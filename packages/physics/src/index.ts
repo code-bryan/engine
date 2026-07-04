@@ -1,5 +1,5 @@
 import Matter from "matter-js";
-import { createStore, type ComponentStore, type Entity } from "@engine/ecs-core";
+import { createStore, type ComponentStore, type Entity, type World } from "@engine/ecs-core";
 import { transforms } from "@engine/renderer";
 
 export type RigidBodyKind = "dynamic" | "kinematic" | "static";
@@ -24,6 +24,7 @@ export type RigidBodyBoxProps = {
 
 export class Physics {
   private engine: Matter.Engine;
+  private collisions = new Set<string>();
   rigidBodies: ComponentStore<RigidBody> = createStore<RigidBody>();
 
   body = {
@@ -41,6 +42,13 @@ export class Physics {
   constructor(options: PhysicsOptions = {}) {
     this.engine = Matter.Engine.create({
       gravity: options.gravity,
+    });
+
+    Matter.Events.on(this.engine, "collisionStart", (event) => {
+      for (const pair of event.pairs) this.trackCollision(pair.bodyA, pair.bodyB);
+    });
+    Matter.Events.on(this.engine, "collisionEnd", (event) => {
+      for (const pair of event.pairs) this.untrackCollision(pair.bodyA, pair.bodyB);
     });
   }
 
@@ -106,6 +114,41 @@ export class Physics {
         callback(a, b);
       }
     });
+  }
+
+  collidesWith(world: World, entity: Entity, tag: string) {
+    for (const other of world.tags.with(tag)) {
+      if (this.collides(entity, other)) return true;
+    }
+    return false;
+  }
+
+  collider(world: World, entity: Entity) {
+    return {
+      collide: (tag: string) => this.collidesWith(world, entity, tag),
+    };
+  }
+
+  private collides(a: Entity, b: Entity) {
+    return this.collisions.has(this.collisionKey(a, b));
+  }
+
+  private trackCollision(bodyA: Matter.Body, bodyB: Matter.Body) {
+    const a = this.findEntityByBody(bodyA);
+    const b = this.findEntityByBody(bodyB);
+    if (a === undefined || b === undefined) return;
+    this.collisions.add(this.collisionKey(a, b));
+  }
+
+  private untrackCollision(bodyA: Matter.Body, bodyB: Matter.Body) {
+    const a = this.findEntityByBody(bodyA);
+    const b = this.findEntityByBody(bodyB);
+    if (a === undefined || b === undefined) return;
+    this.collisions.delete(this.collisionKey(a, b));
+  }
+
+  private collisionKey(a: Entity, b: Entity) {
+    return a < b ? `${a}:${b}` : `${b}:${a}`;
   }
 
   private findEntityByBody(body: Matter.Body) {

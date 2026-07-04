@@ -1,7 +1,8 @@
-import type { World } from "@engine/ecs-core";
+import { World } from "@engine/ecs-core";
 import type { Physics } from "@engine/physics";
 
-export type GameApplication = {
-  world: World;
-  physics: Physics;
-};
+export class GameWorld extends World {
+  constructor(public physics: Physics) {
+    super();
+  }
+}
