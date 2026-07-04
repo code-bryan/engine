@@ -16,7 +16,7 @@ const game = { world, physics };
 
 PlayerPrefab(game, { x: 32, y: 64 });
 EnemyPrefab(game, { x: 220, y: 64 });
-registerRestartOnEnemyTouch(physics);
+registerRestartOnEnemyTouch(game);
 
 world.addSystem(createKeyboardInputSys());
 world.addSystem(createPlayerControlSystem(physics));

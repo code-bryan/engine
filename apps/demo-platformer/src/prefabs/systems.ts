@@ -1,6 +1,7 @@
 import { keyboard } from "@engine/input";
 import type { Physics } from "@engine/physics";
 import { transforms } from "@engine/renderer";
+import type { GameApplication } from "../app";
 import { enemies, players, velocities } from "./components";
 
 export function createPlayerControlSystem(physics: Physics) {
@@ -46,16 +47,13 @@ export function createEnemyFollowSystem(physics: Physics) {
   };
 }
 
-export function registerRestartOnEnemyTouch(physics: Physics) {
-  physics.onCollisionStart((a, b) => {
-    for (const playerEntity of players.keys()) {
-      for (const enemyEntity of enemies.keys()) {
-        const hit = (a === playerEntity && b === enemyEntity) || (a === enemyEntity && b === playerEntity);
-        if (!hit) continue;
-        resetGame(physics);
-        return;
-      }
-    }
+export function registerRestartOnEnemyTouch(app: GameApplication) {
+  app.physics.onCollisionStart((a, b) => {
+    const playerEnemyHit = app.world.tags.has(a, "player") && app.world.tags.has(b, "enemy");
+    const enemyPlayerHit = app.world.tags.has(a, "enemy") && app.world.tags.has(b, "player");
+    if (!playerEnemyHit && !enemyPlayerHit) return;
+
+    resetGame(app.physics);
   });
 }
 

@@ -4,6 +4,7 @@ import { enemies, velocities } from "./components";
 
 export function EnemyPrefab(app: GameApplication, props: { x: number; y: number }) {
   const e = app.world.spawn();
+  app.world.tags.add(e, "enemy");
   transforms.set(e, { x: props.x, y: props.y, scale: 16 });
   velocities.set(e, { x: 0, y: 0 });
   enemies.set(e, { speed: 42, spawnX: props.x, spawnY: props.y });
