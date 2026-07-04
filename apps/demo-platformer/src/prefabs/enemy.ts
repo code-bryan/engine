@@ -1,6 +1,6 @@
 import { sprite, transforms } from "@engine/renderer";
 import type { GameWorld } from "../app";
-import { enemies, velocities } from "./components";
+import { enemies, velocities } from "../components";
 
 export function EnemyPrefab(world: GameWorld, props: { x: number; y: number }) {
   const e = world.spawn();
