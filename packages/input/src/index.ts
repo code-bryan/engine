@@ -17,8 +17,9 @@ export function createKeyboardInputSys(target: Window = window) {
 
 export function createPointerInputSys(target: HTMLElement | Window = window) {
   target.addEventListener("pointermove", (event) => {
-    globalPointer.x = event.clientX;
-    globalPointer.y = event.clientY;
+    const pointerEvent = event as PointerEvent;
+    globalPointer.x = pointerEvent.clientX;
+    globalPointer.y = pointerEvent.clientY;
   });
   target.addEventListener("pointerdown", () => { globalPointer.down = true; });
   target.addEventListener("pointerup", () => { globalPointer.down = false; });

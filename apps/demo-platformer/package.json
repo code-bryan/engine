@@ -3,10 +3,16 @@
   "type": "module",
   "version": "0.0.0",
   "private": true,
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5178",
+    "build": "bun run typecheck",
+    "typecheck": "tsc -p ../../tsconfig.json --noEmit",
+    "test": "bun test --pass-with-no-tests"
+  },
   "dependencies": {
-    "@engine/ecs-core": "",
-    "@engine/renderer": "",
-    "@engine/loader": "",
-    "@engine/input": ""
+    "@engine/ecs-core": "workspace:*",
+    "@engine/renderer": "workspace:*",
+    "@engine/loader": "workspace:*",
+    "@engine/input": "workspace:*"
   }
 }

@@ -4,6 +4,14 @@
     "module": "ES2022",
     "moduleResolution": "Bundler",
     "strict": true,
-    "types": ["bun-types"]
+    "skipLibCheck": true,
+    "types": ["bun-types"],
+    "baseUrl": ".",
+    "paths": {
+      "@engine/ecs-core": ["packages/ecs-core/src/index.ts"],
+      "@engine/renderer": ["packages/renderer/src/index.ts"],
+      "@engine/loader": ["packages/loader/src/index.ts"],
+      "@engine/input": ["packages/input/src/index.ts"]
+    }
   }
 }
