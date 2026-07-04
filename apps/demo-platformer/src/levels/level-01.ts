@@ -1,5 +1,4 @@
 import { createKeyboardInputSys } from "@engine/input";
-import { loadSpriteSheet } from "@engine/renderer";
 import type { GameWorld } from "../app";
 import { EnemyPrefab, PlayerPrefab } from "../prefabs";
 import {
@@ -10,13 +9,10 @@ import {
 } from "../systems";
 
 export async function Level01(world: GameWorld) {
-  const [playerFrames, enemyFrames] = await Promise.all([
-    loadSpriteSheet({ src: "/assets/Orc_Walk.png", frameWidth: 100, frameHeight: 100, frames: 8 }),
-    loadSpriteSheet({ src: "/assets/Soldier_Walk.png", frameWidth: 100, frameHeight: 100, frames: 8 }),
+  await Promise.all([
+    PlayerPrefab(world, { x: 32, y: 64 }),
+    EnemyPrefab(world, { x: 220, y: 64 }),
   ]);
-
-  PlayerPrefab(world, { x: 32, y: 64, frames: playerFrames.map((texture) => ({ texture })) });
-  EnemyPrefab(world, { x: 220, y: 64, frames: enemyFrames.map((texture) => ({ texture })) });
 
   world.addSystem(createKeyboardInputSys());
   world.addSystem(createPlayerControlSystem(world));
