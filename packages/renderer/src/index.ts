@@ -1,14 +1,46 @@
-import { Application, Container, Sprite, Texture, type ApplicationOptions } from "pixi.js";
+import { Application, Assets, Container, Rectangle, Sprite, Texture, type ApplicationOptions } from "pixi.js";
 import { createStore, type ComponentStore, type Entity, type World } from "@engine/ecs-core";
 
-export type Transform = { x: number; y: number; rotation?: number; scale?: number };
+export type TransformScale = number | { x: number; y: number };
+export type Transform = { x: number; y: number; rotation?: number; scale?: TransformScale };
 export type SpriteRef = { sprite: Sprite };
 export type SpriteProps = { texture?: Texture; tint?: number };
+export type SpriteAnimationFrame = { texture?: Texture; tint?: number };
+export type SpriteAnimation = {
+  frames: SpriteAnimationFrame[];
+  fps: number;
+  loop: boolean;
+  elapsed: number;
+  current: number;
+  playing: boolean;
+};
+export type SpriteAnimationProps = {
+  frames: SpriteAnimationFrame[];
+  fps?: number;
+  loop?: boolean;
+  autoplay?: boolean;
+};
+export type SpriteSheetProps = {
+  src: string;
+  frameWidth: number;
+  frameHeight: number;
+  frames: number;
+};
 
 export const transforms = createStore<Transform>();
 export const sprites = createStore<SpriteRef>();
+export const spriteAnimations = createStore<SpriteAnimation>();
 
 export const createSprite = (texture: Texture = Texture.WHITE) => new Sprite(texture);
+
+export async function loadSpriteSheet(props: SpriteSheetProps) {
+  const sheet = await Assets.load<Texture>(props.src);
+
+  return Array.from({ length: props.frames }, (_, index) => new Texture({
+    source: sheet.source,
+    frame: new Rectangle(index * props.frameWidth, 0, props.frameWidth, props.frameHeight),
+  }));
+}
 
 export function attachSprite(e: Entity, sprite = createSprite()) {
   sprites.set(e, { sprite });
@@ -22,7 +54,64 @@ export const sprite = {
     sprites.set(entity, { sprite: pixiSprite });
     return pixiSprite;
   },
+  animation: {
+    set(entity: Entity, props: SpriteAnimationProps) {
+      spriteAnimations.set(entity, {
+        frames: props.frames,
+        fps: props.fps ?? 8,
+        loop: props.loop ?? true,
+        elapsed: 0,
+        current: 0,
+        playing: props.autoplay ?? true,
+      });
+      applySpriteAnimationFrame(entity, 0);
+    },
+    play(entity: Entity) {
+      const animation = spriteAnimations.get(entity);
+      if (animation) animation.playing = true;
+    },
+    stop(entity: Entity) {
+      const animation = spriteAnimations.get(entity);
+      if (animation) animation.playing = false;
+    },
+  },
 };
+
+export function createSpriteAnimationSystem(animationStore: ComponentStore<SpriteAnimation> = spriteAnimations) {
+  return (dt: number) => {
+    for (const [entity, animation] of animationStore) {
+      if (!animation.playing || animation.frames.length === 0) continue;
+
+      animation.elapsed += dt;
+      const frameDuration = 1 / animation.fps;
+      if (animation.elapsed < frameDuration) continue;
+
+      const steps = Math.floor(animation.elapsed / frameDuration);
+      animation.elapsed -= steps * frameDuration;
+      animation.current += steps;
+
+      if (animation.loop) {
+        animation.current %= animation.frames.length;
+      } else if (animation.current >= animation.frames.length) {
+        animation.current = animation.frames.length - 1;
+        animation.playing = false;
+      }
+
+      applySpriteAnimationFrame(entity, animation.current);
+    }
+  };
+}
+
+function applySpriteAnimationFrame(entity: Entity, index: number) {
+  const animation = spriteAnimations.get(entity);
+  const spriteRef = sprites.get(entity);
+  if (!animation || !spriteRef) return;
+
+  const frame = animation.frames[index];
+  if (!frame) return;
+  if (frame.texture) spriteRef.sprite.texture = frame.texture;
+  if (frame.tint !== undefined) spriteRef.sprite.tint = frame.tint;
+}
 
 export function createRenderSystem(
   stage: Container,
@@ -34,11 +123,16 @@ export function createRenderSystem(
       if (!sprite.parent) stage.addChild(sprite);
       const t = transformStore.get(e);
       if (!t) continue;
-      sprite.position.set(t.x, t.y);
+      const scale = normalizeScale(t.scale);
+      sprite.position.set(scale.x < 0 ? t.x + sprite.texture.width * Math.abs(scale.x) : t.x, t.y);
       sprite.rotation = t.rotation ?? 0;
-      sprite.scale.set(t.scale ?? 1);
+      sprite.scale.set(scale.x, scale.y);
     }
   };
+}
+
+function normalizeScale(scale: TransformScale = 1) {
+  return typeof scale === "number" ? { x: scale, y: scale } : scale;
 }
 
 export type EngineApplicationOptions = {
@@ -58,6 +152,7 @@ export async function createEngineApplication(options: EngineApplicationOptions)
   await app.init(options.pixi);
   options.mount.appendChild(app.canvas);
 
+  options.world.addSystem(createSpriteAnimationSystem());
   options.world.addSystem(createRenderSystem(app.stage));
 
   let frame = 0;
