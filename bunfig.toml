@@ -1,0 +1,6 @@
+[workspace]
+children = ["packages/*", "apps/*"]
+
+[test]
+coverage = true
+watch    = true

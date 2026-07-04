@@ -1,0 +1,16 @@
+{
+  "name": "@engine",
+  "private": true,
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "dev": "bun --watch run apps/demo-platformer/src/index.ts",
+    "test": "bun test",
+    "build": "echo monorepo root has no build"
+  },
+  "dependencies": {
+    "@pixi/js": "^8.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}

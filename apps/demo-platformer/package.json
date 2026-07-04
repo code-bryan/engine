@@ -1,0 +1,12 @@
+{
+  "name": "@engine/demo-platformer",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "dependencies": {
+    "@engine/ecs-core": "",
+    "@engine/renderer": "",
+    "@engine/loader": "",
+    "@engine/input": ""
+  }
+}

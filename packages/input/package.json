@@ -1,0 +1,6 @@
+{
+  "name": "@engine/input",
+  "type": "module",
+  "version": "0.0.0",
+  "exports": "./src/index.ts"
+}
