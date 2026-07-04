@@ -1,7 +1,14 @@
 import { World } from "@engine/ecs-core";
 import { createKeyboardInputSys } from "@engine/input";
 import { createEngineApplication } from "@engine/renderer";
-import { createMovementSystem, createPlayerControlSystem, EnemyPrefab, PlayerPrefab } from "./prefabs";
+import {
+  createEnemyFollowSystem,
+  createMovementSystem,
+  createPlayerControlSystem,
+  createRestartOnEnemyTouchSystem,
+  EnemyPrefab,
+  PlayerPrefab,
+} from "./prefabs";
 
 const world = new World();
 PlayerPrefab(world, { x: 32, y: 64 });
@@ -9,7 +16,9 @@ EnemyPrefab(world, { x: 220, y: 64 });
 
 world.addSystem(createKeyboardInputSys());
 world.addSystem(createPlayerControlSystem());
+world.addSystem(createEnemyFollowSystem());
 world.addSystem(createMovementSystem());
+world.addSystem(createRestartOnEnemyTouchSystem());
 
 const engine = await createEngineApplication({
   world,
