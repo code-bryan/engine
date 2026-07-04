@@ -5,7 +5,7 @@ import { Level01 } from "./levels";
 
 const world = new GameWorld(createPhysics({ gravity: { x: 0, y: 0 } }));
 
-Level01(world);
+await Level01(world);
 
 const engine = await createEngineApplication({
   world,
