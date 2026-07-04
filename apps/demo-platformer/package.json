@@ -13,6 +13,7 @@
     "@engine/ecs-core": "workspace:*",
     "@engine/renderer": "workspace:*",
     "@engine/loader": "workspace:*",
-    "@engine/input": "workspace:*"
+    "@engine/input": "workspace:*",
+    "@engine/physics": "workspace:*"
   }
 }

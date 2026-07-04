@@ -3,6 +3,7 @@ import { createStore, type ComponentStore, type Entity, type World } from "@engi
 
 export type Transform = { x: number; y: number; rotation?: number; scale?: number };
 export type SpriteRef = { sprite: Sprite };
+export type SpriteProps = { texture?: Texture; tint?: number };
 
 export const transforms = createStore<Transform>();
 export const sprites = createStore<SpriteRef>();
@@ -13,6 +14,15 @@ export function attachSprite(e: Entity, sprite = createSprite()) {
   sprites.set(e, { sprite });
   return sprite;
 }
+
+export const sprite = {
+  set(entity: Entity, props: SpriteProps = {}) {
+    const pixiSprite = createSprite(props.texture);
+    if (props.tint !== undefined) pixiSprite.tint = props.tint;
+    sprites.set(entity, { sprite: pixiSprite });
+    return pixiSprite;
+  },
+};
 
 export function createRenderSystem(
   stage: Container,

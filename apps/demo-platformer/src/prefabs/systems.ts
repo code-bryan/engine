@@ -1,8 +1,9 @@
 import { keyboard } from "@engine/input";
+import type { Physics } from "@engine/physics";
 import { transforms } from "@engine/renderer";
 import { enemies, players, velocities } from "./components";
 
-export function createPlayerControlSystem() {
+export function createPlayerControlSystem(physics: Physics) {
   return () => {
     const keys = keyboard.get(0)?.keys;
     if (!keys) return;
@@ -16,11 +17,12 @@ export function createPlayerControlSystem() {
 
       velocity.x = x * player.speed;
       velocity.y = y * player.speed;
+      physics.setVelocity(e, velocity);
     }
   };
 }
 
-export function createEnemyFollowSystem() {
+export function createEnemyFollowSystem(physics: Physics) {
   return () => {
     const playerEntity = players.keys().next().value;
     if (playerEntity === undefined) return;
@@ -39,52 +41,25 @@ export function createEnemyFollowSystem() {
 
       velocity.x = distance > 0 ? (dx / distance) * enemy.speed : 0;
       velocity.y = distance > 0 ? (dy / distance) * enemy.speed : 0;
+      physics.setVelocity(enemyEntity, velocity);
     }
   };
 }
 
-export function createMovementSystem() {
-  return (dt: number) => {
-    for (const [e, velocity] of velocities) {
-      const transform = transforms.get(e);
-      if (!transform) continue;
-
-      transform.x += velocity.x * dt;
-      transform.y += velocity.y * dt;
-    }
-  };
-}
-
-export function createRestartOnEnemyTouchSystem() {
-  return () => {
-    for (const [playerEntity, player] of players) {
-      const playerTransform = transforms.get(playerEntity);
-      if (!playerTransform) continue;
-
+export function registerRestartOnEnemyTouch(physics: Physics) {
+  physics.onCollisionStart((a, b) => {
+    for (const playerEntity of players.keys()) {
       for (const enemyEntity of enemies.keys()) {
-        const enemyTransform = transforms.get(enemyEntity);
-        if (!enemyTransform || !isTouching(playerTransform, enemyTransform)) continue;
-
-        resetGame();
+        const hit = (a === playerEntity && b === enemyEntity) || (a === enemyEntity && b === playerEntity);
+        if (!hit) continue;
+        resetGame(physics);
         return;
       }
     }
-  };
+  });
 }
 
-function isTouching(a: { x: number; y: number; scale?: number }, b: { x: number; y: number; scale?: number }) {
-  const aSize = a.scale ?? 1;
-  const bSize = b.scale ?? 1;
-
-  return (
-    a.x < b.x + bSize &&
-    a.x + aSize > b.x &&
-    a.y < b.y + bSize &&
-    a.y + aSize > b.y
-  );
-}
-
-function resetGame() {
+function resetGame(physics: Physics) {
   for (const [e, player] of players) {
     const transform = transforms.get(e);
     const velocity = velocities.get(e);
@@ -96,6 +71,7 @@ function resetGame() {
       velocity.x = 0;
       velocity.y = 0;
     }
+    physics.reset(e, { x: player.spawnX, y: player.spawnY });
   }
 
   for (const [e, enemy] of enemies) {
@@ -109,5 +85,6 @@ function resetGame() {
       velocity.x = 0;
       velocity.y = 0;
     }
+    physics.reset(e, { x: enemy.spawnX, y: enemy.spawnY });
   }
 }

@@ -8,6 +8,7 @@ export default defineConfig({
       "@engine/renderer": resolve(__dirname, "../../packages/renderer/src/index.ts"),
       "@engine/loader": resolve(__dirname, "../../packages/loader/src/index.ts"),
       "@engine/input": resolve(__dirname, "../../packages/input/src/index.ts"),
+      "@engine/physics": resolve(__dirname, "../../packages/physics/src/index.ts"),
     },
   },
 });
