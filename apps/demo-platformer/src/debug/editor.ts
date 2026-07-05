@@ -15,6 +15,12 @@ export type DebugEditorPlayback = {
 export function attachDebugEditor(world: GameWorld, engine: EngineApplication, playback: DebugEditorPlayback) {
   return attachRuntimeDebugger(world, engine, {
     playback,
+    grid: {
+      snapSize: 16,
+      majorEvery: 4,
+      minMinorScreenPx: 10,
+      maxMinorScreenPx: 24,
+    },
     statusPanels: [
       {
         id: "input",

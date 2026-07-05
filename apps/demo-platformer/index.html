@@ -45,17 +45,6 @@
           0 24px 80px rgba(0, 0, 0, 0.55),
           inset 0 1px 0 rgba(255, 255, 255, 0.08);
       }
-      .game-frame::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        z-index: 2;
-        pointer-events: none;
-        background-image:
-          linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
-          linear-gradient(to bottom, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
-        background-size: 64px 64px;
-      }
       .game-frame canvas {
         position: relative;
         z-index: 1;

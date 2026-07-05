@@ -54,6 +54,13 @@ export type DebugTrackedStore = {
   store: Map<Entity, unknown>;
 };
 
+export type DebugGridOptions = {
+  snapSize?: number;
+  majorEvery?: number;
+  minMinorScreenPx?: number;
+  maxMinorScreenPx?: number;
+};
+
 export type RuntimeDebuggerOptions<TWorld extends DebuggerWorld = DebuggerWorld> = {
   getEntityTitle?: (world: TWorld, entity: Entity) => string;
   sections?: DebugEditorSection<TWorld>[];
@@ -62,6 +69,7 @@ export type RuntimeDebuggerOptions<TWorld extends DebuggerWorld = DebuggerWorld>
   getRuntimeDetails?: (world: TWorld, entity?: Entity) => string;
   playback?: DebugPlayback;
   trackedStores?: DebugTrackedStore[];
+  grid?: DebugGridOptions;
 };
 
 export type DebugEditor<TWorld extends DebuggerWorld = DebuggerWorld> = {
@@ -88,6 +96,12 @@ type LogCategory = "entity" | "tag" | "system" | "physics" | "collision" | "stor
 type LogEntry = { cat: LogCategory; text: string; count: number };
 
 const ALL_LOG_CATEGORIES: LogCategory[] = ["entity", "tag", "collision", "physics", "store", "system"];
+const DEFAULT_GRID_OPTIONS: Required<DebugGridOptions> = {
+  snapSize: 16,
+  majorEvery: 4,
+  minMinorScreenPx: 10,
+  maxMinorScreenPx: 28,
+};
 
 type DebugState = {
   selectedEntity?: Entity;
@@ -200,6 +214,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   for (const e of registry) trackedStoreMap.set(e.label, { label: e.label, store: e.store });
   for (const s of options.trackedStores ?? []) trackedStoreMap.set(s.label, s);
   const trackedStores = Array.from(trackedStoreMap.values());
+  const gridOptions = resolveGridOptions(options.grid);
   const storeSnapshots = new Map<string, string>();
   const labels = new Map<number, Text>();
 
@@ -319,6 +334,8 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   };
   setNearestFiltering();
 
+  let refresh = () => {};
+
   const centerCamera = () => {
     const w = engine.app.renderer.width;
     const h = engine.app.renderer.height;
@@ -333,6 +350,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     if (w > 0 && h > 0) {
       engine.app.renderer.resize(w, h);
       centerCamera();
+      refresh();
     }
   };
   resizeRendererToViewport();
@@ -344,7 +362,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   const searchInput = layout.querySelector<HTMLInputElement>("[data-search]");
   const controlsHost = layout.querySelector<HTMLElement>(".debugger-toolbar");
 
-  const refresh = () => {
+  refresh = () => {
     if (state.lockTarget !== undefined) {
       const t = transforms.get(state.lockTarget);
       if (t) {
@@ -356,7 +374,21 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     }
     applyCameraToStage(engine.app.stage, state.camera);
     recordStoreDiffs(world, trackedStores, storeSnapshots, state);
-    renderDebugger(world, layout, viewportHud, overlay, labels, state, componentInspectors, options, gameW, gameH);
+    renderDebugger(
+      world,
+      layout,
+      viewportHud,
+      overlay,
+      labels,
+      state,
+      componentInspectors,
+      options,
+      gridOptions,
+      engine.app.renderer.width,
+      engine.app.renderer.height,
+      gameW,
+      gameH,
+    );
     bindEntitySelection(layout, state, refresh);
   };
 
@@ -423,7 +455,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     const cssScale = rect.width / engine.app.canvas.width;
     state.camera.x = drag.camX + (event.clientX - drag.startX) / cssScale;
     state.camera.y = drag.camY + (event.clientY - drag.startY) / cssScale;
-    applyCameraToStage(engine.app.stage, state.camera);
+    refresh();
   };
 
   const handleCanvasPointerUp = () => { drag = null; };
@@ -443,8 +475,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     state.camera.zoom = Math.max(0.1, Math.min(20, state.camera.zoom * factor));
     state.camera.x = cx - wx * state.camera.zoom;
     state.camera.y = cy - wy * state.camera.zoom;
-    applyCameraToStage(engine.app.stage, state.camera);
-    setText(layout, "[data-zoom-display]", `${Math.round(state.camera.zoom * 100)}%`);
+    refresh();
   };
 
   const closeDropdowns = () => {
@@ -690,9 +721,6 @@ function ensureStyles() {
       display: block !important;
       padding: 0 !important;
       overflow: hidden;
-    }
-    .app-shell--debug-grid-off .game-frame::after {
-      display: none;
     }
     .app-shell--debug .game-frame {
       position: absolute !important;
@@ -1350,6 +1378,9 @@ function renderDebugger<TWorld extends DebuggerWorld>(
   state: DebugState,
   components: DebugInspectorComponent<TWorld>[],
   options: RuntimeDebuggerOptions<TWorld>,
+  gridOptions: Required<DebugGridOptions>,
+  viewportW?: number,
+  viewportH?: number,
   gameW?: number,
   gameH?: number,
 ) {
@@ -1360,7 +1391,7 @@ function renderDebugger<TWorld extends DebuggerWorld>(
   renderInspector(world, sidebar, state.selectedEntity, components, options, state);
   renderSystems(sidebar, world, state.systemMetrics, state.systemTimingHistory);
   renderLog(sidebar, state);
-  renderPhysicsOverlay(world, overlay, labels, state.selectedEntity, options.getEntityTitle, state, gameW, gameH);
+  renderPhysicsOverlay(world, overlay, labels, state.selectedEntity, options.getEntityTitle, state, gridOptions, viewportW, viewportH, gameW, gameH);
 }
 
 function renderOverview(
@@ -1687,10 +1718,17 @@ function renderPhysicsOverlay<TWorld extends DebuggerWorld>(
   selectedEntity: Entity | undefined,
   getEntityTitle: ((world: TWorld, entity: Entity) => string) | undefined,
   state?: DebugState,
+  gridOptions?: Required<DebugGridOptions>,
+  viewportW?: number,
+  viewportH?: number,
   gameW?: number,
   gameH?: number,
 ) {
   overlay.clear();
+
+  if (state?.showGrid && gridOptions) {
+    renderWorldGrid(overlay, state.camera, gridOptions, viewportW, viewportH);
+  }
 
   // game viewport indicator — shows what the game camera sees at normal 1:1 zoom
   if (gameW && gameH) {
@@ -1793,6 +1831,106 @@ function renderPhysicsOverlay<TWorld extends DebuggerWorld>(
       overlay.moveTo(ax, ay - cs).lineTo(ax, ay + cs).stroke({ color: 0xfbbf24, width: 1.5, alpha: 0.9 });
     }
   }
+}
+
+function renderWorldGrid(
+  overlay: Graphics,
+  camera: DebugState["camera"],
+  options: Required<DebugGridOptions>,
+  viewportWidth?: number,
+  viewportHeight?: number,
+) {
+  if (!viewportWidth || !viewportHeight || camera.zoom <= 0) return;
+
+  const worldLeft = -camera.x / camera.zoom;
+  const worldTop = -camera.y / camera.zoom;
+  const worldRight = (viewportWidth - camera.x) / camera.zoom;
+  const worldBottom = (viewportHeight - camera.y) / camera.zoom;
+  const worldLineWidth = 1 / camera.zoom;
+  const minorStep = options.snapSize;
+  const majorStep = minorStep * options.majorEvery;
+  const minorScreenPx = minorStep * camera.zoom;
+  const majorScreenPx = majorStep * camera.zoom;
+  const minorAlpha = computeMinorAlpha(minorScreenPx, options);
+  const majorAlpha = computeMajorAlpha(majorScreenPx);
+
+  if (minorAlpha > 0) {
+    drawGridLines(overlay, worldLeft, worldTop, worldRight, worldBottom, minorStep, {
+      color: 0xc9ccd4,
+      alpha: minorAlpha,
+      width: worldLineWidth,
+    }, majorStep);
+  }
+
+  drawGridLines(overlay, worldLeft, worldTop, worldRight, worldBottom, majorStep, {
+    color: 0xd7dbe4,
+    alpha: majorAlpha,
+    width: worldLineWidth,
+  });
+}
+
+function computeMinorAlpha(screenPx: number, options: Required<DebugGridOptions>) {
+  if (screenPx <= options.minMinorScreenPx * 0.7) return 0;
+  if (screenPx >= options.maxMinorScreenPx * 1.35) return 0.065;
+
+  const t = clamp01((screenPx - options.minMinorScreenPx * 0.7) / (options.maxMinorScreenPx * 1.35 - options.minMinorScreenPx * 0.7));
+  return lerp(0.045, 0.095, t);
+}
+
+function computeMajorAlpha(screenPx: number) {
+  const t = clamp01((screenPx - 40) / 80);
+  return lerp(0.085, 0.13, t);
+}
+
+function drawGridLines(
+  overlay: Graphics,
+  left: number,
+  top: number,
+  right: number,
+  bottom: number,
+  step: number,
+  stroke: { color: number; alpha: number; width: number },
+  skipEvery?: number,
+) {
+  if (step <= 0) return;
+
+  const startX = Math.floor(left / step) * step;
+  const startY = Math.floor(top / step) * step;
+
+  for (let x = startX; x <= right; x += step) {
+    if (skipEvery && isGridLineAligned(x, skipEvery)) continue;
+    overlay.moveTo(x, top).lineTo(x, bottom).stroke(stroke);
+  }
+
+  for (let y = startY; y <= bottom; y += step) {
+    if (skipEvery && isGridLineAligned(y, skipEvery)) continue;
+    overlay.moveTo(left, y).lineTo(right, y).stroke(stroke);
+  }
+}
+
+function isGridLineAligned(value: number, step: number) {
+  const rounded = Math.round(value / step);
+  return Math.abs(value - rounded * step) < 0.0001;
+}
+
+function resolveGridOptions(options?: DebugGridOptions): Required<DebugGridOptions> {
+  return {
+    snapSize: Math.max(1, Math.round(options?.snapSize ?? DEFAULT_GRID_OPTIONS.snapSize)),
+    majorEvery: Math.max(2, Math.round(options?.majorEvery ?? DEFAULT_GRID_OPTIONS.majorEvery)),
+    minMinorScreenPx: Math.max(4, options?.minMinorScreenPx ?? DEFAULT_GRID_OPTIONS.minMinorScreenPx),
+    maxMinorScreenPx: Math.max(
+      options?.minMinorScreenPx ?? DEFAULT_GRID_OPTIONS.minMinorScreenPx,
+      options?.maxMinorScreenPx ?? DEFAULT_GRID_OPTIONS.maxMinorScreenPx,
+    ),
+  };
+}
+
+function clamp01(value: number) {
+  return Math.max(0, Math.min(1, value));
+}
+
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t;
 }
 
 function recordStoreDiffs<TWorld extends DebuggerWorld>(

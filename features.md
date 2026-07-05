@@ -4,43 +4,106 @@ This file tracks debugger work that is still missing or incomplete after the cur
 
 ## Already Implemented
 
-- Centered viewport with debugger layout around it
-- Top toolbar with play, pause, step, restart
-- Page grid and viewport grid
-- Toggle buttons for grid, physics boxes, labels
-- Entity list with selection
-- Physics overlay and labels
-- FPS / MS HUD in viewport
-- Event log
-- System timings list
-- Inspector component registry
-- Built-in inspector cards for `Entity`, `Transform`, `Physics`
-- Demo inspector cards for `Facing`, `Actor State`, `Velocity`, `Player`, `Enemy`, `Collisions`
-- Editable inspector fields for:
-  - `Transform`
-  - `Velocity`
-  - `Player`
-  - `Enemy`
-- Clickable collision targets and entity id links
-- Input panel with active pressed keys
+### Core Layout
+- Full-screen debugger mode — app shell takes over the full viewport with `position: fixed`
+- Game canvas fills the viewport via `position: absolute; inset: 0` on game-frame
+- Floating panel layout overlaid on top with `pointer-events: none` grid, panels re-enable pointer events
+- Top toolbar, left panel, right panel, bottom panel
+
+### Toolbar
+- Three-column layout: Debug menu (left) | playback controls (center) | zoom + camera (right)
+- Playback buttons: play, pause, step, restart — active state highlighted on the current state instead of a text badge
+- Debug dropdown menu (opens downward, closes on outside click):
+  - Grid toggle
+  - Physics overlay toggle
+  - Labels toggle
+  - Sprite Bounds toggle
+- Zoom + camera group (single pill):
+  - Zoom out (−)
+  - Zoom level display (click resets to 100%)
+  - Zoom in (+)
+  - Fit to viewport
+  - Separator
+  - Reset camera
+  - Lock camera to selected entity
+
+### Camera Tools
+- Pan with middle mouse button (drag)
+- Zoom to cursor with scroll wheel (zoom range 0.1×–20×)
+- Zoom display updates live on wheel scroll
+- Camera fit on attach — game viewport centered at 72% scale
+- Camera reset button — recenters and resets zoom
+- Lock to entity — camera follows selected entity each frame, pan disabled while locked
+- Canvas click picks entity under cursor (inverse camera transform to world space)
+
+### Viewport & Rendering
+- Renderer resized to full viewport via ResizeObserver, recenters on resize
+- Pixel-perfect sprite rendering — `scaleMode = "nearest"` on all texture sources when debugger is active, restored on destroy
+- Pixi background color matches engine dark theme (`0x09090b`)
+- Game starts paused when debugger attaches (via `queueMicrotask`)
+- Game viewport border indicator drawn in Pixi overlay (shows 1:1 game bounds)
+
+### Grid
+- Grid defined as `game-frame::after` in `index.html` — big boxes only (64px), no small subdivision
+- Toggle via `app-shell--debug-grid-off` class on shell → `display: none` on `game-frame::after`
+
+### Entity Panel (right)
+- Entity list with search/filter
+- Selected entity highlighted, auto-scrolls into view
+- Click entity to select
+
+### Inspector Panel (right)
+- Collapsible component cards
+- Search/filter fields
+- Built-in cards: Entity, Transform, Physics
+- Editable fields for Transform (x, y, scale, rotation)
+- Auto-discovered component cards from global registry
+- Custom inspector cards registered per game
+- Demo cards: Facing, Actor State, Velocity (editable), Player (editable), Enemy (editable), Collisions
+- Collision history, contact normals, touching entities with clickable links
+
+### Left Panel
+- Input status panel (held keys, pressed, released, pointer position and state)
+- Snapshots: save up to 5 world snapshots, restore by frame
+- Systems list with enable/disable toggle and per-system timing (current / avg / peak)
+
+### Bottom Panel
+- Event log with category filters: entity, tag, collision, physics, store, system
+- Pause/resume log
+- Repeated events collapsed with count badge
+- Color-coded by category
+
+### FPS / Frame HUD
+- Overlay in top-left of game frame showing FPS and MS
+
+### Sprite Debug Overlay
+- Physics body boxes with color by kind (dynamic / kinematic / static)
+- Selected body highlighted in amber
+- Velocity arrow on dynamic bodies
+- Entity labels above bodies
+- Sprite bounds boxes (cyan)
+- Anchor/pivot crosshair (yellow)
+- Correct bounds when sprite faces left (scaleX < 0)
+
+### Snapshots
+- Capture full world snapshot (all component stores + physics positions/velocities)
+- Restore snapshot — resets all stores and physics bodies to saved state
+
+### Cleanup on Destroy
+- Renderer resized back to original game resolution
+- Background color restored
+- Texture scale modes restored
+- Stage position and scale reset to identity
+- All event listeners removed
+- ResizeObserver disconnected
+
+---
 
 ## High Priority Missing Features
 
 - Real component registry across the engine
   - Right now components are still registered manually per game.
   - Goal: register component stores once and let the debugger discover them automatically.
-
-- Better input debugging
-  - Show `pressed this frame`
-  - Show `released this frame`
-  - Show pointer position
-  - Show pointer button state
-  - Show last input events
-
-- Better collision details
-  - Show collision history, not only current contacts
-  - Show contact normals / points if available
-  - Show selected entity collision timeline
 
 - Runtime editing feedback
   - Edited values should visually confirm update
@@ -53,50 +116,15 @@ This file tracks debugger work that is still missing or incomplete after the cur
 
 ## Medium Priority Missing Features
 
-- System controls
-  - Enable / disable individual systems
-  - Show persistent timing history, not only latest frame
-  - Show average / peak times
-
-- Better event log
-  - Filters by type
-  - Pause / resume log
-  - Collapse repeated spam
-  - Color coding per event category
-
-- Better selection UX
-  - Stronger selected entity highlight
-  - Selected row auto-scroll into view
-  - Optional focus camera on selected entity
+- Better physics debug
+  - Body sleep / active state
+  - Render order / z-index
 
 - Better inspector UI
-  - Collapsible component cards
   - Reorder cards
-  - Read-only vs editable visual distinction
-  - Search inside inspector
-
-- Better physics debug
-  - Velocity vectors
-  - Direction arrows
-  - Body centers / anchors
-  - Sleep / active state
-
-- Better render debug
-  - Sprite bounds
-  - Anchor / pivot visualization
-  - Render order / z-index
-  - Visibility / culling state
+  - Pin frequently used components
 
 ## Lower Priority / Nice To Have
-
-- Snapshots and replay
-  - Save world snapshot
-  - Restore snapshot
-  - Input recording and playback
-
-- Camera tools
-  - Pan / zoom debugger camera
-  - Lock camera to entity
 
 - World editing tools
   - Drag entities in viewport
@@ -108,16 +136,9 @@ This file tracks debugger work that is still missing or incomplete after the cur
   - Pause on entity spawn/destroy
   - Pause on component change
 
+- Input recording and playback
+
 - Persisted debugger preferences
   - Remember panel visibility
   - Remember toggles
   - Remember last selected entity
-
-## Suggested Next Order
-
-1. Improve input debug panel
-2. Add system enable / disable
-3. Add event log filters
-4. Add richer collision details
-5. Add component auto-registration
-6. Add snapshots / replay
