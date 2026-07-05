@@ -1,3 +1,4 @@
+import { captureWorldSnapshot, restoreWorldSnapshot } from "@engine/debugger";
 import { createPhysics } from "@engine/physics";
 import { createEngineApplication } from "@engine/renderer";
 import { GameWorld } from "./app";
@@ -23,6 +24,7 @@ async function mountGame(startPlaying: boolean) {
 
     const world = new GameWorld(createPhysics({ gravity: { x: 0, y: 0 } }));
     await Level01(world);
+    const initialSnapshot = captureWorldSnapshot(world);
 
     engine = await createEngineApplication({
         world,
@@ -48,7 +50,11 @@ async function mountGame(startPlaying: boolean) {
             engine.tick(1 / 60);
         },
         onStop() {
-            void mountGame(false);
+            if (!engine) return;
+            playbackState = "stopped";
+            engine.stop();
+            restoreWorldSnapshot(world, initialSnapshot);
+            engine.tick(0);
         },
         getState() {
             return playbackState;
