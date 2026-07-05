@@ -184,8 +184,10 @@ export type EngineApplicationOptions = {
 
 export type EngineApplication = {
   app: Application;
+  tick: (dt?: number) => void;
   start: () => void;
   stop: () => void;
+  destroy: () => void;
 };
 
 export async function createEngineApplication(options: EngineApplicationOptions): Promise<EngineApplication> {
@@ -199,22 +201,36 @@ export async function createEngineApplication(options: EngineApplicationOptions)
   let frame = 0;
   let last = performance.now();
 
+  function tick(dt = 0) {
+    options.world.tick(dt);
+  }
+
   function loop(now: number) {
-    options.world.tick((now - last) / 1000);
+    tick((now - last) / 1000);
     last = now;
     frame = requestAnimationFrame(loop);
   }
 
+  function stop() {
+    cancelAnimationFrame(frame);
+    frame = 0;
+  }
+
+  tick(0);
+
   return {
     app,
+    tick,
     start() {
       if (frame) return;
       last = performance.now();
       frame = requestAnimationFrame(loop);
     },
-    stop() {
-      cancelAnimationFrame(frame);
-      frame = 0;
+    stop,
+    destroy() {
+      stop();
+      app.canvas.remove();
+      app.destroy(true, { children: true });
     },
   };
 }

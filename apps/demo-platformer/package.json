@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@engine/ecs-core": "workspace:*",
+    "@engine/debugger": "workspace:*",
     "@engine/renderer": "workspace:*",
     "@engine/loader": "workspace:*",
     "@engine/input": "workspace:*",
