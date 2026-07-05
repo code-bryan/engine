@@ -158,7 +158,10 @@ export function createRenderSystem(
       const height = sprite.texture.height * Math.abs(scale.y);
       const baseX = t.x + offset.x - anchor.x * width;
       const baseY = t.y + offset.y - anchor.y * height;
-      sprite.position.set(scale.x < 0 ? baseX + width : baseX, baseY);
+      sprite.position.set(
+        Math.round(scale.x < 0 ? baseX + width : baseX),
+        Math.round(baseY),
+      );
       sprite.rotation = t.rotation ?? 0;
       sprite.scale.set(scale.x, scale.y);
     }
