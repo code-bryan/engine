@@ -303,18 +303,33 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   overlay.eventMode = "none";
   engine.app.stage.addChild(overlay);
 
-  // store original game resolution to draw viewport box and restore on destroy
+  // store original game resolution and background to restore on destroy
   const gameW = engine.app.renderer.width;
   const gameH = engine.app.renderer.height;
+  const origBg = engine.app.renderer.background.color;
+  engine.app.renderer.background.color = 0x09090b;
+
+  const centerCamera = () => {
+    const w = engine.app.renderer.width;
+    const h = engine.app.renderer.height;
+    state.camera.zoom = Math.min(w / gameW, h / gameH) * 0.88;
+    state.camera.x = (w - gameW * state.camera.zoom) / 2;
+    state.camera.y = (h - gameH * state.camera.zoom) / 2;
+  };
 
   const resizeRendererToViewport = () => {
     const w = viewport.clientWidth;
     const h = viewport.clientHeight;
-    if (w > 0 && h > 0) engine.app.renderer.resize(w, h);
+    if (w > 0 && h > 0) {
+      engine.app.renderer.resize(w, h);
+      centerCamera();
+    }
   };
   resizeRendererToViewport();
   const resizeObserver = new ResizeObserver(resizeRendererToViewport);
   resizeObserver.observe(viewport);
+
+  queueMicrotask(() => options.playback?.onPause?.());
 
   const searchInput = layout.querySelector<HTMLInputElement>("[data-search]");
   const controlsHost = layout.querySelector<HTMLElement>(".debugger-toolbar");
@@ -443,8 +458,9 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
 
     if (!action) return;
     if (action === "camera-reset") {
-      state.camera = { x: 0, y: 0, zoom: 1 };
+      state.camera.zoom = 1;
       state.lockTarget = undefined;
+      centerCamera();
       applyCameraToStage(engine.app.stage, state.camera);
       refresh();
       return;
@@ -580,6 +596,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
       shell.classList.remove("app-shell--debug-grid-off");
       resizeObserver.disconnect();
       engine.app.renderer.resize(gameW, gameH);
+      engine.app.renderer.background.color = origBg;
       engine.app.stage.scale.set(1, 1);
       engine.app.stage.position.set(0, 0);
       engine.app.canvas.removeEventListener("click", handleCanvasClick);
@@ -608,19 +625,11 @@ function ensureStyles() {
   style.id = STYLE_ID;
   style.textContent = `
     .app-shell--debug {
-      position: relative;
-      grid-template-columns: minmax(240px, 280px) minmax(320px, 1fr) minmax(260px, 320px);
-      grid-template-rows: auto minmax(0, 1fr) minmax(96px, 18vh);
-      grid-template-areas:
-        "top top top"
-        "left center right"
-        "bottom bottom bottom";
-      align-items: center;
-      justify-items: stretch;
-      column-gap: 18px;
-      row-gap: 18px;
-      padding: 20px;
-      isolation: isolate;
+      position: fixed !important;
+      inset: 0;
+      display: block !important;
+      padding: 0 !important;
+      overflow: hidden;
     }
     .app-shell--debug::before {
       content: "";
@@ -629,24 +638,24 @@ function ensureStyles() {
       z-index: 0;
       pointer-events: none;
       background-image:
-        linear-gradient(to right, rgba(148, 163, 184, 0.08) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(148, 163, 184, 0.08) 1px, transparent 1px),
-        linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
-      background-size: 16px 16px, 16px 16px, 64px 64px, 64px 64px;
-      background-position: 0 0, 0 0, 0 0, 0 0;
+        linear-gradient(to right, rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+      background-size: 64px 64px;
+      background-position: 0 0;
     }
-    .app-shell--debug.app-shell--debug-grid-off::before,
-    .app-shell--debug.app-shell--debug-grid-off .game-frame::after {
+    .app-shell--debug.app-shell--debug-grid-off::before {
       opacity: 0;
     }
     .app-shell--debug .game-frame {
-      grid-area: center;
-      width: 100%;
-      height: 100%;
-      position: relative;
+      position: absolute !important;
+      inset: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      border-radius: 0 !important;
+      border: none !important;
+      box-shadow: none !important;
+      aspect-ratio: unset !important;
       z-index: 1;
-      overflow: hidden;
     }
     .debugger-viewport-hud {
       position: absolute;
@@ -683,10 +692,24 @@ function ensureStyles() {
       color: #facc15;
     }
     .debugger-layout {
-      display: contents;
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      display: grid;
+      grid-template-columns: 270px 1fr 290px;
+      grid-template-rows: 56px 1fr 150px;
+      grid-template-areas:
+        "top top top"
+        "left . right"
+        "left bottom right";
+      gap: 10px;
+      padding: 10px;
+      box-sizing: border-box;
+      pointer-events: none;
     }
     .debugger-toolbar {
       grid-area: top;
+      pointer-events: auto;
       position: relative;
       z-index: 1;
       min-height: 0;
@@ -716,6 +739,7 @@ function ensureStyles() {
       gap: 2px;
     }
     .debugger-panel {
+      pointer-events: auto;
       position: relative;
       z-index: 1;
       min-height: 0;
@@ -735,18 +759,15 @@ function ensureStyles() {
     .debugger-panel--left {
       grid-area: left;
       grid-template-rows: auto auto minmax(0, 1fr);
-      height: min(100%, 900px);
     }
     .debugger-panel--right {
       grid-area: right;
       grid-template-rows: minmax(220px, 42%) minmax(0, 1fr);
-      height: min(100%, 900px);
     }
     .debugger-panel--bottom {
       grid-area: bottom;
       grid-template-rows: minmax(0, 1fr);
       min-height: 0;
-      max-height: 160px;
     }
     .debugger-title {
       font-size: 13px;
@@ -1106,27 +1127,6 @@ function ensureStyles() {
       font: 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
     }
     .debugger-snapshot-restore:hover { background: rgba(37,99,235,0.28); }
-    @media (max-width: 960px) {
-      .app-shell--debug {
-        grid-template-columns: 1fr;
-        grid-template-rows: auto auto auto auto auto;
-        grid-template-areas:
-          "top"
-          "center"
-          "left"
-          "right"
-          "bottom";
-        align-items: stretch;
-      }
-      .app-shell--debug .game-frame {
-        width: 100%;
-        height: 100%;
-      }
-      .debugger-panel--left,
-      .debugger-panel--right {
-        height: auto;
-      }
-    }
   `;
   document.head.appendChild(style);
 }
