@@ -1,7 +1,7 @@
 import { getComponentRegistry, type ComponentRegistryEntry, type Entity, type World, type WorldDebugEvent } from "@engine/ecs-core";
 import type { Physics, PhysicsDebugEvent } from "@engine/physics";
 import { sprites, transforms, type EngineApplication, type TransformScale } from "@engine/renderer";
-import { Container, Graphics, Text } from "pixi.js";
+import { Container, Graphics, Text, TextureSource, type SCALE_MODE } from "pixi.js";
 
 export type DebuggerWorld = World & { physics: Physics };
 
@@ -227,6 +227,12 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
       </div>
       <div class="debugger-toolbar__actions">
         <div class="debugger-badge" data-playback>playing</div>
+        <div class="debugger-zoom-group">
+          <button data-action="zoom-out" title="Zoom Out">−</button>
+          <button class="debugger-zoom-value" data-zoom-display data-action="zoom-100" title="Reset to 100%">100%</button>
+          <button data-action="zoom-in" title="Zoom In">+</button>
+          <button data-action="zoom-fit" title="Fit game in viewport">⊞</button>
+        </div>
         <div class="debugger-controls debugger-controls--header">
           <button data-toggle="grid" title="Toggle Grid" aria-label="Toggle Grid">
             <span aria-hidden="true">#</span>
@@ -309,10 +315,21 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   const origBg = engine.app.renderer.background.color;
   engine.app.renderer.background.color = 0x09090b;
 
+  // pixel-perfect filtering for zoom — collect unique texture sources and set nearest
+  const origScaleModes = new Map<TextureSource, SCALE_MODE>();
+  const setNearestFiltering = () => {
+    for (const [, spriteRef] of sprites) {
+      const src = spriteRef.sprite.texture.source;
+      if (!origScaleModes.has(src)) origScaleModes.set(src, src.scaleMode);
+      src.scaleMode = "nearest";
+    }
+  };
+  setNearestFiltering();
+
   const centerCamera = () => {
     const w = engine.app.renderer.width;
     const h = engine.app.renderer.height;
-    state.camera.zoom = Math.min(w / gameW, h / gameH) * 0.88;
+    state.camera.zoom = Math.min(w / gameW, h / gameH) * 0.72;
     state.camera.x = (w - gameW * state.camera.zoom) / 2;
     state.camera.y = (h - gameH * state.camera.zoom) / 2;
   };
@@ -388,7 +405,6 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   let didDrag = false;
 
   const handleCanvasClick = (event: MouseEvent) => {
-    if (didDrag) { didDrag = false; return; }
     const canvasPt = toCanvasPoint(engine.app.canvas, event.clientX, event.clientY);
     const stage = engine.app.stage;
     const worldPt = {
@@ -400,7 +416,8 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   };
 
   const handleCanvasPointerDown = (event: PointerEvent) => {
-    if (event.button !== 0) return;
+    if (event.button !== 1) return;
+    event.preventDefault();
     drag = { startX: event.clientX, startY: event.clientY, camX: state.camera.x, camY: state.camera.y };
     didDrag = false;
     engine.app.canvas.setPointerCapture(event.pointerId);
@@ -419,19 +436,22 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   const handleCanvasPointerUp = () => { drag = null; };
 
   const handleCanvasWheel = (event: WheelEvent) => {
+    if (event.deltaY === 0) return;
+    const target = event.target as Element;
+    if (target.closest(".debugger-panel, .debugger-toolbar")) return;
     event.preventDefault();
     const rect = engine.app.canvas.getBoundingClientRect();
     const cssScale = rect.width / engine.app.canvas.width;
     const cx = (event.clientX - rect.left) / cssScale;
     const cy = (event.clientY - rect.top) / cssScale;
-    const stage = engine.app.stage;
     const wx = (cx - state.camera.x) / state.camera.zoom;
     const wy = (cy - state.camera.y) / state.camera.zoom;
     const factor = event.deltaY < 0 ? 1.1 : 1 / 1.1;
-    state.camera.zoom = Math.max(0.25, Math.min(4, state.camera.zoom * factor));
+    state.camera.zoom = Math.max(0.1, Math.min(20, state.camera.zoom * factor));
     state.camera.x = cx - wx * state.camera.zoom;
     state.camera.y = cy - wy * state.camera.zoom;
-    applyCameraToStage(stage, state.camera);
+    applyCameraToStage(engine.app.stage, state.camera);
+    setText(layout, "[data-zoom-display]", `${Math.round(state.camera.zoom * 100)}%`);
   };
 
   const handleControlsClick = (event: MouseEvent) => {
@@ -457,6 +477,30 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     }
 
     if (!action) return;
+    if (action === "zoom-in" || action === "zoom-out" || action === "zoom-100") {
+      const w = engine.app.renderer.width;
+      const h = engine.app.renderer.height;
+      const cx = w / 2;
+      const cy = h / 2;
+      const wx = (cx - state.camera.x) / state.camera.zoom;
+      const wy = (cy - state.camera.y) / state.camera.zoom;
+      const factor = action === "zoom-in" ? 1.25 : action === "zoom-out" ? 1 / 1.25 : null;
+      state.camera.zoom = factor !== null
+        ? Math.max(0.1, Math.min(20, state.camera.zoom * factor))
+        : 1;
+      state.camera.x = cx - wx * state.camera.zoom;
+      state.camera.y = cy - wy * state.camera.zoom;
+      applyCameraToStage(engine.app.stage, state.camera);
+      refresh();
+      return;
+    }
+    if (action === "zoom-fit") {
+      state.lockTarget = undefined;
+      centerCamera();
+      applyCameraToStage(engine.app.stage, state.camera);
+      refresh();
+      return;
+    }
     if (action === "camera-reset") {
       state.camera.zoom = 1;
       state.lockTarget = undefined;
@@ -572,7 +616,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   engine.app.canvas.addEventListener("pointermove", handleCanvasPointerMove);
   engine.app.canvas.addEventListener("pointerup", handleCanvasPointerUp);
   engine.app.canvas.addEventListener("pointerleave", handleCanvasPointerUp);
-  engine.app.canvas.addEventListener("wheel", handleCanvasWheel, { passive: false });
+  shell.addEventListener("wheel", handleCanvasWheel, { passive: false });
   controlsHost?.addEventListener("click", handleControlsClick);
   searchInput?.addEventListener("input", handleSearchInput);
   layout.querySelector<HTMLElement>("[data-inspector]")?.addEventListener("change", handleInspectorChange);
@@ -597,6 +641,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
       resizeObserver.disconnect();
       engine.app.renderer.resize(gameW, gameH);
       engine.app.renderer.background.color = origBg;
+      for (const [src, mode] of origScaleModes) src.scaleMode = mode;
       engine.app.stage.scale.set(1, 1);
       engine.app.stage.position.set(0, 0);
       engine.app.canvas.removeEventListener("click", handleCanvasClick);
@@ -604,7 +649,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
       engine.app.canvas.removeEventListener("pointermove", handleCanvasPointerMove);
       engine.app.canvas.removeEventListener("pointerup", handleCanvasPointerUp);
       engine.app.canvas.removeEventListener("pointerleave", handleCanvasPointerUp);
-      engine.app.canvas.removeEventListener("wheel", handleCanvasWheel);
+      shell.removeEventListener("wheel", handleCanvasWheel);
       controlsHost?.removeEventListener("click", handleControlsClick);
       searchInput?.removeEventListener("input", handleSearchInput);
       layout.querySelector<HTMLElement>("[data-inspector]")?.removeEventListener("change", handleInspectorChange);
@@ -1127,6 +1172,42 @@ function ensureStyles() {
       font: 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
     }
     .debugger-snapshot-restore:hover { background: rgba(37,99,235,0.28); }
+    .debugger-zoom-group {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding: 3px 5px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      background: #18181b;
+    }
+    .debugger-zoom-group button {
+      height: 24px;
+      min-width: 24px;
+      padding: 0 5px;
+      border: none;
+      border-radius: 7px;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      font: inherit;
+      font-size: 13px;
+      line-height: 1;
+    }
+    .debugger-zoom-group button:hover {
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .debugger-zoom-value {
+      min-width: 44px;
+      text-align: center;
+      font-size: 11px !important;
+      font-variant-numeric: tabular-nums;
+      color: #a1a1aa !important;
+      letter-spacing: 0.02em;
+    }
+    .debugger-zoom-value:hover {
+      color: #e4e4e7 !important;
+    }
   `;
   document.head.appendChild(style);
 }
@@ -1160,6 +1241,7 @@ function renderOverview(
   playbackState: "playing" | "paused" | "stopped",
 ) {
   setText(sidebar, "[data-frame]", String(state.latestFrame));
+  setText(sidebar, "[data-zoom-display]", `${Math.round(state.camera.zoom * 100)}%`);
   setText(viewportHud, "[data-fps]", state.fps.toFixed(1));
   setText(viewportHud, "[data-frame-ms]", state.latestFrameMs.toFixed(2));
   syncPlayback(sidebar, playbackState, state);
