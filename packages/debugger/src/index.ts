@@ -221,49 +221,42 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   layout.className = "debugger-layout";
   layout.innerHTML = `
     <header class="debugger-toolbar">
-      <div class="debugger-toolbar__brand">
-        <div class="debugger-title">Runtime Debugger</div>
-        <div class="debugger-subtitle">frame <span data-frame>0</span></div>
+      <div class="debugger-toolbar__left">
+        <div class="debugger-dropdown" data-dropdown="debug">
+          <button class="debugger-dropdown__trigger" data-dropdown-trigger="debug">
+            Debug <span aria-hidden="true">▾</span>
+          </button>
+          <div class="debugger-dropdown__panel">
+            <button class="debugger-dropdown__item" data-toggle="grid">
+              <span class="debugger-dropdown__item-icon">#</span>Grid
+            </button>
+            <button class="debugger-dropdown__item" data-toggle="physics">
+              <span class="debugger-dropdown__item-icon">□</span>Physics
+            </button>
+            <button class="debugger-dropdown__item" data-toggle="labels">
+              <span class="debugger-dropdown__item-icon">T</span>Labels
+            </button>
+            <button class="debugger-dropdown__item" data-toggle="sprites">
+              <span class="debugger-dropdown__item-icon">⊡</span>Sprite Bounds
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="debugger-toolbar__playback">
+        <button data-action="play" title="Play" aria-label="Play">▶</button>
+        <button data-action="pause" title="Pause" aria-label="Pause">Ⅱ</button>
+        <button data-action="step" title="Step Frame" aria-label="Step Frame">▸|</button>
+        <button data-action="stop" title="Restart" aria-label="Restart">↺</button>
       </div>
       <div class="debugger-toolbar__actions">
-        <div class="debugger-badge" data-playback>playing</div>
         <div class="debugger-zoom-group">
           <button data-action="zoom-out" title="Zoom Out">−</button>
           <button class="debugger-zoom-value" data-zoom-display data-action="zoom-100" title="Reset to 100%">100%</button>
           <button data-action="zoom-in" title="Zoom In">+</button>
           <button data-action="zoom-fit" title="Fit game in viewport">⊞</button>
-        </div>
-        <div class="debugger-controls debugger-controls--header">
-          <button data-toggle="grid" title="Toggle Grid" aria-label="Toggle Grid">
-            <span aria-hidden="true">#</span>
-          </button>
-          <button data-toggle="physics" title="Toggle Physics" aria-label="Toggle Physics">
-            <span aria-hidden="true">□</span>
-          </button>
-          <button data-toggle="labels" title="Toggle Labels" aria-label="Toggle Labels">
-            <span aria-hidden="true">T</span>
-          </button>
-          <button data-toggle="sprites" title="Toggle Sprite Bounds" aria-label="Toggle Sprite Bounds">
-            <span aria-hidden="true">⊡</span>
-          </button>
-          <button data-action="camera-reset" title="Reset Camera" aria-label="Reset Camera">
-            <span aria-hidden="true">⌖</span>
-          </button>
-          <button data-toggle="camera-lock" title="Lock Camera to Selected" aria-label="Lock Camera to Selected">
-            <span aria-hidden="true">⊙</span>
-          </button>
-          <button data-action="play" title="Play" aria-label="Play">
-            <span aria-hidden="true">▶</span>
-          </button>
-          <button data-action="pause" title="Pause" aria-label="Pause">
-            <span aria-hidden="true">Ⅱ</span>
-          </button>
-          <button data-action="step" title="Step" aria-label="Step">
-            <span aria-hidden="true">▸|</span>
-          </button>
-          <button data-action="stop" title="Restart" aria-label="Restart">
-            <span aria-hidden="true">↺</span>
-          </button>
+          <div class="debugger-zoom-sep"></div>
+          <button data-action="camera-reset" title="Reset Camera">⌖</button>
+          <button data-toggle="camera-lock" title="Lock Camera to Entity">⊙</button>
         </div>
       </div>
     </header>
@@ -454,9 +447,29 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     setText(layout, "[data-zoom-display]", `${Math.round(state.camera.zoom * 100)}%`);
   };
 
+  const closeDropdowns = () => {
+    for (const d of layout.querySelectorAll<HTMLElement>("[data-dropdown].is-open")) {
+      d.classList.remove("is-open");
+    }
+  };
+
+  const handleDocumentClick = (event: MouseEvent) => {
+    if (!(event.target instanceof Element)) return;
+    if (!event.target.closest("[data-dropdown]")) closeDropdowns();
+  };
+  document.addEventListener("click", handleDocumentClick);
+
   const handleControlsClick = (event: MouseEvent) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
+
+    const dropdownTrigger = target.closest<HTMLElement>("[data-dropdown-trigger]");
+    if (dropdownTrigger) {
+      const name = dropdownTrigger.dataset.dropdownTrigger;
+      const dropdown = layout.querySelector<HTMLElement>(`[data-dropdown="${name}"]`);
+      if (dropdown) dropdown.classList.toggle("is-open");
+      return;
+    }
 
     const action = target.closest<HTMLButtonElement>("[data-action]")?.dataset.action;
     const toggle = target.closest<HTMLButtonElement>("[data-toggle]")?.dataset.toggle;
@@ -477,6 +490,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     }
 
     if (!action) return;
+    if (target.closest(".debugger-dropdown__panel")) closeDropdowns();
     if (action === "zoom-in" || action === "zoom-out" || action === "zoom-100") {
       const w = engine.app.renderer.width;
       const h = engine.app.renderer.height;
@@ -650,6 +664,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
       engine.app.canvas.removeEventListener("pointerup", handleCanvasPointerUp);
       engine.app.canvas.removeEventListener("pointerleave", handleCanvasPointerUp);
       shell.removeEventListener("wheel", handleCanvasWheel);
+      document.removeEventListener("click", handleDocumentClick);
       controlsHost?.removeEventListener("click", handleControlsClick);
       searchInput?.removeEventListener("input", handleSearchInput);
       layout.querySelector<HTMLElement>("[data-inspector]")?.removeEventListener("change", handleInspectorChange);
@@ -744,11 +759,11 @@ function ensureStyles() {
       grid-area: top;
       pointer-events: auto;
       position: relative;
-      z-index: 1;
+      z-index: 20;
       min-height: 0;
-      display: flex;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
       align-items: center;
-      justify-content: space-between;
       gap: 12px;
       padding: 10px 14px;
       box-sizing: border-box;
@@ -760,16 +775,46 @@ function ensureStyles() {
       color: #e4e4e7;
       font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
     }
-    .debugger-toolbar__brand,
+    .debugger-toolbar__left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .debugger-toolbar__playback {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      background: #18181b;
+    }
+    .debugger-toolbar__playback button {
+      width: 34px;
+      height: 28px;
+      border: 1px solid transparent;
+      border-radius: 9px;
+      background: transparent;
+      color: #a1a1aa;
+      cursor: pointer;
+      font: 13px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      display: grid;
+      place-items: center;
+    }
+    .debugger-toolbar__playback button:hover {
+      background: rgba(255, 255, 255, 0.07);
+      color: #e4e4e7;
+    }
+    .debugger-toolbar__playback button.is-active {
+      border-color: rgba(96, 165, 250, 0.4);
+      background: rgba(37, 99, 235, 0.22);
+      color: #bfdbfe;
+    }
     .debugger-toolbar__actions {
       display: flex;
       align-items: center;
+      justify-content: flex-end;
       gap: 10px;
-    }
-    .debugger-toolbar__brand {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 2px;
     }
     .debugger-panel {
       pointer-events: auto;
@@ -851,6 +896,90 @@ function ensureStyles() {
       border-color: rgba(96, 165, 250, 0.45);
       background: rgba(37, 99, 235, 0.24);
       color: #bfdbfe;
+    }
+    .debugger-dropdown {
+      position: relative;
+    }
+    .debugger-dropdown__trigger {
+      height: 32px;
+      padding: 0 12px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 10px;
+      background: #18181b;
+      color: #e4e4e7;
+      cursor: pointer;
+      font: inherit;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    .debugger-dropdown__trigger:hover {
+      background: #27272a;
+    }
+    .debugger-dropdown.is-open .debugger-dropdown__trigger {
+      border-color: rgba(96, 165, 250, 0.4);
+      background: rgba(37, 99, 235, 0.18);
+      color: #bfdbfe;
+    }
+    .debugger-dropdown__panel {
+      display: none;
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      min-width: 180px;
+      padding: 5px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      background: rgba(10, 10, 12, 0.98);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(20px);
+      z-index: 100;
+    }
+    .debugger-dropdown.is-open .debugger-dropdown__panel {
+      display: grid;
+      gap: 1px;
+    }
+    .debugger-dropdown__item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      height: 32px;
+      padding: 0 8px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+      color: #a1a1aa;
+      cursor: pointer;
+      font: inherit;
+      text-align: left;
+      box-sizing: border-box;
+    }
+    .debugger-dropdown__item:hover {
+      background: rgba(255, 255, 255, 0.06);
+      color: #e4e4e7;
+    }
+    .debugger-dropdown__item.is-active {
+      border-color: rgba(96, 165, 250, 0.3);
+      background: rgba(37, 99, 235, 0.18);
+      color: #bfdbfe;
+    }
+    .debugger-dropdown__item-icon {
+      width: 18px;
+      text-align: center;
+      font-size: 13px;
+      flex-shrink: 0;
+      opacity: 0.6;
+    }
+    .debugger-dropdown__item.is-active .debugger-dropdown__item-icon {
+      opacity: 1;
+    }
+    .debugger-dropdown__divider {
+      height: 1px;
+      margin: 3px 4px;
+      background: rgba(255, 255, 255, 0.08);
     }
     .debugger-section {
       min-height: 0;
@@ -1185,6 +1314,11 @@ function ensureStyles() {
     .debugger-zoom-group button:hover {
       background: rgba(255, 255, 255, 0.08);
     }
+    .debugger-zoom-group button.is-active {
+      border-color: rgba(96, 165, 250, 0.4);
+      background: rgba(37, 99, 235, 0.22);
+      color: #bfdbfe;
+    }
     .debugger-zoom-value {
       min-width: 44px;
       text-align: center;
@@ -1195,6 +1329,13 @@ function ensureStyles() {
     }
     .debugger-zoom-value:hover {
       color: #e4e4e7 !important;
+    }
+    .debugger-zoom-sep {
+      width: 1px;
+      height: 16px;
+      background: rgba(255, 255, 255, 0.12);
+      margin: 0 2px;
+      flex-shrink: 0;
     }
   `;
   document.head.appendChild(style);
@@ -1802,7 +1943,12 @@ function setText(root: ParentNode, selector: string, value: string) {
 }
 
 function syncPlayback(sidebar: HTMLElement, playbackState: "playing" | "paused" | "stopped", state: DebugState) {
-  setText(sidebar, "[data-playback]", playbackState);
+  const playback = sidebar.querySelector<HTMLElement>(".debugger-toolbar__playback");
+  if (playback) {
+    playback.querySelector<HTMLButtonElement>("[data-action='play']")?.classList.toggle("is-active", playbackState === "playing");
+    playback.querySelector<HTMLButtonElement>("[data-action='pause']")?.classList.toggle("is-active", playbackState === "paused");
+    playback.querySelector<HTMLButtonElement>("[data-action='stop']")?.classList.toggle("is-active", playbackState === "stopped");
+  }
   syncToggleState(sidebar, "grid", state.showGrid);
   syncToggleState(sidebar, "physics", state.showPhysics);
   syncToggleState(sidebar, "labels", state.showLabels);
