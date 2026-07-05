@@ -48,9 +48,15 @@ export function attachDebugEditor(world: GameWorld, engine: EngineApplication, p
         store: velocities,
         fields(value) {
           return [
-            { label: "X", value: formatNumber(value.x) },
-            { label: "Y", value: formatNumber(value.y) },
+            { label: "X", value: formatNumber(value.x), editable: true, editKey: "x" },
+            { label: "Y", value: formatNumber(value.y), editable: true, editKey: "y" },
           ];
+        },
+        set(value, key, next) {
+          const numeric = Number(next);
+          if (Number.isNaN(numeric)) return;
+          if (key === "x") value.x = numeric;
+          if (key === "y") value.y = numeric;
         },
       }),
       createStoreInspector({

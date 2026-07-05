@@ -1,5 +1,5 @@
 import type { Entity, World, WorldDebugEvent } from "@engine/ecs-core";
-import type { Physics, PhysicsDebugBody, PhysicsDebugEvent } from "@engine/physics";
+import type { Physics, PhysicsDebugEvent } from "@engine/physics";
 import { transforms, type EngineApplication, type TransformScale } from "@engine/renderer";
 import { Graphics, Text } from "pixi.js";
 
@@ -9,6 +9,8 @@ export type DebugEditorField = {
   label: string;
   value: string;
   secondary?: string;
+  editable?: boolean;
+  editKey?: string;
 };
 
 export type DebugEditorSection<TWorld extends DebuggerWorld = DebuggerWorld> = {
@@ -20,6 +22,7 @@ export type DebugInspectorComponent<TWorld extends DebuggerWorld = DebuggerWorld
   id: string;
   title: string;
   fields: (world: TWorld, entity: Entity) => DebugEditorField[];
+  set?: (world: TWorld, entity: Entity, key: string, value: string) => void;
 };
 
 export type DebugStoreInspectorOptions<TValue, TWorld extends DebuggerWorld = DebuggerWorld> = {
@@ -27,6 +30,7 @@ export type DebugStoreInspectorOptions<TValue, TWorld extends DebuggerWorld = De
   title: string;
   store: Map<Entity, TValue>;
   fields: (value: TValue, world: TWorld, entity: Entity) => DebugEditorField[];
+  set?: (value: TValue, key: string, next: string, world: TWorld, entity: Entity) => void;
 };
 
 export type DebugPlayback = {
@@ -84,6 +88,11 @@ export function createStoreInspector<TValue, TWorld extends DebuggerWorld = Debu
       if (value === undefined) return [];
       return options.fields(value, world, entity);
     },
+    set(world, entity, key, next) {
+      const value = options.store.get(entity);
+      if (value === undefined || !options.set) return;
+      options.set(value, key, next, world, entity);
+    },
   };
 }
 
@@ -112,6 +121,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   };
 
   const componentInspectors = [
+    ...createBuiltinInspectorComponents(options.getEntityTitle),
     ...(options.components ?? []),
     ...(options.sections ?? []).map((section, index) => ({
       id: `legacy-section-${index}`,
@@ -122,6 +132,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
       },
     })),
   ];
+  const componentInspectorMap = new Map(componentInspectors.map((component) => [component.id, component]));
 
   const trackedStores = options.trackedStores ?? [];
   const storeSnapshots = new Map<string, string>();
@@ -257,9 +268,23 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     renderEntityList(world, layout, state.selectedEntity, options.getEntityTitle);
   };
 
+  const handleInspectorChange = (event: Event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+
+    const entity = target.dataset.entity;
+    const component = target.dataset.component;
+    const key = target.dataset.key;
+    if (!entity || !component || !key) return;
+
+    applyInspectorEdit(world, componentInspectorMap, Number(entity), component, key, target.value);
+    refresh();
+  };
+
   engine.app.canvas.addEventListener("click", handleCanvasClick);
   controlsHost?.addEventListener("click", handleControlsClick);
   searchInput?.addEventListener("input", handleSearchInput);
+  layout.querySelector<HTMLElement>("[data-inspector]")?.addEventListener("change", handleInspectorChange);
 
   refresh();
 
@@ -275,6 +300,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
       engine.app.canvas.removeEventListener("click", handleCanvasClick);
       controlsHost?.removeEventListener("click", handleControlsClick);
       searchInput?.removeEventListener("input", handleSearchInput);
+      layout.querySelector<HTMLElement>("[data-inspector]")?.removeEventListener("change", handleInspectorChange);
       for (const unsubscribe of unsubscribers) unsubscribe();
     },
   };
@@ -556,12 +582,28 @@ function ensureStyles() {
     .debugger-field {
       display: flex;
       justify-content: space-between;
+      align-items: center;
       gap: 8px;
       color: #a1a1aa;
+    }
+    .debugger-field--editable {
+      cursor: text;
     }
     .debugger-field strong {
       color: #fafafa;
       text-align: right;
+    }
+    .debugger-field__input {
+      width: 88px;
+      height: 24px;
+      padding: 0 6px;
+      box-sizing: border-box;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      background: #111114;
+      color: #fafafa;
+      text-align: right;
+      font: inherit;
     }
     .debugger-log {
       margin: 0;
@@ -685,41 +727,82 @@ function renderInspector<TWorld extends DebuggerWorld>(
     return;
   }
 
-  const transform = transforms.get(entity);
-  const scale = normalizeScale(transform?.scale);
-  const body = world.physics.getDebugBodies().find((item) => item.entity === entity);
-  const cards: string[] = [
-    renderCard("Entity", [
-      { label: "Name", value: options.getEntityTitle?.(world, entity) ?? entityTitle(world, entity) },
-      { label: "Tags", value: world.tags.list(entity).join(", ") || "-" },
-    ]),
-    renderCard("Transform", [
-      { label: "X", value: formatNumber(transform?.x) },
-      { label: "Y", value: formatNumber(transform?.y) },
-      { label: "Scale", value: `${formatNumber(scale.x)}, ${formatNumber(scale.y)}` },
-      { label: "Rot", value: formatNumber(transform?.rotation) },
-    ]),
-    renderCard("Physics", [
-      { label: "Kind", value: body?.kind ?? "-" },
-      { label: "Bounds", value: body ? `${formatNumber(body.width)} x ${formatNumber(body.height)}` : "-" },
-      { label: "Colliding", value: body?.isColliding ? "yes" : "no" },
-    ]),
-  ];
+  const cards: string[] = [];
 
   for (const component of components) {
     const fields = component.fields(world, entity);
     if (fields.length === 0) continue;
-    cards.push(renderCard(component.title, fields.map((field) => ({
-      label: field.label,
-      value: field.secondary === undefined ? field.value : `${field.value}, ${field.secondary}`,
-    }))));
+    cards.push(renderCard(component.id, component.title, entity, fields));
   }
 
-  cards.push(renderCard("Runtime", [
+  cards.push(renderRuntimeCard("Runtime", [
     { label: "Details", value: options.getRuntimeDetails?.(world, entity) ?? defaultRuntimeDetails(world, entity) },
   ]));
 
   host.innerHTML = cards.join("");
+}
+
+function createBuiltinInspectorComponents<TWorld extends DebuggerWorld>(
+  getEntityTitle?: (world: TWorld, entity: Entity) => string,
+): DebugInspectorComponent<TWorld>[] {
+  return [
+    {
+      id: "entity",
+      title: "Entity",
+      fields(world, entity) {
+        return [
+          { label: "Name", value: getEntityTitle?.(world, entity) ?? entityTitle(world, entity) },
+          { label: "Tags", value: world.tags.list(entity).join(", ") || "-" },
+        ];
+      },
+    },
+    {
+      id: "transform",
+      title: "Transform",
+      fields(world, entity) {
+        const transform = transforms.get(entity);
+        if (!transform) return [];
+        const scale = normalizeScale(transform.scale);
+        return [
+          { label: "X", value: formatNumber(transform.x), editable: true, editKey: "x" },
+          { label: "Y", value: formatNumber(transform.y), editable: true, editKey: "y" },
+          { label: "Scale X", value: formatNumber(scale.x), editable: true, editKey: "scaleX" },
+          { label: "Scale Y", value: formatNumber(scale.y), editable: true, editKey: "scaleY" },
+          { label: "Rot", value: formatNumber(transform.rotation), editable: true, editKey: "rotation" },
+        ];
+      },
+      set(world, entity, key, rawValue) {
+        const next = Number(rawValue);
+        if (Number.isNaN(next)) return;
+
+        const transform = transforms.get(entity);
+        if (!transform) return;
+
+        if (key === "x") transform.x = next;
+        if (key === "y") transform.y = next;
+        if (key === "rotation") transform.rotation = next;
+        if (key === "scaleX" || key === "scaleY") {
+          const scale = normalizeScale(transform.scale);
+          if (key === "scaleX") scale.x = next;
+          if (key === "scaleY") scale.y = next;
+          transform.scale = scale;
+        }
+      },
+    },
+    {
+      id: "physics",
+      title: "Physics",
+      fields(world, entity) {
+        const body = world.physics.getDebugBodies().find((item) => item.entity === entity);
+        if (!body) return [];
+        return [
+          { label: "Kind", value: body.kind },
+          { label: "Bounds", value: `${formatNumber(body.width)} x ${formatNumber(body.height)}` },
+          { label: "Colliding", value: body.isColliding ? "yes" : "no" },
+        ];
+      },
+    },
+  ];
 }
 
 function renderSystems(sidebar: HTMLElement, metrics: FrameMetric[]) {
@@ -849,13 +932,52 @@ function formatPhysicsEvent<TWorld extends DebuggerWorld>(
   }
 }
 
-function renderCard(title: string, fields: Array<{ label: string; value: string }>) {
+function renderRuntimeCard(title: string, fields: Array<{ label: string; value: string }>) {
   return `
     <div class="debugger-card">
       <div class="debugger-card__title">${title}</div>
       ${fields.map((field) => `<div class="debugger-field"><span>${escapeHtml(field.label)}</span><strong>${escapeHtml(field.value)}</strong></div>`).join("")}
     </div>
   `;
+}
+
+function renderCard(componentId: string, title: string, entity: Entity, fields: DebugEditorField[]) {
+  return `
+    <div class="debugger-card">
+      <div class="debugger-card__title">${title}</div>
+      ${fields.map((field) => renderField(componentId, entity, field)).join("")}
+    </div>
+  `;
+}
+
+function renderField(componentId: string, entity: Entity, field: DebugEditorField) {
+  if (field.editable && field.editKey) {
+    return `
+      <label class="debugger-field debugger-field--editable">
+        <span>${escapeHtml(field.label)}</span>
+        <input
+          class="debugger-field__input"
+          data-entity="${entity}"
+          data-component="${escapeHtml(componentId)}"
+          data-key="${escapeHtml(field.editKey)}"
+          value="${escapeHtml(field.value)}"
+        />
+      </label>
+    `;
+  }
+
+  return `<div class="debugger-field"><span>${escapeHtml(field.label)}</span><strong>${escapeHtml(field.value)}</strong></div>`;
+}
+
+function applyInspectorEdit<TWorld extends DebuggerWorld>(
+  world: TWorld,
+  components: Map<string, DebugInspectorComponent<TWorld>>,
+  entity: Entity,
+  componentId: string,
+  key: string,
+  rawValue: string,
+) {
+  components.get(componentId)?.set?.(world, entity, key, rawValue);
 }
 
 function setText(root: ParentNode, selector: string, value: string) {
