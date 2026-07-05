@@ -2,6 +2,7 @@ import type { Entity } from "@engine/ecs-core";
 import { sprites, transforms } from "@engine/renderer";
 import { Graphics, Text } from "pixi.js";
 import { renderWorldGrid } from "./grid";
+import { renderEditorGizmo, renderSelectionOutline } from "./gizmo";
 import type { DebugGridOptions, DebugState, DebuggerWorld } from "../shared/types";
 
 export function renderPhysicsOverlay<TWorld extends DebuggerWorld>(
@@ -34,7 +35,15 @@ export function renderPhysicsOverlay<TWorld extends DebuggerWorld>(
     labels.delete(entity);
   }
 
-  if (!state?.showPhysics && !state?.showLabels && !state?.showSprites) return;
+  const shouldRenderSceneDebug = Boolean(state?.showPhysics || state?.showLabels || state?.showSprites);
+  if (!shouldRenderSceneDebug) {
+    if (state?.selectedEntity !== undefined && state.toolMode === "select") {
+      renderSelectionOutline(world, overlay, state.selectedEntity, state.camera.zoom);
+    } else if (state?.selectedEntity !== undefined) {
+      renderEditorGizmo(world, overlay, state.selectedEntity, state.toolMode, state.camera.zoom);
+    }
+    return;
+  }
 
   for (const body of world.physics.getDebugBodies()) {
     const isSelected = body.entity === selectedEntity;
@@ -116,6 +125,12 @@ export function renderPhysicsOverlay<TWorld extends DebuggerWorld>(
       overlay.moveTo(ax - cs, ay).lineTo(ax + cs, ay).stroke({ color: 0xfbbf24, width: 1.5, alpha: 0.9 });
       overlay.moveTo(ax, ay - cs).lineTo(ax, ay + cs).stroke({ color: 0xfbbf24, width: 1.5, alpha: 0.9 });
     }
+  }
+
+  if (state?.selectedEntity !== undefined && state.toolMode === "select") {
+    renderSelectionOutline(world, overlay, state.selectedEntity, state.camera.zoom);
+  } else if (state?.selectedEntity !== undefined) {
+    renderEditorGizmo(world, overlay, state.selectedEntity, state.toolMode, state.camera.zoom);
   }
 }
 

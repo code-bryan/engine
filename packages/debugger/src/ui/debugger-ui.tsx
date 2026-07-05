@@ -1,4 +1,20 @@
+import {
+  Camera,
+  Crosshair,
+  Expand,
+  LocateFixed,
+  MousePointer2,
+  Minus,
+  Pause,
+  Plus,
+  Play,
+  Redo2,
+  RotateCw,
+  ScanSearch,
+  StepForward,
+} from "lucide-react";
 import { useEffect, useRef } from "react";
+import type { EditorToolMode } from "../shared/types";
 
 export type DebuggerStatusCardView = {
   title: string;
@@ -60,6 +76,7 @@ export type DebuggerUiProps = {
   showSprites: boolean;
   cameraLocked: boolean;
   debugMenuOpen: boolean;
+  toolMode: EditorToolMode;
   entityQuery: string;
   inspectorQuery: string;
   statusCards: DebuggerStatusCardView[];
@@ -77,6 +94,7 @@ export type DebuggerUiProps = {
   onToggleLabels: () => void;
   onToggleSprites: () => void;
   onToggleCameraLock: () => void;
+  onSetToolMode: (mode: EditorToolMode) => void;
   onPlaybackAction: (action: "play" | "pause" | "step" | "stop") => void;
   onZoomAction: (action: "zoom-in" | "zoom-out" | "zoom-100" | "zoom-fit" | "camera-reset") => void;
   onEntityQueryChange: (value: string) => void;
@@ -132,22 +150,36 @@ export function DebuggerUi(props: DebuggerUiProps) {
                 </button>
               </div>
             </div>
+            <div className="debugger-tool-group" aria-label="Editor tools">
+              <button className={props.toolMode === "select" ? "is-active" : ""} onClick={() => props.onSetToolMode("select")} title="Select Tool" aria-label="Select Tool">
+                <MousePointer2 size={14} strokeWidth={2} />
+              </button>
+              <button className={props.toolMode === "move" ? "is-active" : ""} onClick={() => props.onSetToolMode("move")} title="Move Tool" aria-label="Move Tool">
+                <Crosshair size={14} strokeWidth={2} />
+              </button>
+              <button className={props.toolMode === "scale" ? "is-active" : ""} onClick={() => props.onSetToolMode("scale")} title="Scale Tool" aria-label="Scale Tool">
+                <Expand size={14} strokeWidth={2} />
+              </button>
+              <button className={props.toolMode === "rotate" ? "is-active" : ""} onClick={() => props.onSetToolMode("rotate")} title="Rotate Tool" aria-label="Rotate Tool">
+                <RotateCw size={14} strokeWidth={2} />
+              </button>
+            </div>
           </div>
           <div className="debugger-toolbar__playback">
-            <button className={props.playbackState === "playing" ? "is-active" : ""} onClick={() => props.onPlaybackAction("play")} title="Play" aria-label="Play">▶</button>
-            <button className={props.playbackState === "paused" ? "is-active" : ""} onClick={() => props.onPlaybackAction("pause")} title="Pause" aria-label="Pause">Ⅱ</button>
-            <button onClick={() => props.onPlaybackAction("step")} title="Step Frame" aria-label="Step Frame">▸|</button>
-            <button className={props.playbackState === "stopped" ? "is-active" : ""} onClick={() => props.onPlaybackAction("stop")} title="Restart" aria-label="Restart">↺</button>
+            <button className={props.playbackState === "playing" ? "is-active" : ""} onClick={() => props.onPlaybackAction("play")} title="Play" aria-label="Play"><Play size={14} fill="currentColor" strokeWidth={2} /></button>
+            <button className={props.playbackState === "paused" ? "is-active" : ""} onClick={() => props.onPlaybackAction("pause")} title="Pause" aria-label="Pause"><Pause size={14} fill="currentColor" strokeWidth={2} /></button>
+            <button onClick={() => props.onPlaybackAction("step")} title="Step Frame" aria-label="Step Frame"><StepForward size={14} strokeWidth={2} /></button>
+            <button className={props.playbackState === "stopped" ? "is-active" : ""} onClick={() => props.onPlaybackAction("stop")} title="Restart" aria-label="Restart"><Redo2 size={14} strokeWidth={2} /></button>
           </div>
           <div className="debugger-toolbar__actions">
             <div className="debugger-zoom-group">
-              <button onClick={() => props.onZoomAction("zoom-out")} title="Zoom Out">−</button>
+              <button onClick={() => props.onZoomAction("zoom-out")} title="Zoom Out" aria-label="Zoom Out"><Minus size={14} strokeWidth={2} /></button>
               <button className="debugger-zoom-value" onClick={() => props.onZoomAction("zoom-100")} title="Reset to 100%">{props.zoomLabel}</button>
-              <button onClick={() => props.onZoomAction("zoom-in")} title="Zoom In">+</button>
-              <button onClick={() => props.onZoomAction("zoom-fit")} title="Fit game in viewport">⊞</button>
+              <button onClick={() => props.onZoomAction("zoom-in")} title="Zoom In" aria-label="Zoom In"><Plus size={14} strokeWidth={2} /></button>
+              <button onClick={() => props.onZoomAction("zoom-fit")} title="Fit game in viewport" aria-label="Fit game in viewport"><ScanSearch size={14} strokeWidth={2} /></button>
               <div className="debugger-zoom-sep"></div>
-              <button onClick={() => props.onZoomAction("camera-reset")} title="Reset Camera">⌖</button>
-              <button className={props.cameraLocked ? "is-active" : ""} onClick={props.onToggleCameraLock} title="Lock Camera to Entity">⊙</button>
+              <button onClick={() => props.onZoomAction("camera-reset")} title="Reset Camera" aria-label="Reset Camera"><LocateFixed size={14} strokeWidth={2} /></button>
+              <button className={props.cameraLocked ? "is-active" : ""} onClick={props.onToggleCameraLock} title="Lock Camera to Entity" aria-label="Lock Camera to Entity"><Camera size={14} strokeWidth={2} /></button>
             </div>
           </div>
         </header>

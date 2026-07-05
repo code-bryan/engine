@@ -154,13 +154,10 @@ export function createRenderSystem(
       const t = transformStore.get(e);
       if (!t) continue;
       const scale = normalizeScale(t.scale);
-      const width = sprite.texture.width * Math.abs(scale.x);
-      const height = sprite.texture.height * Math.abs(scale.y);
-      const baseX = t.x + offset.x - anchor.x * width;
-      const baseY = t.y + offset.y - anchor.y * height;
+      sprite.anchor.set(anchor.x, anchor.y);
       sprite.position.set(
-        Math.round(scale.x < 0 ? baseX + width : baseX),
-        Math.round(baseY),
+        Math.round(t.x + offset.x),
+        Math.round(t.y + offset.y),
       );
       sprite.rotation = t.rotation ?? 0;
       sprite.scale.set(scale.x, scale.y);

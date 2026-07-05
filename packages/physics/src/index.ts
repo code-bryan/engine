@@ -36,6 +36,7 @@ export type PhysicsDebugBody = {
 export type PhysicsDebugEvent =
   | { type: "body:set"; entity: Entity; kind: RigidBodyKind; x: number; y: number; width: number; height: number }
   | { type: "body:reset"; entity: Entity; x: number; y: number; velocity: { x: number; y: number } }
+  | { type: "body:angle"; entity: Entity; angle: number }
   | { type: "body:velocity"; entity: Entity; velocity: { x: number; y: number } }
   | { type: "collision:start"; entities: [Entity, Entity] }
   | { type: "collision:end"; entities: [Entity, Entity] };
@@ -129,6 +130,13 @@ export class Physics {
     });
     Matter.Body.setVelocity(rigidBody.body, velocity);
     this.emitDebug({ type: "body:reset", entity, x: position.x, y: position.y, velocity: { ...velocity } });
+  }
+
+  setAngle(entity: Entity, angle: number) {
+    const rigidBody = this.rigidBodies.get(entity);
+    if (!rigidBody) return;
+    Matter.Body.setAngle(rigidBody.body, angle);
+    this.emitDebug({ type: "body:angle", entity, angle });
   }
 
   createSystem() {

@@ -4,6 +4,7 @@ import { sprites, transforms, type EngineApplication } from "@engine/renderer";
 import { Container, Graphics, Text, TextureSource, type SCALE_MODE } from "pixi.js";
 import { createRoot } from "react-dom/client";
 import { createBuiltinInspectorComponents, createStoreInspector, applyInspectorEdit } from "./inspectors";
+import { getEntityEditorBounds, hitEditorGizmo, type GizmoHit } from "./runtime/gizmo";
 import { resolveGridOptions } from "./runtime/grid";
 import { renderPhysicsOverlay } from "./runtime/overlay";
 import { captureRegistrySnapshot, captureWorldSnapshot, restoreRegistrySnapshot, restoreWorldSnapshot } from "./runtime/snapshots";
@@ -67,11 +68,12 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     snapshots: [],
     collapsedComponents: new Set(),
     showGrid: true,
-    showPhysics: true,
-    showLabels: true,
-    showSprites: true,
+    showPhysics: false,
+    showLabels: false,
+    showSprites: false,
     camera: { x: 0, y: 0, zoom: 1 },
     lockTarget: undefined,
+    toolMode: "select",
     entityQuery: "",
     inspectorQuery: "",
     openDropdown: undefined,
@@ -117,7 +119,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
 
   const layout = document.createElement("div");
   layout.className = "debugger-root";
-  shell.appendChild(layout);
+  viewport.appendChild(layout);
   const reactRoot = createRoot(layout);
 
   const overlay = new Graphics();
@@ -221,6 +223,10 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
           state.lockTarget = state.lockTarget !== undefined ? undefined : state.selectedEntity;
           refresh();
         },
+        setToolMode(mode) {
+          state.toolMode = mode;
+          refresh();
+        },
         playback(action) {
           if (action === "play") options.playback?.onPlay?.();
           if (action === "pause") options.playback?.onPause?.();
@@ -319,9 +325,22 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   }));
 
   let drag: { startX: number; startY: number; camX: number; camY: number } | null = null;
+  let entityDrag: { entity: Entity; offsetX: number; offsetY: number } | null = null;
+  let gizmoDrag: {
+    hit: GizmoHit;
+    startWorld: { x: number; y: number };
+    startPosition: { x: number; y: number };
+    startRotation: number;
+    startScale: { x: number; y: number };
+  } | null = null;
   let didDrag = false;
+  let suppressCanvasClick = false;
 
   const handleCanvasClick = (event: MouseEvent) => {
+    if (suppressCanvasClick) {
+      suppressCanvasClick = false;
+      return;
+    }
     const canvasPt = toCanvasPoint(engine.app.canvas, event.clientX, event.clientY);
     const stage = engine.app.stage;
     const worldPt = {
@@ -333,6 +352,48 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   };
 
   const handleCanvasPointerDown = (event: PointerEvent) => {
+    if (event.button === 0) {
+      const worldPt = toWorldPoint(engine.app.canvas, engine.app.stage, event.clientX, event.clientY);
+      const gizmoHit = hitEditorGizmo(world, state.selectedEntity, state.toolMode, worldPt, state.camera.zoom);
+      if (state.toolMode !== "select" && gizmoHit) {
+        const transform = transforms.get(gizmoHit.entity);
+        if (transform) {
+          state.lockTarget = undefined;
+          gizmoDrag = {
+            hit: gizmoHit,
+            startWorld: worldPt,
+            startPosition: { x: transform.x, y: transform.y },
+            startRotation: transform.rotation ?? 0,
+            startScale: normalizeScale(transform.scale),
+          };
+          didDrag = false;
+          suppressCanvasClick = false;
+          engine.app.canvas.setPointerCapture(event.pointerId);
+          refresh();
+          return;
+        }
+      }
+
+      const picked = world.physics.pickEntityAt(worldPt);
+      if (state.toolMode === "move" && picked !== undefined) {
+        const transform = transforms.get(picked);
+        if (transform) {
+          state.selectedEntity = picked;
+          state.lockTarget = undefined;
+          entityDrag = {
+            entity: picked,
+            offsetX: worldPt.x - transform.x,
+            offsetY: worldPt.y - transform.y,
+          };
+          didDrag = false;
+          suppressCanvasClick = false;
+          engine.app.canvas.setPointerCapture(event.pointerId);
+          refresh();
+          return;
+        }
+      }
+    }
+
     if (event.button !== 1) return;
     event.preventDefault();
     drag = { startX: event.clientX, startY: event.clientY, camX: state.camera.x, camY: state.camera.y };
@@ -341,6 +402,33 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   };
 
   const handleCanvasPointerMove = (event: PointerEvent) => {
+    if (gizmoDrag) {
+      const worldPt = toWorldPoint(engine.app.canvas, engine.app.stage, event.clientX, event.clientY);
+      applyGizmoDrag(world, gizmoDrag, worldPt, gridOptions.snapSize);
+      engine.tick(0);
+      didDrag = true;
+      suppressCanvasClick = true;
+      refresh();
+      return;
+    }
+
+    if (entityDrag) {
+      const worldPt = toWorldPoint(engine.app.canvas, engine.app.stage, event.clientX, event.clientY);
+      const nextX = snapToGrid(worldPt.x - entityDrag.offsetX, gridOptions.snapSize);
+      const nextY = snapToGrid(worldPt.y - entityDrag.offsetY, gridOptions.snapSize);
+      const transform = transforms.get(entityDrag.entity);
+      if (transform) {
+        transform.x = nextX;
+        transform.y = nextY;
+      }
+      world.physics.reset(entityDrag.entity, { x: nextX, y: nextY }, { x: 0, y: 0 });
+      engine.tick(0);
+      didDrag = true;
+      suppressCanvasClick = true;
+      refresh();
+      return;
+    }
+
     if (!drag || state.lockTarget !== undefined) return;
     if (Math.abs(event.clientX - drag.startX) + Math.abs(event.clientY - drag.startY) > 4) didDrag = true;
     const rect = engine.app.canvas.getBoundingClientRect();
@@ -350,7 +438,11 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     refresh();
   };
 
-  const handleCanvasPointerUp = () => { drag = null; };
+  const handleCanvasPointerUp = () => {
+    drag = null;
+    entityDrag = null;
+    gizmoDrag = null;
+  };
 
   const handleCanvasWheel = (event: WheelEvent) => {
     if (event.deltaY === 0) return;
@@ -377,7 +469,36 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
       refresh();
     }
   };
+
+  const handleWindowKeyDown = (event: KeyboardEvent) => {
+    const target = event.target;
+    if (
+      target instanceof HTMLInputElement
+      || target instanceof HTMLTextAreaElement
+      || (target instanceof HTMLElement && target.isContentEditable)
+    ) return;
+
+    const key = event.key.toLowerCase();
+    if (key === "q") {
+      state.toolMode = "select";
+      refresh();
+    } else if (key === "w") {
+      state.toolMode = "move";
+      refresh();
+    } else if (key === "e") {
+      state.toolMode = "rotate";
+      refresh();
+    } else if (key === "r") {
+      state.toolMode = "scale";
+      refresh();
+    } else {
+      return;
+    }
+
+    event.preventDefault();
+  };
   document.addEventListener("click", handleDocumentClick);
+  window.addEventListener("keydown", handleWindowKeyDown);
 
   engine.app.canvas.addEventListener("click", handleCanvasClick);
   engine.app.canvas.addEventListener("pointerdown", handleCanvasPointerDown);
@@ -409,6 +530,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
       engine.app.canvas.removeEventListener("pointerleave", handleCanvasPointerUp);
       shell.removeEventListener("wheel", handleCanvasWheel);
       document.removeEventListener("click", handleDocumentClick);
+      window.removeEventListener("keydown", handleWindowKeyDown);
       reactRoot.unmount();
       for (const unsubscribe of unsubscribers) unsubscribe();
     },
@@ -473,6 +595,8 @@ function formatPhysicsEvent<TWorld extends DebuggerWorld>(
       return { cat: "physics", text: `body set ${entityLabel(world, event.entity, getEntityTitle)} ${event.kind} ${event.width}x${event.height} @ ${event.x},${event.y}` };
     case "body:reset":
       return { cat: "physics", text: `body reset ${entityLabel(world, event.entity, getEntityTitle)} @ ${event.x},${event.y}` };
+    case "body:angle":
+      return { cat: "physics", text: `body angle ${entityLabel(world, event.entity, getEntityTitle)} ${event.angle.toFixed(2)}` };
     case "body:velocity":
       return { cat: "physics", text: `velocity ${entityLabel(world, event.entity, getEntityTitle)} ${event.velocity.x.toFixed(2)},${event.velocity.y.toFixed(2)}` };
     case "collision:start":
@@ -558,6 +682,92 @@ function toCanvasPoint(canvas: HTMLCanvasElement, clientX: number, clientY: numb
     x: (clientX - rect.left) * (canvas.width / rect.width),
     y: (clientY - rect.top) * (canvas.height / rect.height),
   };
+}
+
+function toWorldPoint(canvas: HTMLCanvasElement, stage: Container, clientX: number, clientY: number) {
+  const canvasPt = toCanvasPoint(canvas, clientX, clientY);
+  return {
+    x: (canvasPt.x - stage.position.x) / stage.scale.x,
+    y: (canvasPt.y - stage.position.y) / stage.scale.y,
+  };
+}
+
+function snapToGrid(value: number, step: number) {
+  if (step <= 1) return value;
+  return Math.round(value / step) * step;
+}
+
+function normalizeScale(scale?: number | { x: number; y: number }) {
+  if (scale === undefined) return { x: 1, y: 1 };
+  return typeof scale === "number" ? { x: scale, y: scale } : scale;
+}
+
+function applyGizmoDrag<TWorld extends DebuggerWorld>(
+  world: TWorld,
+  drag: {
+    hit: GizmoHit;
+    startWorld: { x: number; y: number };
+    startPosition: { x: number; y: number };
+    startRotation: number;
+    startScale: { x: number; y: number };
+  },
+  worldPt: { x: number; y: number },
+  snapSize: number,
+) {
+  const transform = transforms.get(drag.hit.entity);
+  if (!transform) return;
+
+  if (drag.hit.kind === "move") {
+    const nextX = snapToGrid(drag.startPosition.x + (worldPt.x - drag.startWorld.x), snapSize);
+    const nextY = snapToGrid(drag.startPosition.y + (worldPt.y - drag.startWorld.y), snapSize);
+    transform.x = nextX;
+    transform.y = nextY;
+    world.physics.reset(drag.hit.entity, { x: nextX, y: nextY }, { x: 0, y: 0 });
+    return;
+  }
+
+  if (drag.hit.kind === "rotate") {
+    const bounds = getEntityEditorBounds(world, drag.hit.entity);
+    if (!bounds) return;
+    const startAngle = Math.atan2(drag.startWorld.y - bounds.pivotY, drag.startWorld.x - bounds.pivotX);
+    const nextAngle = Math.atan2(worldPt.y - bounds.pivotY, worldPt.x - bounds.pivotX);
+    const rotation = snapRotation(drag.startRotation + (nextAngle - startAngle));
+    transform.rotation = rotation;
+    world.physics.setAngle(drag.hit.entity, rotation);
+    return;
+  }
+
+  const { bounds, handle } = drag.hit;
+  const anchorX = handle === "ne" || handle === "se" ? bounds.x : bounds.x + bounds.width;
+  const anchorY = handle === "sw" || handle === "se" ? bounds.y : bounds.y + bounds.height;
+  const startDx = drag.startWorld.x - anchorX;
+  const startDy = drag.startWorld.y - anchorY;
+  const nextDx = worldPt.x - anchorX;
+  const nextDy = worldPt.y - anchorY;
+  const minScale = 0.1;
+
+  const nextScaleX = Math.max(
+    minScale,
+    Math.abs(startDx) < 0.001 ? drag.startScale.x : drag.startScale.x * (nextDx / startDx),
+  );
+  const nextScaleY = Math.max(
+    minScale,
+    Math.abs(startDy) < 0.001 ? drag.startScale.y : drag.startScale.y * (nextDy / startDy),
+  );
+
+  transform.scale = {
+    x: snapScale(nextScaleX),
+    y: snapScale(nextScaleY),
+  };
+}
+
+function snapScale(value: number) {
+  return Math.round(value * 20) / 20;
+}
+
+function snapRotation(angle: number) {
+  const step = Math.PI / 12;
+  return Math.round(angle / step) * step;
 }
 
 function formatNumber(value?: number) {

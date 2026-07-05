@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@types/matter-js": "^0.20.2",
+    "lucide-react": "^1.23.0",
     "matter-js": "^0.20.0",
     "pixi.js": "^8.0.0",
     "react": "^19.2.7",

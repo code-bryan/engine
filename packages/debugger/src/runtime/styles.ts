@@ -28,11 +28,12 @@ export function ensureDebuggerStyles() {
       position: absolute;
       inset: 0;
       z-index: 10;
+      pointer-events: none;
     }
     .debugger-viewport-hud {
       position: absolute;
-      top: 8px;
-      left: 8px;
+      top: 76px;
+      left: 290px;
       z-index: 4;
       pointer-events: none;
       display: flex;
@@ -125,11 +126,46 @@ export function ensureDebuggerStyles() {
       display: grid;
       place-items: center;
     }
+    .debugger-toolbar button svg {
+      display: block;
+    }
     .debugger-toolbar__playback button:hover {
       background: rgba(255, 255, 255, 0.07);
       color: #e4e4e7;
     }
     .debugger-toolbar__playback button.is-active {
+      border-color: rgba(96, 165, 250, 0.4);
+      background: rgba(37, 99, 235, 0.22);
+      color: #bfdbfe;
+    }
+    .debugger-tool-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      background: #18181b;
+    }
+    .debugger-tool-group button {
+      height: 28px;
+      width: 30px;
+      padding: 0;
+      border: 1px solid transparent;
+      border-radius: 9px;
+      background: transparent;
+      color: #a1a1aa;
+      cursor: pointer;
+      font: 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: 0.02em;
+      display: grid;
+      place-items: center;
+    }
+    .debugger-tool-group button:hover {
+      background: rgba(255, 255, 255, 0.07);
+      color: #e4e4e7;
+    }
+    .debugger-tool-group button.is-active {
       border-color: rgba(96, 165, 250, 0.4);
       background: rgba(37, 99, 235, 0.22);
       color: #bfdbfe;

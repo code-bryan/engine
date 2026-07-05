@@ -47,6 +47,8 @@ export type DebugPlayback = {
   getState?: () => "playing" | "paused" | "stopped";
 };
 
+export type EditorToolMode = "select" | "move" | "scale" | "rotate";
+
 export type DebugTrackedStore = {
   label: string;
   store: Map<Entity, unknown>;
@@ -123,6 +125,7 @@ export type DebugState = {
   showSprites: boolean;
   camera: { x: number; y: number; zoom: number };
   lockTarget: Entity | undefined;
+  toolMode: EditorToolMode;
   entityQuery: string;
   inspectorQuery: string;
   openDropdown: string | undefined;

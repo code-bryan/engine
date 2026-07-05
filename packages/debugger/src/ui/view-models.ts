@@ -16,6 +16,7 @@ import type {
   DebugInspectorComponent,
   DebugState,
   DebugStatusPanel,
+  EditorToolMode,
   DebuggerWorld,
   FrameMetric,
   LogCategory,
@@ -30,6 +31,7 @@ export type DebuggerUiActions = {
   toggleLabels: () => void;
   toggleSprites: () => void;
   toggleCameraLock: () => void;
+  setToolMode: (mode: EditorToolMode) => void;
   playback: (action: "play" | "pause" | "step" | "stop") => void;
   zoom: (action: "zoom-in" | "zoom-out" | "zoom-100" | "zoom-fit" | "camera-reset") => void;
   setEntityQuery: (value: string) => void;
@@ -64,6 +66,7 @@ export function renderDebuggerUi<TWorld extends DebuggerWorld>(
     showSprites: state.showSprites,
     cameraLocked: state.lockTarget !== undefined,
     debugMenuOpen: state.openDropdown === "debug",
+    toolMode: state.toolMode,
     entityQuery: state.entityQuery,
     inspectorQuery: state.inspectorQuery,
     statusCards: buildStatusCards(world, options.statusPanels ?? []),
@@ -81,6 +84,7 @@ export function renderDebuggerUi<TWorld extends DebuggerWorld>(
     onToggleLabels: actions.toggleLabels,
     onToggleSprites: actions.toggleSprites,
     onToggleCameraLock: actions.toggleCameraLock,
+    onSetToolMode: actions.setToolMode,
     onPlaybackAction: actions.playback,
     onZoomAction: actions.zoom,
     onEntityQueryChange: actions.setEntityQuery,
