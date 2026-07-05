@@ -676,20 +676,8 @@ function ensureStyles() {
       padding: 0 !important;
       overflow: hidden;
     }
-    .app-shell--debug::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      z-index: 0;
-      pointer-events: none;
-      background-image:
-        linear-gradient(to right, rgba(255, 255, 255, 0.06) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
-      background-size: 64px 64px;
-      background-position: 0 0;
-    }
-    .app-shell--debug.app-shell--debug-grid-off::before {
-      opacity: 0;
+    .app-shell--debug-grid-off .game-frame::after {
+      display: none;
     }
     .app-shell--debug .game-frame {
       position: absolute !important;
