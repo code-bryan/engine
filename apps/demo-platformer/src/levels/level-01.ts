@@ -15,11 +15,11 @@ export async function Level01(world: GameWorld) {
     EnemyPrefab(world, { x: 220, y: 64 }),
   ]);
 
-  world.addSystem(createKeyboardInputSys());
-  world.addSystem(createPlayerControlSystem(world));
-  world.addSystem(createEnemyFollowSystem(world));
-  world.addSystem(createActorStateSystem());
-  world.addSystem(createSpriteFacingSystem());
-  world.addSystem(world.physics.createSystem());
-  world.addSystem(createRestartOnEnemyTouchSystem(world));
+  world.addSystem("keyboard-input", createKeyboardInputSys());
+  world.addSystem("player-control", createPlayerControlSystem(world));
+  world.addSystem("enemy-follow", createEnemyFollowSystem(world));
+  world.addSystem("actor-state", createActorStateSystem());
+  world.addSystem("sprite-facing", createSpriteFacingSystem());
+  world.addSystem("physics", world.physics.createSystem());
+  world.addSystem("restart-on-enemy-touch", createRestartOnEnemyTouchSystem(world));
 }

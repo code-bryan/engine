@@ -33,9 +33,18 @@ export type PhysicsDebugBody = {
   isColliding: boolean;
 };
 
+export type PhysicsDebugEvent =
+  | { type: "body:set"; entity: Entity; kind: RigidBodyKind; x: number; y: number; width: number; height: number }
+  | { type: "body:reset"; entity: Entity; x: number; y: number; velocity: { x: number; y: number } }
+  | { type: "body:velocity"; entity: Entity; velocity: { x: number; y: number } }
+  | { type: "collision:start"; entities: [Entity, Entity] }
+  | { type: "collision:end"; entities: [Entity, Entity] };
+export type PhysicsDebugListener = (event: PhysicsDebugEvent) => void;
+
 export class Physics {
   private engine: Matter.Engine;
   private collisions = new Set<string>();
+  private debugListeners = new Set<PhysicsDebugListener>();
   rigidBodies: ComponentStore<RigidBody> = createStore<RigidBody>();
 
   body = {
@@ -63,6 +72,11 @@ export class Physics {
     });
   }
 
+  onDebugEvent(listener: PhysicsDebugListener) {
+    this.debugListeners.add(listener);
+    return () => this.debugListeners.delete(listener);
+  }
+
   setBody(entity: Entity, props: RigidBodyBoxProps & { kind?: RigidBodyKind }) {
     const kind = props.kind ?? "dynamic";
     const body = Matter.Bodies.rectangle(
@@ -79,6 +93,15 @@ export class Physics {
 
     Matter.Composite.add(this.engine.world, body);
     this.rigidBodies.set(entity, { body, kind, width: props.width, height: props.height });
+    this.emitDebug({
+      type: "body:set",
+      entity,
+      kind,
+      x: props.x,
+      y: props.y,
+      width: props.width,
+      height: props.height,
+    });
   }
 
   setVelocity(entity: Entity, velocity: { x: number; y: number }) {
@@ -88,6 +111,7 @@ export class Physics {
       x: velocity.x / 60,
       y: velocity.y / 60,
     });
+    this.emitDebug({ type: "body:velocity", entity, velocity: { ...velocity } });
   }
 
   reset(entity: Entity, position: { x: number; y: number }, velocity = { x: 0, y: 0 }) {
@@ -99,6 +123,7 @@ export class Physics {
       y: position.y + rigidBody.height / 2,
     });
     Matter.Body.setVelocity(rigidBody.body, velocity);
+    this.emitDebug({ type: "body:reset", entity, x: position.x, y: position.y, velocity: { ...velocity } });
   }
 
   createSystem() {
@@ -183,6 +208,7 @@ export class Physics {
     const b = this.findEntityByBody(bodyB);
     if (a === undefined || b === undefined) return;
     this.collisions.add(this.collisionKey(a, b));
+    this.emitDebug({ type: "collision:start", entities: [a, b] });
   }
 
   private untrackCollision(bodyA: Matter.Body, bodyB: Matter.Body) {
@@ -190,6 +216,7 @@ export class Physics {
     const b = this.findEntityByBody(bodyB);
     if (a === undefined || b === undefined) return;
     this.collisions.delete(this.collisionKey(a, b));
+    this.emitDebug({ type: "collision:end", entities: [a, b] });
   }
 
   private collisionKey(a: Entity, b: Entity) {
@@ -213,6 +240,10 @@ export class Physics {
     for (const [entity, rigidBody] of this.rigidBodies) {
       if (rigidBody.body === body) return entity;
     }
+  }
+
+  private emitDebug(event: PhysicsDebugEvent) {
+    for (const listener of this.debugListeners) listener(event);
   }
 }
 

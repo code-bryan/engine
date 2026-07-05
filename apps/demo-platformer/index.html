@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>@engine demo-platformer</title>
     <style>
+      :root {
+        color-scheme: dark;
+      }
+      html {
+        height: 100%;
+      }
       body {
         margin: 0;
         min-height: 100vh;
@@ -14,351 +20,60 @@
         overflow: hidden;
       }
       .app-shell {
+        box-sizing: border-box;
         width: 100vw;
-        height: 100vh;
+        min-height: 100vh;
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 340px;
+        place-items: center;
+        padding: 24px;
+        background:
+          radial-gradient(circle at top, rgba(82, 82, 91, 0.18), transparent 40%),
+          linear-gradient(180deg, #18181b 0%, #09090b 100%);
       }
       .game-frame {
+        width: min(calc(100vw - 48px), calc((100vh - 48px) * 16 / 9));
+        aspect-ratio: 16 / 9;
         position: relative;
-        min-width: 0;
         display: grid;
-        grid-template-rows: 40px minmax(0, 1fr) 24px;
-        background: #0e0e10;
-        border-right: 1px solid #27272a;
-      }
-      .viewport-toolbar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        padding: 0 8px;
-        background: #18181b;
-        border-bottom: 1px solid #27272a;
-        position: relative;
-        z-index: 3;
-      }
-      .viewport-toolbar__group {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-      }
-      .viewport-toolbar__brand {
-        font-size: 10px;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        color: #71717a;
-        background: #09090b;
-        border: 1px solid #27272a;
-        padding: 2px 8px;
-        border-radius: 2px;
-      }
-      .viewport-btn {
-        height: 28px;
-        min-width: 28px;
-        border: 1px solid transparent;
-        background: transparent;
-        color: #a1a1aa;
-        border-radius: 2px;
-        font-size: 11px;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        cursor: pointer;
-      }
-      .viewport-btn:hover {
-        background: #3f3f46;
-        color: #fafafa;
-      }
-      .viewport-btn--active {
-        background: rgba(59, 130, 246, 0.18);
-        color: #60a5fa;
-        border-color: rgba(59, 130, 246, 0.5);
-      }
-      .viewport-btn--danger {
-        color: #f87171;
-      }
-      .viewport-stats {
-        position: absolute;
-        top: 48px;
-        left: 8px;
-        z-index: 2;
-        display: flex;
-        gap: 12px;
-        background: rgba(5, 5, 5, 0.82);
+        place-items: center;
+        overflow: hidden;
+        background:
+          linear-gradient(180deg, rgba(39, 39, 42, 0.95), rgba(12, 12, 14, 0.98));
         border: 1px solid rgba(255, 255, 255, 0.08);
-        padding: 6px 8px;
-        border-radius: 3px;
-        font-size: 10px;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        border-radius: 18px;
+        box-shadow:
+          0 24px 80px rgba(0, 0, 0, 0.55),
+          inset 0 1px 0 rgba(255, 255, 255, 0.08);
       }
-      .viewport-stats b {
-        color: #71717a;
-        font-weight: 700;
-        margin-right: 4px;
-      }
-      .viewport-grid {
+      .game-frame::after {
+        content: "";
         position: absolute;
-        inset: 40px 0 24px 0;
+        inset: 0;
+        z-index: 2;
         pointer-events: none;
-        z-index: 1;
-        opacity: 0.25;
         background-image:
-          linear-gradient(to right, #1f1f22 1px, transparent 1px),
-          linear-gradient(to bottom, #1f1f22 1px, transparent 1px);
-        background-size: 32px 32px;
+          linear-gradient(to right, rgba(148, 163, 184, 0.1) 1px, transparent 1px),
+          linear-gradient(to bottom, rgba(148, 163, 184, 0.1) 1px, transparent 1px),
+          linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+          linear-gradient(to bottom, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+        background-size: 16px 16px, 16px 16px, 64px 64px, 64px 64px;
       }
-      .viewport-footer {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        padding: 0 8px;
-        background: #27272a;
-        border-top: 1px solid #27272a;
-        font-size: 10px;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        color: #a1a1aa;
-      }
-      .editor-sidebar {
-        display: grid;
-        grid-template-rows: 52px minmax(220px, 45%) minmax(0, 1fr) 24px;
-        background: #18181b;
-        min-height: 0;
-      }
-      .editor-session {
-        padding: 8px 12px;
-        border-bottom: 1px solid #27272a;
-        background: #121214;
-      }
-      .editor-session__head,
-      .editor-session__actions {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-      }
-      .editor-session__head {
-        margin-bottom: 6px;
-      }
-      .editor-session__file {
-        font-size: 11px;
-        font-weight: 700;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      }
-      .editor-session__dirty {
-        color: #60a5fa;
-        margin-left: 4px;
-      }
-      .editor-badge {
-        font-size: 9px;
-        text-transform: uppercase;
-        color: #f59e0b;
-        border: 1px solid rgba(245, 158, 11, 0.2);
-        background: rgba(245, 158, 11, 0.1);
-        padding: 2px 6px;
-        border-radius: 2px;
-        font-weight: 700;
-      }
-      .editor-play,
-      .editor-mini-btn {
-        border: 1px solid #3f3f46;
-        border-radius: 3px;
-        height: 22px;
-        cursor: pointer;
-        font-size: 10px;
-        font-weight: 700;
-      }
-      .editor-play {
-        flex: 1;
-        background: #059669;
-        color: white;
-      }
-      .editor-mini-btn {
-        width: 28px;
-        background: #27272a;
-        color: #d4d4d8;
-      }
-      .editor-mini-btn--stop {
-        color: #f87171;
-      }
-      .editor-section {
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-        border-bottom: 1px solid #27272a;
-      }
-      .editor-section--grow {
-        min-height: 0;
-      }
-      .editor-section__header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 6px 12px;
-        background: #27272a;
-        border: 0;
-        border-bottom: 1px solid #18181b;
-        color: #d4d4d8;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        font-size: 10px;
-        font-weight: 700;
-        cursor: pointer;
-      }
-      .editor-section__meta {
-        font-size: 9px;
-        color: #71717a;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      }
-      .editor-section__body {
-        min-height: 0;
-        overflow: auto;
-        background: #09090b;
-      }
-      .editor-section__body.is-collapsed {
-        display: none;
-      }
-      .editor-search-row,
-      .editor-entity-head,
-      .editor-component {
-        padding: 10px 12px;
-      }
-      .editor-search-row,
-      .editor-entity-head,
-      .editor-component {
-        border-bottom: 1px solid #27272a;
-      }
-      .editor-hierarchy {
-        display: grid;
-        gap: 1px;
-        padding: 8px 0;
-      }
-      .hierarchy-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        padding: 6px 12px;
-        background: transparent;
-        border: 0;
-        color: #a1a1aa;
-        cursor: pointer;
-        text-align: left;
-      }
-      .hierarchy-row:hover {
-        background: rgba(63, 63, 70, 0.45);
-        color: #fafafa;
-      }
-      .hierarchy-row--active {
-        background: rgba(59, 130, 246, 0.12);
-        color: #fafafa;
-        box-shadow: inset 2px 0 0 #3b82f6;
-      }
-      .hierarchy-row__name,
-      .editor-input--title {
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      }
-      .hierarchy-row__meta {
-        font-size: 9px;
-        color: #60a5fa;
-        border: 1px solid rgba(59, 130, 246, 0.18);
-        background: rgba(59, 130, 246, 0.12);
-        padding: 2px 5px;
-        border-radius: 3px;
-      }
-      .editor-inspector {
+      .game-frame canvas {
+        position: relative;
+        z-index: 1;
         display: block;
-        align-content: start;
-      }
-      .editor-row {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-      }
-      .editor-prop {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 8px;
-      }
-      .editor-prop:last-child {
-        margin-bottom: 0;
-      }
-      .editor-prop__label {
-        width: 78px;
-        flex: 0 0 auto;
-        font-size: 10px;
-        font-weight: 600;
-        color: #a1a1aa;
-        text-transform: uppercase;
-      }
-      .editor-vector {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 6px;
-        flex: 1;
-      }
-      .editor-input {
         width: 100%;
-        height: 24px;
-        box-sizing: border-box;
-        background: #050505;
-        color: #e4e4e7;
-        border: 1px solid #27272a;
-        border-radius: 3px;
-        padding: 0 8px;
-        font-size: 11px;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      }
-      .editor-runtime {
-        margin: 0;
-        min-height: 120px;
-        background: #050505;
-        border: 1px solid #27272a;
-        border-radius: 3px;
-        padding: 8px;
-        font-size: 11px;
-        line-height: 1.5;
-        white-space: pre-wrap;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      }
-      .editor-component__title {
-        margin-bottom: 10px;
-        font-size: 10px;
-        font-weight: 700;
-        text-transform: uppercase;
-        color: #d4d4d8;
-      }
-      .editor-footer {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0 12px;
-        background: #121214;
-        border-top: 1px solid #27272a;
-        font-size: 10px;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        color: #71717a;
-        text-transform: uppercase;
-        font-weight: 700;
-      }
-      .editor-footer__stats {
-        display: flex;
-        gap: 12px;
-        color: #d4d4d8;
-      }
-      canvas {
-        display: block;
+        height: 100%;
         image-rendering: pixelated;
-        width: 960px;
-        max-width: 100%;
-        height: auto;
         background: #2c2c38;
-        margin: auto;
       }
-      @media (max-width: 960px) {
+      @media (max-width: 640px) {
         .app-shell {
-          grid-template-columns: 1fr;
-          grid-template-rows: minmax(0, 1fr) minmax(340px, 45vh);
+          padding: 12px;
         }
-        .editor-sidebar {
-          grid-template-rows: 52px minmax(120px, 35%) minmax(0, 1fr) 24px;
+        .game-frame {
+          width: min(calc(100vw - 24px), calc((100vh - 24px) * 16 / 9));
+          border-radius: 12px;
         }
       }
     </style>

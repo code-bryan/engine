@@ -1,7 +1,7 @@
 import { attachRuntimeDebugger, type DebuggerWorld } from "@engine/debugger";
+import type { EngineApplication } from "@engine/renderer";
 import { actorStates, enemies, facings, players, velocities } from "../components";
 import type { GameWorld } from "../app";
-import type { EngineApplication } from "@engine/renderer";
 
 export type DebugEditorPlayback = {
   onPlay: () => void;
@@ -14,13 +14,20 @@ export type DebugEditorPlayback = {
 export function attachDebugEditor(world: GameWorld, engine: EngineApplication, playback: DebugEditorPlayback) {
   return attachRuntimeDebugger(world, engine, {
     playback,
+    trackedStores: [
+      { label: "velocity", store: velocities },
+      { label: "player", store: players },
+      { label: "enemy", store: enemies },
+      { label: "state", store: actorStates },
+      { label: "facing", store: facings },
+    ],
     getEntityTitle(debugWorld: DebuggerWorld, entity: number) {
       const tag = debugWorld.tags.list(entity)[0] ?? "entity";
       return `${tag.slice(0, 1).toUpperCase()}${tag.slice(1)}_${entity}`;
     },
     sections: [
       {
-        title: "Sprite Renderer",
+        title: "Actor",
         fields(_debugWorld: DebuggerWorld, entity?: number) {
           return [
             { label: "Facing", value: entity === undefined ? "-" : facings.get(entity) ?? "-" },
@@ -29,7 +36,7 @@ export function attachDebugEditor(world: GameWorld, engine: EngineApplication, p
         },
       },
       {
-        title: "Runtime Motion",
+        title: "Motion",
         fields(_debugWorld: DebuggerWorld, entity?: number) {
           const velocity = entity === undefined ? undefined : velocities.get(entity);
           return [
@@ -42,7 +49,7 @@ export function attachDebugEditor(world: GameWorld, engine: EngineApplication, p
         },
       },
       {
-        title: "Actor Data",
+        title: "Gameplay",
         fields(_debugWorld: DebuggerWorld, entity?: number) {
           const player = entity === undefined ? undefined : players.get(entity);
           const enemy = entity === undefined ? undefined : enemies.get(entity);
