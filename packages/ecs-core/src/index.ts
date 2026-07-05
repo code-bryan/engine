@@ -14,6 +14,7 @@ export type WorldDebugListener = (event: WorldDebugEvent) => void;
 type SystemEntry = {
   label: string;
   run: SystemFn;
+  enabled: boolean;
 };
 
 export interface ComponentStore<T> extends Map<Entity, T> {}
@@ -79,7 +80,12 @@ export class World {
   }
 
   getSystemEntries() {
-    return this.systemEntries.slice();
+    return this.systemEntries.map((e) => ({ label: e.label, enabled: e.enabled }));
+  }
+
+  setSystemEnabled(index: number, enabled: boolean) {
+    const entry = this.systemEntries[index];
+    if (entry) entry.enabled = enabled;
   }
 
   onDebugEvent(listener: WorldDebugListener) {
@@ -107,7 +113,7 @@ export class World {
       ? labelOrFn
       : labelOrFn.name || `system_${this.systemEntries.length}`;
 
-    const entry = { label, run };
+    const entry = { label, run, enabled: true };
     this.systemEntries.push(entry);
     this.systems.push(run);
     this.emitDebug({
@@ -125,6 +131,7 @@ export class World {
 
     for (let index = 0; index < this.systemEntries.length; index += 1) {
       const entry = this.systemEntries[index];
+      if (!entry.enabled) continue;
       const startedAt = performance.now();
       entry.run(dt);
       this.emitDebug({

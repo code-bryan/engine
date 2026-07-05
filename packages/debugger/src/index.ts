@@ -11,6 +11,8 @@ export type DebugEditorField = {
   secondary?: string;
   editable?: boolean;
   editKey?: string;
+  selectEntity?: Entity;
+  selectEntities?: Entity[];
 };
 
 export type DebugEditorSection<TWorld extends DebuggerWorld = DebuggerWorld> = {
@@ -33,6 +35,12 @@ export type DebugStoreInspectorOptions<TValue, TWorld extends DebuggerWorld = De
   set?: (value: TValue, key: string, next: string, world: TWorld, entity: Entity) => void;
 };
 
+export type DebugStatusPanel<TWorld extends DebuggerWorld = DebuggerWorld> = {
+  id: string;
+  title: string;
+  fields: (world: TWorld) => DebugEditorField[];
+};
+
 export type DebugPlayback = {
   onPlay?: () => void;
   onPause?: () => void;
@@ -50,6 +58,7 @@ export type RuntimeDebuggerOptions<TWorld extends DebuggerWorld = DebuggerWorld>
   getEntityTitle?: (world: TWorld, entity: Entity) => string;
   sections?: DebugEditorSection<TWorld>[];
   components?: DebugInspectorComponent<TWorld>[];
+  statusPanels?: DebugStatusPanel<TWorld>[];
   getRuntimeDetails?: (world: TWorld, entity?: Entity) => string;
   playback?: DebugPlayback;
   trackedStores?: DebugTrackedStore[];
@@ -65,6 +74,11 @@ type FrameMetric = {
   durationMs: number;
 };
 
+type LogCategory = "entity" | "tag" | "system" | "physics" | "collision" | "store";
+type LogEntry = { cat: LogCategory; text: string };
+
+const ALL_LOG_CATEGORIES: LogCategory[] = ["entity", "tag", "collision", "physics", "store", "system"];
+
 type DebugState = {
   selectedEntity?: Entity;
   latestFrame: number;
@@ -72,7 +86,12 @@ type DebugState = {
   latestFrameMs: number;
   fps: number;
   systemMetrics: FrameMetric[];
-  eventLog: string[];
+  eventLog: LogEntry[];
+  logFilter: Set<LogCategory>;
+  logPaused: boolean;
+  showGrid: boolean;
+  showPhysics: boolean;
+  showLabels: boolean;
 };
 
 const STYLE_ID = "engine-runtime-debugger-style";
@@ -118,6 +137,11 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     fps: 0,
     systemMetrics: [],
     eventLog: [],
+    logFilter: new Set(ALL_LOG_CATEGORIES),
+    logPaused: false,
+    showGrid: true,
+    showPhysics: true,
+    showLabels: true,
   };
 
   const componentInspectors = [
@@ -163,6 +187,15 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
       <div class="debugger-toolbar__actions">
         <div class="debugger-badge" data-playback>playing</div>
         <div class="debugger-controls debugger-controls--header">
+          <button data-toggle="grid" title="Toggle Grid" aria-label="Toggle Grid">
+            <span aria-hidden="true">#</span>
+          </button>
+          <button data-toggle="physics" title="Toggle Physics" aria-label="Toggle Physics">
+            <span aria-hidden="true">□</span>
+          </button>
+          <button data-toggle="labels" title="Toggle Labels" aria-label="Toggle Labels">
+            <span aria-hidden="true">T</span>
+          </button>
           <button data-action="play" title="Play" aria-label="Play">
             <span aria-hidden="true">▶</span>
           </button>
@@ -179,6 +212,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
       </div>
     </header>
     <aside class="debugger-panel debugger-panel--left">
+      <div class="debugger-sidepanels" data-status-panels></div>
       <section class="debugger-section debugger-section--grow">
         <div class="debugger-section__title">Systems</div>
         <div class="debugger-systems" data-systems></div>
@@ -197,8 +231,11 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     </aside>
     <section class="debugger-panel debugger-panel--bottom">
       <section class="debugger-section debugger-section--grow">
-        <div class="debugger-section__title">Event Log</div>
-        <pre class="debugger-log" data-log></pre>
+        <div class="debugger-log-header">
+          <div class="debugger-section__title">Event Log</div>
+          <div class="debugger-log-controls" data-log-controls></div>
+        </div>
+        <div class="debugger-log" data-log></div>
       </section>
     </section>
   `;
@@ -256,12 +293,25 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     if (!(target instanceof HTMLElement)) return;
 
     const action = target.closest<HTMLButtonElement>("[data-action]")?.dataset.action;
+    const toggle = target.closest<HTMLButtonElement>("[data-toggle]")?.dataset.toggle;
+
+    if (toggle) {
+      if (toggle === "grid") {
+        state.showGrid = !state.showGrid;
+        shell.classList.toggle("app-shell--debug-grid-off", !state.showGrid);
+      }
+      if (toggle === "physics") state.showPhysics = !state.showPhysics;
+      if (toggle === "labels") state.showLabels = !state.showLabels;
+      refresh();
+      return;
+    }
+
     if (!action) return;
     if (action === "play") options.playback?.onPlay?.();
     if (action === "pause") options.playback?.onPause?.();
     if (action === "step") options.playback?.onStep?.();
     if (action === "stop") options.playback?.onStop?.();
-    syncPlayback(layout, options.playback?.getState?.() ?? "playing");
+    syncPlayback(layout, options.playback?.getState?.() ?? "playing", state);
   };
 
   const handleSearchInput = () => {
@@ -281,10 +331,55 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     refresh();
   };
 
+  const handleInspectorClick = (event: MouseEvent) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+
+    const selectButton = target.closest<HTMLButtonElement>("[data-select-entity]");
+    if (!selectButton) return;
+
+    const entity = selectButton.dataset.selectEntity;
+    if (entity === undefined) return;
+    state.selectedEntity = Number(entity);
+    refresh();
+  };
+
+  const handleLogClick = (event: MouseEvent) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+
+    const toggle = target.closest<HTMLButtonElement>("[data-log-toggle]")?.dataset.logToggle as LogCategory | undefined;
+    if (toggle) {
+      if (state.logFilter.has(toggle)) state.logFilter.delete(toggle);
+      else state.logFilter.add(toggle);
+      refresh();
+      return;
+    }
+
+    if (target.closest("[data-log-pause]")) {
+      state.logPaused = !state.logPaused;
+      refresh();
+    }
+  };
+
+  const handleSystemsClick = (event: MouseEvent) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const button = target.closest<HTMLButtonElement>("[data-system-index]");
+    if (!button) return;
+    const index = Number(button.dataset.systemIndex);
+    const entries = world.getSystemEntries();
+    world.setSystemEnabled(index, !entries[index]?.enabled);
+    refresh();
+  };
+
   engine.app.canvas.addEventListener("click", handleCanvasClick);
   controlsHost?.addEventListener("click", handleControlsClick);
   searchInput?.addEventListener("input", handleSearchInput);
   layout.querySelector<HTMLElement>("[data-inspector]")?.addEventListener("change", handleInspectorChange);
+  layout.querySelector<HTMLElement>("[data-inspector]")?.addEventListener("click", handleInspectorClick);
+  layout.querySelector<HTMLElement>("[data-systems]")?.addEventListener("click", handleSystemsClick);
+  layout.querySelector<HTMLElement>(".debugger-panel--bottom")?.addEventListener("click", handleLogClick);
 
   refresh();
 
@@ -297,10 +392,14 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
       viewportHud.remove();
       layout.remove();
       shell.classList.remove("app-shell--debug");
+      shell.classList.remove("app-shell--debug-grid-off");
       engine.app.canvas.removeEventListener("click", handleCanvasClick);
       controlsHost?.removeEventListener("click", handleControlsClick);
       searchInput?.removeEventListener("input", handleSearchInput);
       layout.querySelector<HTMLElement>("[data-inspector]")?.removeEventListener("change", handleInspectorChange);
+      layout.querySelector<HTMLElement>("[data-inspector]")?.removeEventListener("click", handleInspectorClick);
+      layout.querySelector<HTMLElement>("[data-systems]")?.removeEventListener("click", handleSystemsClick);
+      layout.querySelector<HTMLElement>(".debugger-panel--bottom")?.removeEventListener("click", handleLogClick);
       for (const unsubscribe of unsubscribers) unsubscribe();
     },
   };
@@ -340,6 +439,10 @@ function ensureStyles() {
         linear-gradient(to bottom, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
       background-size: 16px 16px, 16px 16px, 64px 64px, 64px 64px;
       background-position: 0 0, 0 0, 0 0, 0 0;
+    }
+    .app-shell--debug.app-shell--debug-grid-off::before,
+    .app-shell--debug.app-shell--debug-grid-off .game-frame::after {
+      opacity: 0;
     }
     .app-shell--debug .game-frame {
       grid-area: center;
@@ -436,7 +539,7 @@ function ensureStyles() {
     }
     .debugger-panel--left {
       grid-area: left;
-      grid-template-rows: minmax(0, 1fr);
+      grid-template-rows: auto minmax(0, 1fr);
       height: min(100%, 900px);
     }
     .debugger-panel--right {
@@ -469,11 +572,11 @@ function ensureStyles() {
     }
     .debugger-controls {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(7, 1fr);
       gap: 8px;
     }
     .debugger-controls--header {
-      grid-template-columns: repeat(4, 32px);
+      grid-template-columns: repeat(7, 32px);
       gap: 6px;
     }
     .debugger-controls button {
@@ -494,6 +597,11 @@ function ensureStyles() {
     }
     .debugger-controls button:hover {
       background: #27272a;
+    }
+    .debugger-controls button.is-active {
+      border-color: rgba(96, 165, 250, 0.45);
+      background: rgba(37, 99, 235, 0.24);
+      color: #bfdbfe;
     }
     .debugger-section {
       min-height: 0;
@@ -550,6 +658,11 @@ function ensureStyles() {
       min-height: 0;
       overflow: auto;
     }
+    .debugger-sidepanels {
+      display: grid;
+      gap: 10px;
+      align-content: start;
+    }
     .debugger-entity {
       display: flex;
       align-items: center;
@@ -605,14 +718,109 @@ function ensureStyles() {
       text-align: right;
       font: inherit;
     }
+    .debugger-field__links {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+    .debugger-field__link {
+      height: 22px;
+      padding: 0 6px;
+      border: 1px solid rgba(96, 165, 250, 0.28);
+      border-radius: 999px;
+      background: rgba(37, 99, 235, 0.16);
+      color: #bfdbfe;
+      cursor: pointer;
+      font: inherit;
+    }
+    .debugger-field__link:hover {
+      background: rgba(37, 99, 235, 0.28);
+    }
+    .debugger-system__toggle {
+      flex-shrink: 0;
+      width: 18px;
+      height: 18px;
+      padding: 0;
+      border: none;
+      border-radius: 3px;
+      background: transparent;
+      color: #4ade80;
+      cursor: pointer;
+      font: inherit;
+      font-size: 10px;
+      line-height: 1;
+    }
+    .debugger-system--disabled .debugger-system__toggle {
+      color: #52525b;
+    }
+    .debugger-system__label {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .debugger-system--disabled .debugger-system__label,
+    .debugger-system--disabled strong {
+      color: #52525b;
+    }
+    .debugger-log-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .debugger-log-header .debugger-section__title {
+      margin-bottom: 0;
+    }
+    .debugger-log-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .debugger-log-chip {
+      height: 18px;
+      padding: 0 6px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 999px;
+      background: transparent;
+      color: #71717a;
+      cursor: pointer;
+      font: 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .debugger-log-chip.is-active {
+      background: rgba(255, 255, 255, 0.08);
+      color: #d4d4d8;
+    }
+    .debugger-log-chip--pause.is-active {
+      background: rgba(251, 191, 36, 0.15);
+      border-color: rgba(251, 191, 36, 0.3);
+      color: #fbbf24;
+    }
     .debugger-log {
       margin: 0;
       min-height: 0;
       overflow: auto;
-      white-space: pre-wrap;
       color: #d4d4d8;
       font-size: 11px;
-      line-height: 1.3;
+      line-height: 1.4;
+    }
+    .debugger-log__entry {
+      padding: 1px 0;
+      border-left: 2px solid transparent;
+      padding-left: 5px;
+      white-space: pre-wrap;
+    }
+    .debugger-log__entry--entity  { border-color: #60a5fa; }
+    .debugger-log__entry--tag     { border-color: #a78bfa; }
+    .debugger-log__entry--system  { border-color: #facc15; }
+    .debugger-log__entry--physics { border-color: #fb923c; }
+    .debugger-log__entry--collision { border-color: #f87171; }
+    .debugger-log__entry--store   { border-color: #4ade80; }
+    .debugger-log__empty {
+      color: #52525b;
+      font-size: 11px;
     }
     @media (max-width: 960px) {
       .app-shell--debug {
@@ -649,11 +857,12 @@ function renderDebugger<TWorld extends DebuggerWorld>(
   options: RuntimeDebuggerOptions<TWorld>,
 ) {
   renderOverview(sidebar, viewportHud, state, options.playback?.getState?.() ?? "playing");
+  renderStatusPanels(world, sidebar, options.statusPanels ?? []);
   renderEntityList(world, sidebar, state.selectedEntity, options.getEntityTitle);
   renderInspector(world, sidebar, state.selectedEntity, components, options);
-  renderSystems(sidebar, state.systemMetrics);
-  renderLog(sidebar, state.eventLog);
-  renderPhysicsOverlay(world, overlay, labels, state.selectedEntity, options.getEntityTitle);
+  renderSystems(sidebar, world, state.systemMetrics);
+  renderLog(sidebar, state);
+  renderPhysicsOverlay(world, overlay, labels, state.selectedEntity, options.getEntityTitle, state);
 }
 
 function renderOverview(
@@ -665,7 +874,7 @@ function renderOverview(
   setText(sidebar, "[data-frame]", String(state.latestFrame));
   setText(viewportHud, "[data-fps]", state.fps.toFixed(1));
   setText(viewportHud, "[data-frame-ms]", state.latestFrameMs.toFixed(2));
-  syncPlayback(sidebar, playbackState);
+  syncPlayback(sidebar, playbackState, state);
 }
 
 function renderEntityList<TWorld extends DebuggerWorld>(
@@ -693,6 +902,26 @@ function renderEntityList<TWorld extends DebuggerWorld>(
           <span class="debugger-pill">${tag}</span>
         </button>
       `;
+    })
+    .join("");
+}
+
+function renderStatusPanels<TWorld extends DebuggerWorld>(
+  world: TWorld,
+  sidebar: HTMLElement,
+  panels: DebugStatusPanel<TWorld>[],
+) {
+  const host = sidebar.querySelector<HTMLElement>("[data-status-panels]");
+  if (!host) return;
+
+  host.innerHTML = panels
+    .map((panel) => {
+      const fields = panel.fields(world);
+      if (fields.length === 0) return "";
+      return renderRuntimeCard(panel.title, fields.map((field) => ({
+        label: field.label,
+        value: field.secondary === undefined ? field.value : `${field.value}, ${field.secondary}`,
+      })));
     })
     .join("");
 }
@@ -751,6 +980,7 @@ function createBuiltinInspectorComponents<TWorld extends DebuggerWorld>(
       title: "Entity",
       fields(world, entity) {
         return [
+          { label: "Id", value: `#${entity}`, selectEntity: entity },
           { label: "Name", value: getEntityTitle?.(world, entity) ?? entityTitle(world, entity) },
           { label: "Tags", value: world.tags.list(entity).join(", ") || "-" },
         ];
@@ -805,23 +1035,59 @@ function createBuiltinInspectorComponents<TWorld extends DebuggerWorld>(
   ];
 }
 
-function renderSystems(sidebar: HTMLElement, metrics: FrameMetric[]) {
+function renderSystems<TWorld extends DebuggerWorld>(sidebar: HTMLElement, world: TWorld, metrics: FrameMetric[]) {
   const host = sidebar.querySelector<HTMLElement>("[data-systems]");
   if (!host) return;
 
-  host.innerHTML = metrics.length === 0
-    ? `<div class="debugger-card"><div class="debugger-field"><span>systems</span><strong>waiting for frame</strong></div></div>`
-    : metrics
-        .map((metric) => `
-          <div class="debugger-card">
-            <div class="debugger-field"><span>${metric.label}</span><strong>${metric.durationMs.toFixed(2)} ms</strong></div>
+  const entries = world.getSystemEntries();
+  if (entries.length === 0) {
+    host.innerHTML = `<div class="debugger-card"><div class="debugger-field"><span>systems</span><strong>waiting for frame</strong></div></div>`;
+    return;
+  }
+
+  const metricByLabel = new Map(metrics.map((m) => [m.label, m]));
+
+  host.innerHTML = entries
+    .map((entry, index) => {
+      const metric = metricByLabel.get(entry.label);
+      const ms = metric ? `${metric.durationMs.toFixed(2)} ms` : "—";
+      const activeClass = entry.enabled ? "" : " debugger-system--disabled";
+      return `
+        <div class="debugger-card debugger-system${activeClass}">
+          <div class="debugger-field">
+            <button class="debugger-system__toggle" data-system-index="${index}" title="${entry.enabled ? "Disable" : "Enable"} system">${entry.enabled ? "●" : "○"}</button>
+            <span class="debugger-system__label">${escapeHtml(entry.label)}</span>
+            <strong>${entry.enabled ? ms : "off"}</strong>
           </div>
-        `)
-        .join("");
+        </div>
+      `;
+    })
+    .join("");
 }
 
-function renderLog(sidebar: HTMLElement, entries: string[]) {
-  setText(sidebar, "[data-log]", entries.join("\n"));
+function renderLog(sidebar: HTMLElement, state: DebugState) {
+  const controls = sidebar.querySelector<HTMLElement>("[data-log-controls]");
+  if (controls) {
+    controls.innerHTML = ALL_LOG_CATEGORIES.map((cat) => {
+      const active = state.logFilter.has(cat);
+      return `<button class="debugger-log-chip${active ? " is-active" : ""}" data-log-toggle="${cat}">${cat}</button>`;
+    }).join("") + `<button class="debugger-log-chip debugger-log-chip--pause${state.logPaused ? " is-active" : ""}" data-log-pause>${state.logPaused ? "resume" : "pause"}</button>`;
+  }
+
+  const host = sidebar.querySelector<HTMLElement>("[data-log]");
+  if (!host) return;
+
+  const visible = state.eventLog.filter((e) => state.logFilter.has(e.cat));
+  if (visible.length === 0) {
+    host.innerHTML = state.logPaused
+      ? `<span class="debugger-log__empty">paused</span>`
+      : `<span class="debugger-log__empty">no events</span>`;
+    return;
+  }
+
+  host.innerHTML = visible
+    .map((e) => `<div class="debugger-log__entry debugger-log__entry--${e.cat}">${escapeHtml(e.text)}</div>`)
+    .join("");
 }
 
 function renderPhysicsOverlay<TWorld extends DebuggerWorld>(
@@ -829,7 +1095,8 @@ function renderPhysicsOverlay<TWorld extends DebuggerWorld>(
   overlay: Graphics,
   labels: Map<number, Text>,
   selectedEntity: Entity | undefined,
-  getEntityTitle?: (world: TWorld, entity: Entity) => string,
+  getEntityTitle: ((world: TWorld, entity: Entity) => string) | undefined,
+  state?: DebugState,
 ) {
   overlay.clear();
 
@@ -840,13 +1107,22 @@ function renderPhysicsOverlay<TWorld extends DebuggerWorld>(
     labels.delete(entity);
   }
 
+  if (!state?.showPhysics && !state?.showLabels) return;
+
   for (const body of world.physics.getDebugBodies()) {
-    const color = body.entity === selectedEntity ? 0xf59e0b : colorForBodyKind(body.kind);
-    overlay
-      .rect(body.x, body.y, body.width, body.height)
-      .stroke({ color, width: body.entity === selectedEntity ? 2 : 1, alpha: 0.95 });
+    if (state.showPhysics) {
+      const color = body.entity === selectedEntity ? 0xf59e0b : colorForBodyKind(body.kind);
+      overlay
+        .rect(body.x, body.y, body.width, body.height)
+        .stroke({ color, width: body.entity === selectedEntity ? 2 : 1, alpha: 0.95 });
+    }
 
     let label = labels.get(body.entity);
+    if (!state.showLabels) {
+      if (label) label.visible = false;
+      continue;
+    }
+
     if (!label) {
       label = new Text({
         text: getEntityTitle?.(world, body.entity) ?? entityTitle(world, body.entity),
@@ -880,7 +1156,7 @@ function recordStoreDiffs<TWorld extends DebuggerWorld>(
       next.add(key);
 
       if (snapshots.get(key) !== snapshot) {
-        if (snapshots.has(key)) pushLog(state, `frame ${world.getFrame()} ${tracked.label}[${entity}] ${snapshot}`);
+        if (snapshots.has(key)) pushLog(state, { cat: "store", text: `frame ${world.getFrame()} ${tracked.label}[${entity}] ${snapshot}` });
         snapshots.set(key, snapshot);
       }
     }
@@ -896,20 +1172,20 @@ function formatWorldEvent<TWorld extends DebuggerWorld>(
   world: TWorld,
   event: WorldDebugEvent,
   getEntityTitle?: (world: TWorld, entity: Entity) => string,
-) {
+): LogEntry | null {
   switch (event.type) {
     case "entity:spawn":
-      return `frame ${event.frame} spawn ${entityLabel(world, event.entity, getEntityTitle)}`;
+      return { cat: "entity", text: `frame ${event.frame} spawn ${entityLabel(world, event.entity, getEntityTitle)}` };
     case "entity:destroy":
-      return `frame ${event.frame} destroy ${entityLabel(world, event.entity, getEntityTitle)}`;
+      return { cat: "entity", text: `frame ${event.frame} destroy ${entityLabel(world, event.entity, getEntityTitle)}` };
     case "tag:add":
-      return `frame ${event.frame} tag+ ${entityLabel(world, event.entity, getEntityTitle)} ${event.tag}`;
+      return { cat: "tag", text: `frame ${event.frame} tag+ ${entityLabel(world, event.entity, getEntityTitle)} ${event.tag}` };
     case "tag:remove":
-      return `frame ${event.frame} tag- ${entityLabel(world, event.entity, getEntityTitle)} ${event.tag}`;
+      return { cat: "tag", text: `frame ${event.frame} tag- ${entityLabel(world, event.entity, getEntityTitle)} ${event.tag}` };
     case "system:add":
-      return `frame ${event.frame} system ${event.index} ${event.label}`;
+      return { cat: "system", text: `frame ${event.frame} system ${event.index} ${event.label}` };
     default:
-      return "";
+      return null;
   }
 }
 
@@ -917,18 +1193,18 @@ function formatPhysicsEvent<TWorld extends DebuggerWorld>(
   world: TWorld,
   event: PhysicsDebugEvent,
   getEntityTitle?: (world: TWorld, entity: Entity) => string,
-) {
+): LogEntry {
   switch (event.type) {
     case "body:set":
-      return `body set ${entityLabel(world, event.entity, getEntityTitle)} ${event.kind} ${event.width}x${event.height} @ ${event.x},${event.y}`;
+      return { cat: "physics", text: `body set ${entityLabel(world, event.entity, getEntityTitle)} ${event.kind} ${event.width}x${event.height} @ ${event.x},${event.y}` };
     case "body:reset":
-      return `body reset ${entityLabel(world, event.entity, getEntityTitle)} @ ${event.x},${event.y}`;
+      return { cat: "physics", text: `body reset ${entityLabel(world, event.entity, getEntityTitle)} @ ${event.x},${event.y}` };
     case "body:velocity":
-      return `velocity ${entityLabel(world, event.entity, getEntityTitle)} ${event.velocity.x.toFixed(2)},${event.velocity.y.toFixed(2)}`;
+      return { cat: "physics", text: `velocity ${entityLabel(world, event.entity, getEntityTitle)} ${event.velocity.x.toFixed(2)},${event.velocity.y.toFixed(2)}` };
     case "collision:start":
-      return `collision start ${entityLabel(world, event.entities[0], getEntityTitle)} <-> ${entityLabel(world, event.entities[1], getEntityTitle)}`;
+      return { cat: "collision", text: `collision start ${entityLabel(world, event.entities[0], getEntityTitle)} <-> ${entityLabel(world, event.entities[1], getEntityTitle)}` };
     case "collision:end":
-      return `collision end ${entityLabel(world, event.entities[0], getEntityTitle)} <-> ${entityLabel(world, event.entities[1], getEntityTitle)}`;
+      return { cat: "collision", text: `collision end ${entityLabel(world, event.entities[0], getEntityTitle)} <-> ${entityLabel(world, event.entities[1], getEntityTitle)}` };
   }
 }
 
@@ -966,6 +1242,30 @@ function renderField(componentId: string, entity: Entity, field: DebugEditorFiel
     `;
   }
 
+  if (field.selectEntities && field.selectEntities.length > 0) {
+    return `
+      <div class="debugger-field">
+        <span>${escapeHtml(field.label)}</span>
+        <div class="debugger-field__links">
+          ${field.selectEntities.map((target) => `
+            <button class="debugger-field__link" data-select-entity="${target}">#${target}</button>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  if (field.selectEntity !== undefined) {
+    return `
+      <div class="debugger-field">
+        <span>${escapeHtml(field.label)}</span>
+        <div class="debugger-field__links">
+          <button class="debugger-field__link" data-select-entity="${field.selectEntity}">#${field.selectEntity}</button>
+        </div>
+      </div>
+    `;
+  }
+
   return `<div class="debugger-field"><span>${escapeHtml(field.label)}</span><strong>${escapeHtml(field.value)}</strong></div>`;
 }
 
@@ -985,14 +1285,22 @@ function setText(root: ParentNode, selector: string, value: string) {
   if (node) node.textContent = value;
 }
 
-function syncPlayback(sidebar: HTMLElement, playbackState: "playing" | "paused" | "stopped") {
+function syncPlayback(sidebar: HTMLElement, playbackState: "playing" | "paused" | "stopped", state: DebugState) {
   setText(sidebar, "[data-playback]", playbackState);
+  syncToggleState(sidebar, "grid", state.showGrid);
+  syncToggleState(sidebar, "physics", state.showPhysics);
+  syncToggleState(sidebar, "labels", state.showLabels);
 }
 
-function pushLog(state: DebugState, message: string) {
-  if (!message) return;
-  state.eventLog.unshift(message);
-  state.eventLog = state.eventLog.slice(0, 80);
+function syncToggleState(root: HTMLElement, toggle: string, active: boolean) {
+  const button = root.querySelector<HTMLButtonElement>(`[data-toggle="${toggle}"]`);
+  button?.classList.toggle("is-active", active);
+}
+
+function pushLog(state: DebugState, entry: LogEntry | null) {
+  if (!entry || state.logPaused) return;
+  state.eventLog.unshift(entry);
+  if (state.eventLog.length > 80) state.eventLog.length = 80;
 }
 
 function entityTitle<TWorld extends DebuggerWorld>(world: TWorld, entity: Entity) {

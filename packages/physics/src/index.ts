@@ -178,6 +178,24 @@ export class Physics {
     }));
   }
 
+  getDebugBody(entity: Entity) {
+    const rigidBody = this.rigidBodies.get(entity);
+    if (!rigidBody) return undefined;
+    return this.toDebugBody(entity, rigidBody);
+  }
+
+  getCollidingEntities(entity: Entity) {
+    const entities: Entity[] = [];
+
+    for (const key of this.collisions) {
+      const [left, right] = key.split(":").map(Number);
+      if (left === entity) entities.push(right);
+      else if (right === entity) entities.push(left);
+    }
+
+    return entities;
+  }
+
   pickEntityAt(point: { x: number; y: number }) {
     for (const [entity, rigidBody] of this.rigidBodies) {
       const { x, y, width, height } = this.toDebugBody(entity, rigidBody);
