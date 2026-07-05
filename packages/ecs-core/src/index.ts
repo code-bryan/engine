@@ -33,6 +33,14 @@ export class Tags<TTag extends string = string> {
   with(tag: TTag) {
     return this.stores.get(tag) ?? new Set<Entity>();
   }
+
+  list(e: Entity) {
+    const tags: TTag[] = [];
+    for (const [tag, store] of this.stores) {
+      if (store.has(e)) tags.push(tag);
+    }
+    return tags;
+  }
 }
 
 export class World {

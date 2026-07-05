@@ -11,12 +11,70 @@
         display: grid;
         place-items: center;
         background: #15151d;
+        color: #f3f4f6;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .app-shell {
+        width: min(1200px, 100vw);
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 320px;
+        gap: 16px;
+        align-items: center;
+        padding: 24px;
+        box-sizing: border-box;
+      }
+      .game-frame {
+        display: grid;
+        place-items: center;
+      }
+      .debug-panel {
+        align-self: stretch;
+        background: #0f1118;
+        border: 1px solid #2b2f3a;
+        padding: 16px;
+        display: grid;
+        gap: 12px;
+        align-content: start;
+      }
+      .debug-panel__title {
+        font-size: 14px;
+        font-weight: 700;
+      }
+      .debug-panel__row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font-size: 12px;
+      }
+      .debug-panel__hint {
+        font-size: 11px;
+        color: #9ca3af;
+        line-height: 1.4;
+      }
+      .debug-panel__details {
+        margin: 0;
+        padding: 12px;
+        min-height: 220px;
+        background: #090b10;
+        border: 1px solid #20242f;
+        font-size: 11px;
+        line-height: 1.5;
+        white-space: pre-wrap;
       }
       canvas {
         image-rendering: pixelated;
         width: 960px;
         max-width: 100vw;
         height: auto;
+        border: 1px solid #2b2f3a;
+        background: #2c2c38;
+      }
+      @media (max-width: 960px) {
+        .app-shell {
+          grid-template-columns: 1fr;
+          align-items: start;
+        }
       }
     </style>
   </head>

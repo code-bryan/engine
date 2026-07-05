@@ -22,6 +22,17 @@ export type RigidBodyBoxProps = {
   height: number;
 };
 
+export type PhysicsDebugBody = {
+  entity: Entity;
+  kind: RigidBodyKind;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  angle: number;
+  isColliding: boolean;
+};
+
 export class Physics {
   private engine: Matter.Engine;
   private collisions = new Set<string>();
@@ -129,8 +140,42 @@ export class Physics {
     };
   }
 
+  getDebugBodies(): PhysicsDebugBody[] {
+    return Array.from(this.rigidBodies, ([entity, rigidBody]) => ({
+      entity,
+      kind: rigidBody.kind,
+      x: rigidBody.body.position.x - rigidBody.width / 2,
+      y: rigidBody.body.position.y - rigidBody.height / 2,
+      width: rigidBody.width,
+      height: rigidBody.height,
+      angle: rigidBody.body.angle,
+      isColliding: this.isEntityColliding(entity),
+    }));
+  }
+
+  pickEntityAt(point: { x: number; y: number }) {
+    for (const [entity, rigidBody] of this.rigidBodies) {
+      const { x, y, width, height } = this.toDebugBody(entity, rigidBody);
+      if (
+        point.x >= x &&
+        point.x <= x + width &&
+        point.y >= y &&
+        point.y <= y + height
+      ) {
+        return entity;
+      }
+    }
+  }
+
   private collides(a: Entity, b: Entity) {
     return this.collisions.has(this.collisionKey(a, b));
+  }
+
+  private isEntityColliding(entity: Entity) {
+    for (const key of this.collisions) {
+      if (key.startsWith(`${entity}:`) || key.endsWith(`:${entity}`)) return true;
+    }
+    return false;
   }
 
   private trackCollision(bodyA: Matter.Body, bodyB: Matter.Body) {
@@ -149,6 +194,19 @@ export class Physics {
 
   private collisionKey(a: Entity, b: Entity) {
     return a < b ? `${a}:${b}` : `${b}:${a}`;
+  }
+
+  private toDebugBody(entity: Entity, rigidBody: RigidBody): PhysicsDebugBody {
+    return {
+      entity,
+      kind: rigidBody.kind,
+      x: rigidBody.body.position.x - rigidBody.width / 2,
+      y: rigidBody.body.position.y - rigidBody.height / 2,
+      width: rigidBody.width,
+      height: rigidBody.height,
+      angle: rigidBody.body.angle,
+      isColliding: this.isEntityColliding(entity),
+    };
   }
 
   private findEntityByBody(body: Matter.Body) {

@@ -1,27 +1,52 @@
 import { loadSpriteSheet, sprite, transforms, type SpriteAnimationFrame } from "@engine/renderer";
 import type { GameWorld } from "../app";
-import { facings, players, velocities } from "../components";
+import { actorStates, facings, players, velocities } from "../components";
 
-const playerFrames = loadPlayerFrames();
+const playerClips = loadPlayerClips();
 
-async function loadPlayerFrames() {
-  const textures = await loadSpriteSheet({ src: "/assets/Orc_Walk.png", frameWidth: 100, frameHeight: 100, frames: 8 });
-  return textures.map((texture) => ({ texture }));
+async function loadPlayerClips() {
+  const [idleTextures, walkTextures] = await Promise.all([
+    loadSpriteSheet({ src: "/assets/Orc_Idle.png", frameWidth: 100, frameHeight: 100, frames: 6 }),
+    loadSpriteSheet({ src: "/assets/Orc_Walk.png", frameWidth: 100, frameHeight: 100, frames: 8 }),
+  ]);
+
+  return {
+    idle: idleTextures.map((texture) => ({ texture })),
+    walk: walkTextures.map((texture) => ({ texture })),
+  };
 }
 
 export async function PlayerPrefab(world: GameWorld, props: { x: number; y: number }) {
+  const bodyWidth = 16;
+  const bodyHeight = 16;
   const e = world.spawn();
   world.tags.add(e, "player");
   transforms.set(e, { x: props.x, y: props.y, scale: 1 });
   velocities.set(e, { x: 0, y: 0 });
   facings.set(e, "right");
+  actorStates.set(e, "idle");
   players.set(e, { speed: 96, spawnX: props.x, spawnY: props.y });
-  world.physics.body.kinematic.set(e, { x: props.x, y: props.y, width: 16, height: 16 });
-  const frames = await playerFrames;
-  sprite.set(e, frames[0]);
+  world.physics.body.kinematic.set(e, { x: props.x, y: props.y, width: bodyWidth, height: bodyHeight });
+  const clips = await playerClips;
+  sprite.set(e, {
+    ...clips.idle[0],
+    anchor: { x: 0.5, y: 0.5 },
+    offset: { x: bodyWidth / 2, y: bodyHeight / 2 },
+  });
   sprite.animation.set(e, {
-    fps: 8,
-    frames,
+    initial: "idle",
+    clips: {
+      idle: {
+        fps: 4,
+        loop: true,
+        frames: clips.idle,
+      },
+      walk: {
+        fps: 8,
+        loop: true,
+        frames: clips.walk,
+      },
+    },
   });
   return e;
 }

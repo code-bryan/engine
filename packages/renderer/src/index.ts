@@ -3,21 +3,35 @@ import { createStore, type ComponentStore, type Entity, type World } from "@engi
 
 export type TransformScale = number | { x: number; y: number };
 export type Transform = { x: number; y: number; rotation?: number; scale?: TransformScale };
-export type SpriteRef = { sprite: Sprite };
-export type SpriteProps = { texture?: Texture; tint?: number };
+export type SpriteAnchor = number | { x: number; y: number };
+export type SpriteOffset = { x: number; y: number };
+export type SpriteRef = {
+  sprite: Sprite;
+  offset: SpriteOffset;
+  anchor: { x: number; y: number };
+};
+export type SpriteProps = {
+  texture?: Texture;
+  tint?: number;
+  offset?: SpriteOffset;
+  anchor?: SpriteAnchor;
+};
 export type SpriteAnimationFrame = { texture?: Texture; tint?: number };
-export type SpriteAnimation = {
+export type SpriteAnimationClip = {
   frames: SpriteAnimationFrame[];
   fps: number;
   loop: boolean;
+};
+export type SpriteAnimation = {
+  clips: Record<string, SpriteAnimationClip>;
+  state: string;
   elapsed: number;
   current: number;
   playing: boolean;
 };
 export type SpriteAnimationProps = {
-  frames: SpriteAnimationFrame[];
-  fps?: number;
-  loop?: boolean;
+  clips: Record<string, SpriteAnimationClip>;
+  initial: string;
   autoplay?: boolean;
 };
 export type SpriteSheetProps = {
@@ -43,7 +57,7 @@ export async function loadSpriteSheet(props: SpriteSheetProps) {
 }
 
 export function attachSprite(e: Entity, sprite = createSprite()) {
-  sprites.set(e, { sprite });
+  sprites.set(e, { sprite, offset: { x: 0, y: 0 }, anchor: { x: 0, y: 0 } });
   return sprite;
 }
 
@@ -51,20 +65,33 @@ export const sprite = {
   set(entity: Entity, props: SpriteProps = {}) {
     const pixiSprite = createSprite(props.texture);
     if (props.tint !== undefined) pixiSprite.tint = props.tint;
-    sprites.set(entity, { sprite: pixiSprite });
+    sprites.set(entity, {
+      sprite: pixiSprite,
+      offset: props.offset ?? { x: 0, y: 0 },
+      anchor: normalizeAnchor(props.anchor),
+    });
     return pixiSprite;
   },
   animation: {
     set(entity: Entity, props: SpriteAnimationProps) {
       spriteAnimations.set(entity, {
-        frames: props.frames,
-        fps: props.fps ?? 8,
-        loop: props.loop ?? true,
+        clips: props.clips,
+        state: props.initial,
         elapsed: 0,
         current: 0,
         playing: props.autoplay ?? true,
       });
       applySpriteAnimationFrame(entity, 0);
+    },
+    state: {
+      set(entity: Entity, state: string) {
+        const animation = spriteAnimations.get(entity);
+        if (!animation || animation.state === state || !animation.clips[state]) return;
+        animation.state = state;
+        animation.elapsed = 0;
+        animation.current = 0;
+        applySpriteAnimationFrame(entity, 0);
+      },
     },
     play(entity: Entity) {
       const animation = spriteAnimations.get(entity);
@@ -80,20 +107,21 @@ export const sprite = {
 export function createSpriteAnimationSystem(animationStore: ComponentStore<SpriteAnimation> = spriteAnimations) {
   return (dt: number) => {
     for (const [entity, animation] of animationStore) {
-      if (!animation.playing || animation.frames.length === 0) continue;
+      const clip = animation.clips[animation.state];
+      if (!animation.playing || !clip || clip.frames.length === 0) continue;
 
       animation.elapsed += dt;
-      const frameDuration = 1 / animation.fps;
+      const frameDuration = 1 / clip.fps;
       if (animation.elapsed < frameDuration) continue;
 
       const steps = Math.floor(animation.elapsed / frameDuration);
       animation.elapsed -= steps * frameDuration;
       animation.current += steps;
 
-      if (animation.loop) {
-        animation.current %= animation.frames.length;
-      } else if (animation.current >= animation.frames.length) {
-        animation.current = animation.frames.length - 1;
+      if (clip.loop) {
+        animation.current %= clip.frames.length;
+      } else if (animation.current >= clip.frames.length) {
+        animation.current = clip.frames.length - 1;
         animation.playing = false;
       }
 
@@ -107,7 +135,8 @@ function applySpriteAnimationFrame(entity: Entity, index: number) {
   const spriteRef = sprites.get(entity);
   if (!animation || !spriteRef) return;
 
-  const frame = animation.frames[index];
+  const clip = animation.clips[animation.state];
+  const frame = clip?.frames[index];
   if (!frame) return;
   if (frame.texture) spriteRef.sprite.texture = frame.texture;
   if (frame.tint !== undefined) spriteRef.sprite.tint = frame.tint;
@@ -119,12 +148,17 @@ export function createRenderSystem(
   spriteStore: ComponentStore<SpriteRef> = sprites,
 ) {
   return () => {
-    for (const [e, { sprite }] of spriteStore) {
+    for (const [e, spriteRef] of spriteStore) {
+      const { sprite, offset, anchor } = spriteRef;
       if (!sprite.parent) stage.addChild(sprite);
       const t = transformStore.get(e);
       if (!t) continue;
       const scale = normalizeScale(t.scale);
-      sprite.position.set(scale.x < 0 ? t.x + sprite.texture.width * Math.abs(scale.x) : t.x, t.y);
+      const width = sprite.texture.width * Math.abs(scale.x);
+      const height = sprite.texture.height * Math.abs(scale.y);
+      const baseX = t.x + offset.x - anchor.x * width;
+      const baseY = t.y + offset.y - anchor.y * height;
+      sprite.position.set(scale.x < 0 ? baseX + width : baseX, baseY);
       sprite.rotation = t.rotation ?? 0;
       sprite.scale.set(scale.x, scale.y);
     }
@@ -133,6 +167,10 @@ export function createRenderSystem(
 
 function normalizeScale(scale: TransformScale = 1) {
   return typeof scale === "number" ? { x: scale, y: scale } : scale;
+}
+
+function normalizeAnchor(anchor: SpriteAnchor = 0) {
+  return typeof anchor === "number" ? { x: anchor, y: anchor } : anchor;
 }
 
 export type EngineApplicationOptions = {
