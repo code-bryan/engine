@@ -1,4 +1,4 @@
-import { attachRuntimeDebugger, createStoreInspector, type DebuggerWorld } from "@engine/debugger";
+import { attachRuntimeDebugger, createStoreInspector, type DebugEditorField, type DebuggerWorld } from "@engine/debugger";
 import { keyboard, pointer } from "@engine/input";
 import type { EngineApplication } from "@engine/renderer";
 import { actorStates, enemies, facings, players, velocities } from "../components";
@@ -15,13 +15,6 @@ export type DebugEditorPlayback = {
 export function attachDebugEditor(world: GameWorld, engine: EngineApplication, playback: DebugEditorPlayback) {
   return attachRuntimeDebugger(world, engine, {
     playback,
-    trackedStores: [
-      { label: "velocity", store: velocities },
-      { label: "player", store: players },
-      { label: "enemy", store: enemies },
-      { label: "state", store: actorStates },
-      { label: "facing", store: facings },
-    ],
     statusPanels: [
       {
         id: "input",
@@ -124,15 +117,34 @@ export function attachDebugEditor(world: GameWorld, engine: EngineApplication, p
         fields(debugWorld, entity) {
           const touching = debugWorld.physics.getCollidingEntities(entity);
           const body = debugWorld.physics.getDebugBody(entity);
-          if (!body && touching.length === 0) return [];
+          const history = debugWorld.physics.getCollisionHistory(entity);
+          const normals = debugWorld.physics.getContactNormals(entity);
+          if (!body && touching.length === 0 && history.length === 0) return [];
 
-          return [
+          const fields: DebugEditorField[] = [
             { label: "Active", value: body?.isColliding ? "yes" : "no" },
             { label: "Count", value: String(touching.length) },
             touching.length === 0
               ? { label: "Touching", value: "-" }
               : { label: "Touching", value: touching.map((other) => `#${other}`).join(", "), selectEntities: touching },
           ];
+
+          for (const { normal, points } of normals) {
+            fields.push({ label: "Normal", value: `${normal.x.toFixed(2)}, ${normal.y.toFixed(2)}  (${points.length} pt)` });
+          }
+
+          if (history.length > 0) {
+            fields.push({ label: "History", value: "" });
+            for (const record of history.slice(0, 6)) {
+              fields.push({
+                label: `  #${record.seq} ${record.type === "start" ? "▶" : "■"}`,
+                value: `#${record.other}`,
+                selectEntity: record.other,
+              });
+            }
+          }
+
+          return fields;
         },
       },
     ],

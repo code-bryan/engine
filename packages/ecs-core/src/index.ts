@@ -20,6 +20,19 @@ type SystemEntry = {
 export interface ComponentStore<T> extends Map<Entity, T> {}
 export const createStore = <T>() => new Map<Entity, T>() as ComponentStore<T>;
 
+export type ComponentRegistryEntry = { id: string; label: string; store: Map<Entity, unknown> };
+
+const _componentRegistry: ComponentRegistryEntry[] = [];
+
+export function registerComponent<T>(id: string, label: string, store: ComponentStore<T>): ComponentStore<T> {
+  _componentRegistry.push({ id, label, store: store as Map<Entity, unknown> });
+  return store;
+}
+
+export function getComponentRegistry(): readonly ComponentRegistryEntry[] {
+  return _componentRegistry;
+}
+
 export class Tags<TTag extends string = string> {
   private stores = new Map<TTag, Set<Entity>>();
 

@@ -41,10 +41,15 @@ export type PhysicsDebugEvent =
   | { type: "collision:end"; entities: [Entity, Entity] };
 export type PhysicsDebugListener = (event: PhysicsDebugEvent) => void;
 
+export type CollisionRecord = { seq: number; type: "start" | "end"; other: Entity };
+export type ContactInfo = { normal: { x: number; y: number }; points: Array<{ x: number; y: number }> };
+
 export class Physics {
   private engine: Matter.Engine;
   private collisions = new Set<string>();
   private debugListeners = new Set<PhysicsDebugListener>();
+  private collisionSeq = 0;
+  private collisionHistory = new Map<Entity, CollisionRecord[]>();
   rigidBodies: ComponentStore<RigidBody> = createStore<RigidBody>();
 
   body = {
@@ -196,6 +201,29 @@ export class Physics {
     return entities;
   }
 
+  getCollisionHistory(entity: Entity): CollisionRecord[] {
+    return this.collisionHistory.get(entity) ?? [];
+  }
+
+  getContactNormals(entity: Entity): ContactInfo[] {
+    const rigidBody = this.rigidBodies.get(entity);
+    if (!rigidBody) return [];
+
+    const pairs = (this.engine as unknown as { pairs: { list: Matter.Pair[] } }).pairs?.list;
+    if (!pairs) return [];
+
+    const result: ContactInfo[] = [];
+    for (const pair of pairs) {
+      if (!pair.isActive) continue;
+      if (pair.bodyA !== rigidBody.body && pair.bodyB !== rigidBody.body) continue;
+      result.push({
+        normal: { x: pair.collision.normal.x, y: pair.collision.normal.y },
+        points: (pair.activeContacts ?? []).map((c) => ({ x: c.vertex.x, y: c.vertex.y })),
+      });
+    }
+    return result;
+  }
+
   pickEntityAt(point: { x: number; y: number }) {
     for (const [entity, rigidBody] of this.rigidBodies) {
       const { x, y, width, height } = this.toDebugBody(entity, rigidBody);
@@ -226,6 +254,8 @@ export class Physics {
     const b = this.findEntityByBody(bodyB);
     if (a === undefined || b === undefined) return;
     this.collisions.add(this.collisionKey(a, b));
+    this.pushHistory(a, "start", b);
+    this.pushHistory(b, "start", a);
     this.emitDebug({ type: "collision:start", entities: [a, b] });
   }
 
@@ -234,7 +264,17 @@ export class Physics {
     const b = this.findEntityByBody(bodyB);
     if (a === undefined || b === undefined) return;
     this.collisions.delete(this.collisionKey(a, b));
+    this.pushHistory(a, "end", b);
+    this.pushHistory(b, "end", a);
     this.emitDebug({ type: "collision:end", entities: [a, b] });
+  }
+
+  private pushHistory(entity: Entity, type: "start" | "end", other: Entity) {
+    const seq = this.collisionSeq++;
+    const history = this.collisionHistory.get(entity) ?? [];
+    history.unshift({ seq, type, other });
+    if (history.length > 12) history.length = 12;
+    this.collisionHistory.set(entity, history);
   }
 
   private collisionKey(a: Entity, b: Entity) {

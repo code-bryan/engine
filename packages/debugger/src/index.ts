@@ -1,4 +1,4 @@
-import type { Entity, World, WorldDebugEvent } from "@engine/ecs-core";
+import { getComponentRegistry, type Entity, type World, type WorldDebugEvent } from "@engine/ecs-core";
 import type { Physics, PhysicsDebugEvent } from "@engine/physics";
 import { transforms, type EngineApplication, type TransformScale } from "@engine/renderer";
 import { Graphics, Text } from "pixi.js";
@@ -144,8 +144,24 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     showLabels: true,
   };
 
+  const registry = getComponentRegistry();
+  const explicitComponentIds = new Set((options.components ?? []).map((c) => c.id));
+
+  const autoInspectors: DebugInspectorComponent<TWorld>[] = registry
+    .filter((e) => !explicitComponentIds.has(e.id))
+    .map((e) => ({
+      id: e.id,
+      title: e.label,
+      fields(_world: TWorld, entity: Entity) {
+        const value = e.store.get(entity);
+        if (value === undefined) return [];
+        return [{ label: "Value", value: stableSerialize(value) }];
+      },
+    }));
+
   const componentInspectors = [
     ...createBuiltinInspectorComponents(options.getEntityTitle),
+    ...autoInspectors,
     ...(options.components ?? []),
     ...(options.sections ?? []).map((section, index) => ({
       id: `legacy-section-${index}`,
@@ -158,7 +174,10 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   ];
   const componentInspectorMap = new Map(componentInspectors.map((component) => [component.id, component]));
 
-  const trackedStores = options.trackedStores ?? [];
+  const trackedStoreMap = new Map<string, DebugTrackedStore>();
+  for (const e of registry) trackedStoreMap.set(e.label, { label: e.label, store: e.store });
+  for (const s of options.trackedStores ?? []) trackedStoreMap.set(s.label, s);
+  const trackedStores = Array.from(trackedStoreMap.values());
   const storeSnapshots = new Map<string, string>();
   const labels = new Map<number, Text>();
 
