@@ -1,7 +1,7 @@
 import { getComponentRegistry, type ComponentRegistryEntry, type Entity, type World, type WorldDebugEvent } from "@engine/ecs-core";
 import type { Physics, PhysicsDebugEvent } from "@engine/physics";
 import { sprites, transforms, type EngineApplication, type TransformScale } from "@engine/renderer";
-import { Graphics, Text } from "pixi.js";
+import { Container, Graphics, Text } from "pixi.js";
 
 export type DebuggerWorld = World & { physics: Physics };
 
@@ -106,6 +106,8 @@ type DebugState = {
   showPhysics: boolean;
   showLabels: boolean;
   showSprites: boolean;
+  camera: { x: number; y: number; zoom: number };
+  lockTarget: Entity | undefined;
 };
 
 const STYLE_ID = "engine-runtime-debugger-style";
@@ -160,6 +162,8 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     showPhysics: true,
     showLabels: true,
     showSprites: true,
+    camera: { x: 0, y: 0, zoom: 1 },
+    lockTarget: undefined,
   };
 
   const registry = getComponentRegistry();
@@ -236,6 +240,12 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
           <button data-toggle="sprites" title="Toggle Sprite Bounds" aria-label="Toggle Sprite Bounds">
             <span aria-hidden="true">⊡</span>
           </button>
+          <button data-action="camera-reset" title="Reset Camera" aria-label="Reset Camera">
+            <span aria-hidden="true">⌖</span>
+          </button>
+          <button data-toggle="camera-lock" title="Lock Camera to Selected" aria-label="Lock Camera to Selected">
+            <span aria-hidden="true">⊙</span>
+          </button>
           <button data-action="play" title="Play" aria-label="Play">
             <span aria-hidden="true">▶</span>
           </button>
@@ -293,12 +303,35 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   overlay.eventMode = "none";
   engine.app.stage.addChild(overlay);
 
+  // store original game resolution to draw viewport box and restore on destroy
+  const gameW = engine.app.renderer.width;
+  const gameH = engine.app.renderer.height;
+
+  const resizeRendererToViewport = () => {
+    const w = viewport.clientWidth;
+    const h = viewport.clientHeight;
+    if (w > 0 && h > 0) engine.app.renderer.resize(w, h);
+  };
+  resizeRendererToViewport();
+  const resizeObserver = new ResizeObserver(resizeRendererToViewport);
+  resizeObserver.observe(viewport);
+
   const searchInput = layout.querySelector<HTMLInputElement>("[data-search]");
   const controlsHost = layout.querySelector<HTMLElement>(".debugger-toolbar");
 
   const refresh = () => {
+    if (state.lockTarget !== undefined) {
+      const t = transforms.get(state.lockTarget);
+      if (t) {
+        const w = engine.app.renderer.width;
+        const h = engine.app.renderer.height;
+        state.camera.x = w / 2 - t.x * state.camera.zoom;
+        state.camera.y = h / 2 - t.y * state.camera.zoom;
+      }
+    }
+    applyCameraToStage(engine.app.stage, state.camera);
     recordStoreDiffs(world, trackedStores, storeSnapshots, state);
-    renderDebugger(world, layout, viewportHud, overlay, labels, state, componentInspectors, options);
+    renderDebugger(world, layout, viewportHud, overlay, labels, state, componentInspectors, options, gameW, gameH);
     bindEntitySelection(layout, state, refresh);
   };
 
@@ -336,9 +369,54 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     pushLog(state, formatPhysicsEvent(world, event, options.getEntityTitle));
   }));
 
+  let drag: { startX: number; startY: number; camX: number; camY: number } | null = null;
+  let didDrag = false;
+
   const handleCanvasClick = (event: MouseEvent) => {
-    state.selectedEntity = world.physics.pickEntityAt(toCanvasPoint(engine.app.canvas, event.clientX, event.clientY));
+    if (didDrag) { didDrag = false; return; }
+    const canvasPt = toCanvasPoint(engine.app.canvas, event.clientX, event.clientY);
+    const stage = engine.app.stage;
+    const worldPt = {
+      x: (canvasPt.x - stage.position.x) / stage.scale.x,
+      y: (canvasPt.y - stage.position.y) / stage.scale.y,
+    };
+    state.selectedEntity = world.physics.pickEntityAt(worldPt);
     refresh();
+  };
+
+  const handleCanvasPointerDown = (event: PointerEvent) => {
+    if (event.button !== 0) return;
+    drag = { startX: event.clientX, startY: event.clientY, camX: state.camera.x, camY: state.camera.y };
+    didDrag = false;
+    engine.app.canvas.setPointerCapture(event.pointerId);
+  };
+
+  const handleCanvasPointerMove = (event: PointerEvent) => {
+    if (!drag || state.lockTarget !== undefined) return;
+    if (Math.abs(event.clientX - drag.startX) + Math.abs(event.clientY - drag.startY) > 4) didDrag = true;
+    const rect = engine.app.canvas.getBoundingClientRect();
+    const cssScale = rect.width / engine.app.canvas.width;
+    state.camera.x = drag.camX + (event.clientX - drag.startX) / cssScale;
+    state.camera.y = drag.camY + (event.clientY - drag.startY) / cssScale;
+    applyCameraToStage(engine.app.stage, state.camera);
+  };
+
+  const handleCanvasPointerUp = () => { drag = null; };
+
+  const handleCanvasWheel = (event: WheelEvent) => {
+    event.preventDefault();
+    const rect = engine.app.canvas.getBoundingClientRect();
+    const cssScale = rect.width / engine.app.canvas.width;
+    const cx = (event.clientX - rect.left) / cssScale;
+    const cy = (event.clientY - rect.top) / cssScale;
+    const stage = engine.app.stage;
+    const wx = (cx - state.camera.x) / state.camera.zoom;
+    const wy = (cy - state.camera.y) / state.camera.zoom;
+    const factor = event.deltaY < 0 ? 1.1 : 1 / 1.1;
+    state.camera.zoom = Math.max(0.25, Math.min(4, state.camera.zoom * factor));
+    state.camera.x = cx - wx * state.camera.zoom;
+    state.camera.y = cy - wy * state.camera.zoom;
+    applyCameraToStage(stage, state.camera);
   };
 
   const handleControlsClick = (event: MouseEvent) => {
@@ -356,11 +434,21 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
       if (toggle === "physics") state.showPhysics = !state.showPhysics;
       if (toggle === "labels") state.showLabels = !state.showLabels;
       if (toggle === "sprites") state.showSprites = !state.showSprites;
+      if (toggle === "camera-lock") {
+        state.lockTarget = state.lockTarget !== undefined ? undefined : state.selectedEntity;
+      }
       refresh();
       return;
     }
 
     if (!action) return;
+    if (action === "camera-reset") {
+      state.camera = { x: 0, y: 0, zoom: 1 };
+      state.lockTarget = undefined;
+      applyCameraToStage(engine.app.stage, state.camera);
+      refresh();
+      return;
+    }
     if (action === "play") options.playback?.onPlay?.();
     if (action === "pause") options.playback?.onPause?.();
     if (action === "step") options.playback?.onStep?.();
@@ -464,6 +552,11 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   };
 
   engine.app.canvas.addEventListener("click", handleCanvasClick);
+  engine.app.canvas.addEventListener("pointerdown", handleCanvasPointerDown);
+  engine.app.canvas.addEventListener("pointermove", handleCanvasPointerMove);
+  engine.app.canvas.addEventListener("pointerup", handleCanvasPointerUp);
+  engine.app.canvas.addEventListener("pointerleave", handleCanvasPointerUp);
+  engine.app.canvas.addEventListener("wheel", handleCanvasWheel, { passive: false });
   controlsHost?.addEventListener("click", handleControlsClick);
   searchInput?.addEventListener("input", handleSearchInput);
   layout.querySelector<HTMLElement>("[data-inspector]")?.addEventListener("change", handleInspectorChange);
@@ -485,7 +578,16 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
       layout.remove();
       shell.classList.remove("app-shell--debug");
       shell.classList.remove("app-shell--debug-grid-off");
+      resizeObserver.disconnect();
+      engine.app.renderer.resize(gameW, gameH);
+      engine.app.stage.scale.set(1, 1);
+      engine.app.stage.position.set(0, 0);
       engine.app.canvas.removeEventListener("click", handleCanvasClick);
+      engine.app.canvas.removeEventListener("pointerdown", handleCanvasPointerDown);
+      engine.app.canvas.removeEventListener("pointermove", handleCanvasPointerMove);
+      engine.app.canvas.removeEventListener("pointerup", handleCanvasPointerUp);
+      engine.app.canvas.removeEventListener("pointerleave", handleCanvasPointerUp);
+      engine.app.canvas.removeEventListener("wheel", handleCanvasWheel);
       controlsHost?.removeEventListener("click", handleControlsClick);
       searchInput?.removeEventListener("input", handleSearchInput);
       layout.querySelector<HTMLElement>("[data-inspector]")?.removeEventListener("change", handleInspectorChange);
@@ -540,12 +642,11 @@ function ensureStyles() {
     }
     .app-shell--debug .game-frame {
       grid-area: center;
-      justify-self: center;
-      align-self: center;
-      width: min(100%, calc((100vh - 220px) * 16 / 9));
-      max-width: 1100px;
+      width: 100%;
+      height: 100%;
       position: relative;
       z-index: 1;
+      overflow: hidden;
     }
     .debugger-viewport-hud {
       position: absolute;
@@ -670,7 +771,7 @@ function ensureStyles() {
       gap: 8px;
     }
     .debugger-controls--header {
-      grid-template-columns: repeat(8, 32px);
+      grid-template-columns: repeat(10, 32px);
       gap: 6px;
     }
     .debugger-controls button {
@@ -1018,7 +1119,8 @@ function ensureStyles() {
         align-items: stretch;
       }
       .app-shell--debug .game-frame {
-        width: min(100%, calc((100vh - 24px) * 16 / 9));
+        width: 100%;
+        height: 100%;
       }
       .debugger-panel--left,
       .debugger-panel--right {
@@ -1038,6 +1140,8 @@ function renderDebugger<TWorld extends DebuggerWorld>(
   state: DebugState,
   components: DebugInspectorComponent<TWorld>[],
   options: RuntimeDebuggerOptions<TWorld>,
+  gameW?: number,
+  gameH?: number,
 ) {
   renderOverview(sidebar, viewportHud, state, options.playback?.getState?.() ?? "playing");
   renderStatusPanels(world, sidebar, options.statusPanels ?? []);
@@ -1046,7 +1150,7 @@ function renderDebugger<TWorld extends DebuggerWorld>(
   renderInspector(world, sidebar, state.selectedEntity, components, options, state);
   renderSystems(sidebar, world, state.systemMetrics, state.systemTimingHistory);
   renderLog(sidebar, state);
-  renderPhysicsOverlay(world, overlay, labels, state.selectedEntity, options.getEntityTitle, state);
+  renderPhysicsOverlay(world, overlay, labels, state.selectedEntity, options.getEntityTitle, state, gameW, gameH);
 }
 
 function renderOverview(
@@ -1372,8 +1476,15 @@ function renderPhysicsOverlay<TWorld extends DebuggerWorld>(
   selectedEntity: Entity | undefined,
   getEntityTitle: ((world: TWorld, entity: Entity) => string) | undefined,
   state?: DebugState,
+  gameW?: number,
+  gameH?: number,
 ) {
   overlay.clear();
+
+  // game viewport indicator — shows what the game camera sees at normal 1:1 zoom
+  if (gameW && gameH) {
+    overlay.rect(0, 0, gameW, gameH).stroke({ color: 0x3f3f46, width: 1, alpha: 0.8 });
+  }
 
   const liveEntities = new Set(world.entities);
   for (const [entity, label] of labels) {
@@ -1626,6 +1737,7 @@ function syncPlayback(sidebar: HTMLElement, playbackState: "playing" | "paused" 
   syncToggleState(sidebar, "physics", state.showPhysics);
   syncToggleState(sidebar, "labels", state.showLabels);
   syncToggleState(sidebar, "sprites", state.showSprites);
+  syncToggleState(sidebar, "camera-lock", state.lockTarget !== undefined);
 }
 
 function syncToggleState(root: HTMLElement, toggle: string, active: boolean) {
@@ -1660,6 +1772,14 @@ function entityLabel<TWorld extends DebuggerWorld>(
   getEntityTitle?: (world: TWorld, entity: Entity) => string,
 ) {
   return getEntityTitle?.(world, entity) ?? entityTitle(world, entity);
+}
+
+function applyCameraToStage(
+  stage: Container,
+  camera: { x: number; y: number; zoom: number },
+) {
+  stage.scale.set(camera.zoom);
+  stage.position.set(camera.x, camera.y);
 }
 
 function toCanvasPoint(canvas: HTMLCanvasElement, clientX: number, clientY: number) {
