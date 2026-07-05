@@ -1,6 +1,6 @@
-import { getComponentRegistry, type Entity, type World, type WorldDebugEvent } from "@engine/ecs-core";
+import { getComponentRegistry, type ComponentRegistryEntry, type Entity, type World, type WorldDebugEvent } from "@engine/ecs-core";
 import type { Physics, PhysicsDebugEvent } from "@engine/physics";
-import { transforms, type EngineApplication, type TransformScale } from "@engine/renderer";
+import { sprites, transforms, type EngineApplication, type TransformScale } from "@engine/renderer";
 import { Graphics, Text } from "pixi.js";
 
 export type DebuggerWorld = World & { physics: Physics };
@@ -74,8 +74,18 @@ type FrameMetric = {
   durationMs: number;
 };
 
+type EntitySnapshot = {
+  components: Map<string, unknown>;
+  physics?: { x: number; y: number; vx: number; vy: number };
+};
+
+type WorldSnapshot = {
+  frame: number;
+  entities: Map<Entity, EntitySnapshot>;
+};
+
 type LogCategory = "entity" | "tag" | "system" | "physics" | "collision" | "store";
-type LogEntry = { cat: LogCategory; text: string };
+type LogEntry = { cat: LogCategory; text: string; count: number };
 
 const ALL_LOG_CATEGORIES: LogCategory[] = ["entity", "tag", "collision", "physics", "store", "system"];
 
@@ -86,12 +96,16 @@ type DebugState = {
   latestFrameMs: number;
   fps: number;
   systemMetrics: FrameMetric[];
+  systemTimingHistory: Map<string, number[]>;
   eventLog: LogEntry[];
   logFilter: Set<LogCategory>;
   logPaused: boolean;
+  snapshots: WorldSnapshot[];
+  collapsedComponents: Set<string>;
   showGrid: boolean;
   showPhysics: boolean;
   showLabels: boolean;
+  showSprites: boolean;
 };
 
 const STYLE_ID = "engine-runtime-debugger-style";
@@ -136,12 +150,16 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     latestFrameMs: 0,
     fps: 0,
     systemMetrics: [],
+    systemTimingHistory: new Map(),
     eventLog: [],
     logFilter: new Set(ALL_LOG_CATEGORIES),
     logPaused: false,
+    snapshots: [],
+    collapsedComponents: new Set(),
     showGrid: true,
     showPhysics: true,
     showLabels: true,
+    showSprites: true,
   };
 
   const registry = getComponentRegistry();
@@ -215,6 +233,9 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
           <button data-toggle="labels" title="Toggle Labels" aria-label="Toggle Labels">
             <span aria-hidden="true">T</span>
           </button>
+          <button data-toggle="sprites" title="Toggle Sprite Bounds" aria-label="Toggle Sprite Bounds">
+            <span aria-hidden="true">⊡</span>
+          </button>
           <button data-action="play" title="Play" aria-label="Play">
             <span aria-hidden="true">▶</span>
           </button>
@@ -232,6 +253,13 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     </header>
     <aside class="debugger-panel debugger-panel--left">
       <div class="debugger-sidepanels" data-status-panels></div>
+      <section class="debugger-section">
+        <div class="debugger-snapshot-header">
+          <div class="debugger-section__title" style="margin-bottom:0">Snapshots</div>
+          <button class="debugger-snapshot-save" data-snapshot-save>Save</button>
+        </div>
+        <div class="debugger-snapshot-list" data-snapshots></div>
+      </section>
       <section class="debugger-section debugger-section--grow">
         <div class="debugger-section__title">Systems</div>
         <div class="debugger-systems" data-systems></div>
@@ -243,8 +271,9 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
         <input class="debugger-input" data-search placeholder="search entity or tag" />
         <div class="debugger-entity-list" data-entities-list></div>
       </section>
-      <section class="debugger-section debugger-section--grow">
+      <section class="debugger-section debugger-section--inspector">
         <div class="debugger-section__title">Inspector</div>
+        <input class="debugger-input" data-inspector-search placeholder="filter fields…" />
         <div class="debugger-inspector" data-inspector></div>
       </section>
     </aside>
@@ -282,9 +311,14 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
         state.latestDt = event.dt;
         state.systemMetrics = [];
         break;
-      case "system:run":
+      case "system:run": {
         state.systemMetrics.push({ label: event.label, durationMs: event.durationMs });
+        const hist = state.systemTimingHistory.get(event.label) ?? [];
+        hist.push(event.durationMs);
+        if (hist.length > 60) hist.shift();
+        state.systemTimingHistory.set(event.label, hist);
         break;
+      }
       case "frame:end":
         state.latestFrame = event.frame;
         state.latestDt = event.dt;
@@ -321,6 +355,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
       }
       if (toggle === "physics") state.showPhysics = !state.showPhysics;
       if (toggle === "labels") state.showLabels = !state.showLabels;
+      if (toggle === "sprites") state.showSprites = !state.showSprites;
       refresh();
       return;
     }
@@ -354,6 +389,17 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
 
+    const collapseBtn = target.closest<HTMLButtonElement>("[data-collapse-component]");
+    if (collapseBtn) {
+      const id = collapseBtn.dataset.collapseComponent;
+      if (id !== undefined) {
+        if (state.collapsedComponents.has(id)) state.collapsedComponents.delete(id);
+        else state.collapsedComponents.add(id);
+        refresh();
+      }
+      return;
+    }
+
     const selectButton = target.closest<HTMLButtonElement>("[data-select-entity]");
     if (!selectButton) return;
 
@@ -362,6 +408,8 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     state.selectedEntity = Number(entity);
     refresh();
   };
+
+  const handleInspectorSearch = () => refresh();
 
   const handleLogClick = (event: MouseEvent) => {
     const target = event.target;
@@ -392,13 +440,38 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     refresh();
   };
 
+  const handleSnapshotsClick = (event: MouseEvent) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+
+    if (target.closest("[data-snapshot-save]")) {
+      state.snapshots.unshift(captureSnapshot(world, registry));
+      if (state.snapshots.length > 5) state.snapshots.length = 5;
+      refresh();
+      return;
+    }
+
+    const restoreBtn = target.closest<HTMLButtonElement>("[data-snapshot-restore]");
+    if (restoreBtn) {
+      const index = Number(restoreBtn.dataset.snapshotRestore);
+      const snap = state.snapshots[index];
+      if (snap) {
+        restoreSnapshot(world, snap, registry);
+        engine.tick(0);
+      }
+      refresh();
+    }
+  };
+
   engine.app.canvas.addEventListener("click", handleCanvasClick);
   controlsHost?.addEventListener("click", handleControlsClick);
   searchInput?.addEventListener("input", handleSearchInput);
   layout.querySelector<HTMLElement>("[data-inspector]")?.addEventListener("change", handleInspectorChange);
   layout.querySelector<HTMLElement>("[data-inspector]")?.addEventListener("click", handleInspectorClick);
+  layout.querySelector<HTMLElement>("[data-inspector-search]")?.addEventListener("input", handleInspectorSearch);
   layout.querySelector<HTMLElement>("[data-systems]")?.addEventListener("click", handleSystemsClick);
   layout.querySelector<HTMLElement>(".debugger-panel--bottom")?.addEventListener("click", handleLogClick);
+  layout.querySelector<HTMLElement>(".debugger-panel--left")?.addEventListener("click", handleSnapshotsClick);
 
   refresh();
 
@@ -417,8 +490,10 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
       searchInput?.removeEventListener("input", handleSearchInput);
       layout.querySelector<HTMLElement>("[data-inspector]")?.removeEventListener("change", handleInspectorChange);
       layout.querySelector<HTMLElement>("[data-inspector]")?.removeEventListener("click", handleInspectorClick);
+      layout.querySelector<HTMLElement>("[data-inspector-search]")?.removeEventListener("input", handleInspectorSearch);
       layout.querySelector<HTMLElement>("[data-systems]")?.removeEventListener("click", handleSystemsClick);
       layout.querySelector<HTMLElement>(".debugger-panel--bottom")?.removeEventListener("click", handleLogClick);
+      layout.querySelector<HTMLElement>(".debugger-panel--left")?.removeEventListener("click", handleSnapshotsClick);
       for (const unsubscribe of unsubscribers) unsubscribe();
     },
   };
@@ -558,7 +633,7 @@ function ensureStyles() {
     }
     .debugger-panel--left {
       grid-area: left;
-      grid-template-rows: auto minmax(0, 1fr);
+      grid-template-rows: auto auto minmax(0, 1fr);
       height: min(100%, 900px);
     }
     .debugger-panel--right {
@@ -595,7 +670,7 @@ function ensureStyles() {
       gap: 8px;
     }
     .debugger-controls--header {
-      grid-template-columns: repeat(7, 32px);
+      grid-template-columns: repeat(8, 32px);
       gap: 6px;
     }
     .debugger-controls button {
@@ -635,6 +710,11 @@ function ensureStyles() {
       grid-template-rows: auto minmax(0, 1fr);
     }
     .debugger-section--entities {
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr);
+      min-height: 0;
+    }
+    .debugger-section--inspector {
       display: grid;
       grid-template-rows: auto auto minmax(0, 1fr);
       min-height: 0;
@@ -694,8 +774,9 @@ function ensureStyles() {
       cursor: pointer;
     }
     .debugger-entity.is-selected {
-      border-color: rgba(96, 165, 250, 0.6);
+      border-color: rgba(96, 165, 250, 0.8);
       background: rgba(30, 41, 59, 0.9);
+      box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.35);
     }
     .debugger-pill {
       color: #93c5fd;
@@ -706,11 +787,33 @@ function ensureStyles() {
       border-radius: 10px;
       background: #09090b;
     }
-    .debugger-card__title {
+    .debugger-card--collapsed .debugger-card__header {
+      margin-bottom: 0;
+    }
+    .debugger-card__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       margin-bottom: 6px;
+    }
+    .debugger-card__title {
       color: #fafafa;
       font-weight: 700;
     }
+    .debugger-card__collapse {
+      width: 18px;
+      height: 18px;
+      padding: 0;
+      border: none;
+      background: transparent;
+      color: #52525b;
+      cursor: pointer;
+      font: inherit;
+      font-size: 10px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .debugger-card__collapse:hover { color: #a1a1aa; }
     .debugger-field {
       display: flex;
       justify-content: space-between;
@@ -720,6 +823,8 @@ function ensureStyles() {
     }
     .debugger-field--editable {
       cursor: text;
+      border-left: 2px solid rgba(96, 165, 250, 0.35);
+      padding-left: 4px;
     }
     .debugger-field strong {
       color: #fafafa;
@@ -841,6 +946,65 @@ function ensureStyles() {
       color: #52525b;
       font-size: 11px;
     }
+    .debugger-log__count {
+      margin-left: 6px;
+      padding: 0 5px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      color: #71717a;
+      font-size: 10px;
+      font-variant-numeric: tabular-nums;
+    }
+    .debugger-system__timing {
+      font-size: 10px;
+      color: #a1a1aa;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .debugger-snapshot-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .debugger-snapshot-save {
+      height: 22px;
+      padding: 0 8px;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 6px;
+      background: #18181b;
+      color: #d4d4d8;
+      cursor: pointer;
+      font: inherit;
+    }
+    .debugger-snapshot-save:hover { background: #27272a; }
+    .debugger-snapshot-list {
+      display: grid;
+      gap: 4px;
+    }
+    .debugger-snapshot-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 4px 6px;
+      border-radius: 6px;
+      background: #09090b;
+      font-size: 11px;
+      color: #a1a1aa;
+    }
+    .debugger-snapshot-row__label { color: #d4d4d8; }
+    .debugger-snapshot-restore {
+      height: 20px;
+      padding: 0 6px;
+      border: 1px solid rgba(96,165,250,0.28);
+      border-radius: 999px;
+      background: rgba(37,99,235,0.16);
+      color: #bfdbfe;
+      cursor: pointer;
+      font: 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .debugger-snapshot-restore:hover { background: rgba(37,99,235,0.28); }
     @media (max-width: 960px) {
       .app-shell--debug {
         grid-template-columns: 1fr;
@@ -877,9 +1041,10 @@ function renderDebugger<TWorld extends DebuggerWorld>(
 ) {
   renderOverview(sidebar, viewportHud, state, options.playback?.getState?.() ?? "playing");
   renderStatusPanels(world, sidebar, options.statusPanels ?? []);
+  renderSnapshots(sidebar, state);
   renderEntityList(world, sidebar, state.selectedEntity, options.getEntityTitle);
-  renderInspector(world, sidebar, state.selectedEntity, components, options);
-  renderSystems(sidebar, world, state.systemMetrics);
+  renderInspector(world, sidebar, state.selectedEntity, components, options, state);
+  renderSystems(sidebar, world, state.systemMetrics, state.systemTimingHistory);
   renderLog(sidebar, state);
   renderPhysicsOverlay(world, overlay, labels, state.selectedEntity, options.getEntityTitle, state);
 }
@@ -923,6 +1088,8 @@ function renderEntityList<TWorld extends DebuggerWorld>(
       `;
     })
     .join("");
+
+  host.querySelector<HTMLElement>(".is-selected")?.scrollIntoView({ block: "nearest", behavior: "instant" });
 }
 
 function renderStatusPanels<TWorld extends DebuggerWorld>(
@@ -966,6 +1133,7 @@ function renderInspector<TWorld extends DebuggerWorld>(
   entity: Entity | undefined,
   components: DebugInspectorComponent<TWorld>[],
   options: RuntimeDebuggerOptions<TWorld>,
+  state: DebugState,
 ) {
   const host = sidebar.querySelector<HTMLElement>("[data-inspector]");
   if (!host) return;
@@ -975,17 +1143,25 @@ function renderInspector<TWorld extends DebuggerWorld>(
     return;
   }
 
+  const query = sidebar.querySelector<HTMLInputElement>("[data-inspector-search]")?.value.trim().toLowerCase() ?? "";
   const cards: string[] = [];
 
   for (const component of components) {
     const fields = component.fields(world, entity);
     if (fields.length === 0) continue;
-    cards.push(renderCard(component.id, component.title, entity, fields));
+    const collapsed = state.collapsedComponents.has(component.id);
+    const visible = collapsed ? fields : fields.filter((f) =>
+      !query || component.title.toLowerCase().includes(query) || f.label.toLowerCase().includes(query),
+    );
+    if (!collapsed && query && visible.length === 0) continue;
+    cards.push(renderCard(component.id, component.title, entity, collapsed ? [] : visible, collapsed));
   }
 
-  cards.push(renderRuntimeCard("Runtime", [
-    { label: "Details", value: options.getRuntimeDetails?.(world, entity) ?? defaultRuntimeDetails(world, entity) },
-  ]));
+  const runtimeFields = [{ label: "Details", value: options.getRuntimeDetails?.(world, entity) ?? defaultRuntimeDetails(world, entity) }];
+  const runtimeVisible = runtimeFields.filter((f) => !query || "runtime".includes(query) || f.label.toLowerCase().includes(query));
+  if (!query || runtimeVisible.length > 0) {
+    cards.push(renderRuntimeCard("Runtime", runtimeVisible));
+  }
 
   host.innerHTML = cards.join("");
 }
@@ -1054,7 +1230,81 @@ function createBuiltinInspectorComponents<TWorld extends DebuggerWorld>(
   ];
 }
 
-function renderSystems<TWorld extends DebuggerWorld>(sidebar: HTMLElement, world: TWorld, metrics: FrameMetric[]) {
+function renderSnapshots(sidebar: HTMLElement, state: DebugState) {
+  const host = sidebar.querySelector<HTMLElement>("[data-snapshots]");
+  if (!host) return;
+
+  if (state.snapshots.length === 0) {
+    host.innerHTML = `<span style="color:#52525b;font-size:11px">none saved</span>`;
+    return;
+  }
+
+  host.innerHTML = state.snapshots
+    .map((snap, i) => `
+      <div class="debugger-snapshot-row">
+        <span class="debugger-snapshot-row__label">frame ${snap.frame}</span>
+        <span>${snap.entities.size} entities</span>
+        <button class="debugger-snapshot-restore" data-snapshot-restore="${i}">Restore</button>
+      </div>
+    `)
+    .join("");
+}
+
+function captureSnapshot<TWorld extends DebuggerWorld>(
+  world: TWorld,
+  registry: readonly ComponentRegistryEntry[],
+): WorldSnapshot {
+  const entities = new Map<Entity, EntitySnapshot>();
+
+  for (const entity of world.entities) {
+    const components = new Map<string, unknown>();
+    for (const entry of registry) {
+      const value = entry.store.get(entity);
+      if (value !== undefined) components.set(entry.id, structuredClone(value));
+    }
+
+    const rigidBody = world.physics.rigidBodies.get(entity);
+    const physics = rigidBody
+      ? {
+          x: rigidBody.body.position.x - rigidBody.width / 2,
+          y: rigidBody.body.position.y - rigidBody.height / 2,
+          vx: rigidBody.body.velocity.x,
+          vy: rigidBody.body.velocity.y,
+        }
+      : undefined;
+
+    entities.set(entity, { components, physics });
+  }
+
+  return { frame: world.getFrame(), entities };
+}
+
+function restoreSnapshot<TWorld extends DebuggerWorld>(
+  world: TWorld,
+  snapshot: WorldSnapshot,
+  registry: readonly ComponentRegistryEntry[],
+) {
+  for (const [entity, data] of snapshot.entities) {
+    if (!world.entities.has(entity)) continue;
+
+    for (const entry of registry) {
+      const value = data.components.get(entry.id);
+      if (value !== undefined) entry.store.set(entity, structuredClone(value));
+      else entry.store.delete(entity);
+    }
+
+    if (data.physics) {
+      world.physics.reset(entity, { x: data.physics.x, y: data.physics.y }, { x: data.physics.vx, y: data.physics.vy });
+      const transform = transforms.get(entity);
+      if (transform) {
+        transform.x = data.physics.x;
+        transform.y = data.physics.y;
+      }
+    }
+  }
+}
+
+function renderSystems<TWorld extends DebuggerWorld>(sidebar: HTMLElement, world: TWorld, metrics: FrameMetric[], history: Map<string, number[]>) {
   const host = sidebar.querySelector<HTMLElement>("[data-systems]");
   if (!host) return;
 
@@ -1069,14 +1319,20 @@ function renderSystems<TWorld extends DebuggerWorld>(sidebar: HTMLElement, world
   host.innerHTML = entries
     .map((entry, index) => {
       const metric = metricByLabel.get(entry.label);
-      const ms = metric ? `${metric.durationMs.toFixed(2)} ms` : "—";
+      const hist = history.get(entry.label) ?? [];
+      const cur = metric ? metric.durationMs : null;
+      const avg = hist.length > 0 ? hist.reduce((a, b) => a + b, 0) / hist.length : null;
+      const peak = hist.length > 0 ? Math.max(...hist) : null;
+      const timing = !entry.enabled ? "off"
+        : cur === null ? "—"
+        : `${cur.toFixed(2)} / ${avg?.toFixed(2) ?? "—"} / ${peak?.toFixed(2) ?? "—"}`;
       const activeClass = entry.enabled ? "" : " debugger-system--disabled";
       return `
         <div class="debugger-card debugger-system${activeClass}">
           <div class="debugger-field">
             <button class="debugger-system__toggle" data-system-index="${index}" title="${entry.enabled ? "Disable" : "Enable"} system">${entry.enabled ? "●" : "○"}</button>
             <span class="debugger-system__label">${escapeHtml(entry.label)}</span>
-            <strong>${entry.enabled ? ms : "off"}</strong>
+            <strong class="debugger-system__timing">${timing}</strong>
           </div>
         </div>
       `;
@@ -1105,7 +1361,7 @@ function renderLog(sidebar: HTMLElement, state: DebugState) {
   }
 
   host.innerHTML = visible
-    .map((e) => `<div class="debugger-log__entry debugger-log__entry--${e.cat}">${escapeHtml(e.text)}</div>`)
+    .map((e) => `<div class="debugger-log__entry debugger-log__entry--${e.cat}">${escapeHtml(e.text)}${e.count > 1 ? `<span class="debugger-log__count">×${e.count}</span>` : ""}</div>`)
     .join("");
 }
 
@@ -1126,37 +1382,94 @@ function renderPhysicsOverlay<TWorld extends DebuggerWorld>(
     labels.delete(entity);
   }
 
-  if (!state?.showPhysics && !state?.showLabels) return;
+  if (!state?.showPhysics && !state?.showLabels && !state?.showSprites) return;
 
   for (const body of world.physics.getDebugBodies()) {
-    if (state.showPhysics) {
-      const color = body.entity === selectedEntity ? 0xf59e0b : colorForBodyKind(body.kind);
+    const isSelected = body.entity === selectedEntity;
+    const cx = body.x + body.width / 2;
+    const cy = body.y + body.height / 2;
+
+    if (state?.showPhysics) {
+      const color = isSelected ? 0xf59e0b : colorForBodyKind(body.kind);
       overlay
         .rect(body.x, body.y, body.width, body.height)
-        .stroke({ color, width: body.entity === selectedEntity ? 2 : 1, alpha: 0.95 });
+        .stroke({ color, width: isSelected ? 2 : 1, alpha: 0.95 });
+
+      // center dot
+      overlay.circle(cx, cy, 2).fill({ color, alpha: 0.9 });
+
+      // velocity arrow
+      const rigidBody = world.physics.rigidBodies.get(body.entity);
+      if (rigidBody) {
+        const vx = rigidBody.body.velocity.x;
+        const vy = rigidBody.body.velocity.y;
+        const speed = Math.sqrt(vx * vx + vy * vy);
+        if (speed > 0.1) {
+          const scale = 30;
+          const tx = cx + vx * scale;
+          const ty = cy + vy * scale;
+          const arrowColor = isSelected ? 0xf59e0b : 0xffffff;
+          overlay.moveTo(cx, cy).lineTo(tx, ty).stroke({ color: arrowColor, width: 1.5, alpha: 0.85 });
+          // arrowhead
+          const angle = Math.atan2(vy, vx);
+          const headLen = 5;
+          overlay
+            .moveTo(tx, ty)
+            .lineTo(tx - headLen * Math.cos(angle - 0.5), ty - headLen * Math.sin(angle - 0.5))
+            .stroke({ color: arrowColor, width: 1.5, alpha: 0.85 });
+          overlay
+            .moveTo(tx, ty)
+            .lineTo(tx - headLen * Math.cos(angle + 0.5), ty - headLen * Math.sin(angle + 0.5))
+            .stroke({ color: arrowColor, width: 1.5, alpha: 0.85 });
+        }
+      }
     }
 
     let label = labels.get(body.entity);
-    if (!state.showLabels) {
+    if (!state?.showLabels) {
       if (label) label.visible = false;
-      continue;
+    } else {
+      if (!label) {
+        label = new Text({
+          text: getEntityTitle?.(world, body.entity) ?? entityTitle(world, body.entity),
+          style: {
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+            fontSize: 10,
+            fill: 0xffffff,
+            stroke: { color: 0x000000, width: 2 },
+          },
+        });
+        labels.set(body.entity, label);
+        overlay.parent?.addChild(label);
+      }
+      label.position.set(body.x, body.y - 12);
+      label.visible = true;
     }
+  }
 
-    if (!label) {
-      label = new Text({
-        text: getEntityTitle?.(world, body.entity) ?? entityTitle(world, body.entity),
-        style: {
-          fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-          fontSize: 10,
-          fill: 0xffffff,
-          stroke: { color: 0x000000, width: 2 },
-        },
-      });
-      labels.set(body.entity, label);
-      overlay.parent?.addChild(label);
+  // sprite bounds + anchor
+  if (state?.showSprites) {
+    for (const [entity, spriteRef] of sprites) {
+      const t = transforms.get(entity);
+      if (!t) continue;
+      const { sprite, offset, anchor } = spriteRef;
+      const scaleX = typeof t.scale === "number" ? t.scale : (t.scale?.x ?? 1);
+      const scaleY = typeof t.scale === "number" ? t.scale : (t.scale?.y ?? 1);
+      const w = sprite.texture.width * Math.abs(scaleX);
+      const h = sprite.texture.height * Math.abs(scaleY);
+      const posX = t.x + offset.x;
+      const posY = t.y + offset.y;
+      const bx = posX - (scaleX < 0 ? (1 - anchor.x) : anchor.x) * w;
+      const by = posY - (scaleY < 0 ? (1 - anchor.y) : anchor.y) * h;
+      // sprite bounds box
+      overlay.rect(bx, by, w, h).stroke({ color: 0x06b6d4, width: 1, alpha: 0.7 });
+      // anchor cross — always at sprite.position (the anchor point in Pixi)
+      const ax = posX;
+      const ay = posY;
+      const cs = 4;
+      overlay.moveTo(ax - cs, ay).lineTo(ax + cs, ay).stroke({ color: 0xfbbf24, width: 1.5, alpha: 0.9 });
+      overlay.moveTo(ax, ay - cs).lineTo(ax, ay + cs).stroke({ color: 0xfbbf24, width: 1.5, alpha: 0.9 });
     }
-    label.position.set(body.x, body.y - 12);
-    label.visible = true;
   }
 }
 
@@ -1191,7 +1504,7 @@ function formatWorldEvent<TWorld extends DebuggerWorld>(
   world: TWorld,
   event: WorldDebugEvent,
   getEntityTitle?: (world: TWorld, entity: Entity) => string,
-): LogEntry | null {
+): Omit<LogEntry, "count"> | null {
   switch (event.type) {
     case "entity:spawn":
       return { cat: "entity", text: `frame ${event.frame} spawn ${entityLabel(world, event.entity, getEntityTitle)}` };
@@ -1212,7 +1525,7 @@ function formatPhysicsEvent<TWorld extends DebuggerWorld>(
   world: TWorld,
   event: PhysicsDebugEvent,
   getEntityTitle?: (world: TWorld, entity: Entity) => string,
-): LogEntry {
+): Omit<LogEntry, "count"> {
   switch (event.type) {
     case "body:set":
       return { cat: "physics", text: `body set ${entityLabel(world, event.entity, getEntityTitle)} ${event.kind} ${event.width}x${event.height} @ ${event.x},${event.y}` };
@@ -1236,11 +1549,14 @@ function renderRuntimeCard(title: string, fields: Array<{ label: string; value: 
   `;
 }
 
-function renderCard(componentId: string, title: string, entity: Entity, fields: DebugEditorField[]) {
+function renderCard(componentId: string, title: string, entity: Entity, fields: DebugEditorField[], collapsed = false) {
   return `
-    <div class="debugger-card">
-      <div class="debugger-card__title">${title}</div>
-      ${fields.map((field) => renderField(componentId, entity, field)).join("")}
+    <div class="debugger-card${collapsed ? " debugger-card--collapsed" : ""}">
+      <div class="debugger-card__header">
+        <span class="debugger-card__title">${escapeHtml(title)}</span>
+        <button class="debugger-card__collapse" data-collapse-component="${escapeHtml(componentId)}">${collapsed ? "▸" : "▾"}</button>
+      </div>
+      ${collapsed ? "" : fields.map((field) => renderField(componentId, entity, field)).join("")}
     </div>
   `;
 }
@@ -1309,6 +1625,7 @@ function syncPlayback(sidebar: HTMLElement, playbackState: "playing" | "paused" 
   syncToggleState(sidebar, "grid", state.showGrid);
   syncToggleState(sidebar, "physics", state.showPhysics);
   syncToggleState(sidebar, "labels", state.showLabels);
+  syncToggleState(sidebar, "sprites", state.showSprites);
 }
 
 function syncToggleState(root: HTMLElement, toggle: string, active: boolean) {
@@ -1316,9 +1633,14 @@ function syncToggleState(root: HTMLElement, toggle: string, active: boolean) {
   button?.classList.toggle("is-active", active);
 }
 
-function pushLog(state: DebugState, entry: LogEntry | null) {
+function pushLog(state: DebugState, entry: Omit<LogEntry, "count"> | null) {
   if (!entry || state.logPaused) return;
-  state.eventLog.unshift(entry);
+  const head = state.eventLog[0];
+  if (head && head.cat === entry.cat && head.text === entry.text) {
+    head.count++;
+    return;
+  }
+  state.eventLog.unshift({ ...entry, count: 1 });
   if (state.eventLog.length > 80) state.eventLog.length = 80;
 }
 
