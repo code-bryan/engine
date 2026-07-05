@@ -1,4 +1,4 @@
-import { attachRuntimeDebugger, type DebuggerWorld } from "@engine/debugger";
+import { attachRuntimeDebugger, createStoreInspector, type DebuggerWorld } from "@engine/debugger";
 import type { EngineApplication } from "@engine/renderer";
 import { actorStates, enemies, facings, players, velocities } from "../components";
 import type { GameWorld } from "../app";
@@ -25,40 +25,58 @@ export function attachDebugEditor(world: GameWorld, engine: EngineApplication, p
       const tag = debugWorld.tags.list(entity)[0] ?? "entity";
       return `${tag.slice(0, 1).toUpperCase()}${tag.slice(1)}_${entity}`;
     },
-    sections: [
-      {
-        title: "Actor",
-        fields(_debugWorld: DebuggerWorld, entity?: number) {
+    components: [
+      createStoreInspector({
+        id: "facing",
+        title: "Facing",
+        store: facings,
+        fields(value) {
+          return [{ label: "Value", value }];
+        },
+      }),
+      createStoreInspector({
+        id: "actor-state",
+        title: "Actor State",
+        store: actorStates,
+        fields(value) {
+          return [{ label: "Value", value }];
+        },
+      }),
+      createStoreInspector({
+        id: "velocity",
+        title: "Velocity",
+        store: velocities,
+        fields(value) {
           return [
-            { label: "Facing", value: entity === undefined ? "-" : facings.get(entity) ?? "-" },
-            { label: "State", value: entity === undefined ? "-" : actorStates.get(entity) ?? "-" },
+            { label: "X", value: formatNumber(value.x) },
+            { label: "Y", value: formatNumber(value.y) },
           ];
         },
-      },
-      {
-        title: "Motion",
-        fields(_debugWorld: DebuggerWorld, entity?: number) {
-          const velocity = entity === undefined ? undefined : velocities.get(entity);
+      }),
+      createStoreInspector({
+        id: "player",
+        title: "Player",
+        store: players,
+        fields(value) {
           return [
-            {
-              label: "Velocity",
-              value: formatNumber(velocity?.x),
-              secondary: formatNumber(velocity?.y),
-            },
+            { label: "Speed", value: formatNumber(value.speed) },
+            { label: "Spawn X", value: formatNumber(value.spawnX) },
+            { label: "Spawn Y", value: formatNumber(value.spawnY) },
           ];
         },
-      },
-      {
-        title: "Gameplay",
-        fields(_debugWorld: DebuggerWorld, entity?: number) {
-          const player = entity === undefined ? undefined : players.get(entity);
-          const enemy = entity === undefined ? undefined : enemies.get(entity);
+      }),
+      createStoreInspector({
+        id: "enemy",
+        title: "Enemy",
+        store: enemies,
+        fields(value) {
           return [
-            { label: "Player", value: player ? `speed=${player.speed}` : "-" },
-            { label: "Enemy", value: enemy ? `speed=${enemy.speed}` : "-" },
+            { label: "Speed", value: formatNumber(value.speed) },
+            { label: "Spawn X", value: formatNumber(value.spawnX) },
+            { label: "Spawn Y", value: formatNumber(value.spawnY) },
           ];
         },
-      },
+      }),
     ],
     getRuntimeDetails(debugWorld: DebuggerWorld, entity?: number) {
       if (entity === undefined) return "selection: none";

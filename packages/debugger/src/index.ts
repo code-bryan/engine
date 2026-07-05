@@ -16,6 +16,19 @@ export type DebugEditorSection<TWorld extends DebuggerWorld = DebuggerWorld> = {
   fields: DebugEditorField[] | ((world: TWorld, entity?: Entity) => DebugEditorField[]);
 };
 
+export type DebugInspectorComponent<TWorld extends DebuggerWorld = DebuggerWorld> = {
+  id: string;
+  title: string;
+  fields: (world: TWorld, entity: Entity) => DebugEditorField[];
+};
+
+export type DebugStoreInspectorOptions<TValue, TWorld extends DebuggerWorld = DebuggerWorld> = {
+  id: string;
+  title: string;
+  store: Map<Entity, TValue>;
+  fields: (value: TValue, world: TWorld, entity: Entity) => DebugEditorField[];
+};
+
 export type DebugPlayback = {
   onPlay?: () => void;
   onPause?: () => void;
@@ -32,6 +45,7 @@ export type DebugTrackedStore = {
 export type RuntimeDebuggerOptions<TWorld extends DebuggerWorld = DebuggerWorld> = {
   getEntityTitle?: (world: TWorld, entity: Entity) => string;
   sections?: DebugEditorSection<TWorld>[];
+  components?: DebugInspectorComponent<TWorld>[];
   getRuntimeDetails?: (world: TWorld, entity?: Entity) => string;
   playback?: DebugPlayback;
   trackedStores?: DebugTrackedStore[];
@@ -59,6 +73,20 @@ type DebugState = {
 
 const STYLE_ID = "engine-runtime-debugger-style";
 
+export function createStoreInspector<TValue, TWorld extends DebuggerWorld = DebuggerWorld>(
+  options: DebugStoreInspectorOptions<TValue, TWorld>,
+): DebugInspectorComponent<TWorld> {
+  return {
+    id: options.id,
+    title: options.title,
+    fields(world, entity) {
+      const value = options.store.get(entity);
+      if (value === undefined) return [];
+      return options.fields(value, world, entity);
+    },
+  };
+}
+
 export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   world: TWorld,
   engine: EngineApplication,
@@ -83,7 +111,18 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     eventLog: [],
   };
 
-  const inspectorSections = options.sections ?? [];
+  const componentInspectors = [
+    ...(options.components ?? []),
+    ...(options.sections ?? []).map((section, index) => ({
+      id: `legacy-section-${index}`,
+      title: section.title,
+      fields(world: TWorld, entity: Entity) {
+        const fields = typeof section.fields === "function" ? section.fields(world, entity) : section.fields;
+        return fields;
+      },
+    })),
+  ];
+
   const trackedStores = options.trackedStores ?? [];
   const storeSnapshots = new Map<string, string>();
   const labels = new Map<number, Text>();
@@ -163,7 +202,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
 
   const refresh = () => {
     recordStoreDiffs(world, trackedStores, storeSnapshots, state);
-    renderDebugger(world, layout, viewportHud, overlay, labels, state, inspectorSections, options);
+    renderDebugger(world, layout, viewportHud, overlay, labels, state, componentInspectors, options);
     bindEntitySelection(layout, state, refresh);
   };
 
@@ -564,12 +603,12 @@ function renderDebugger<TWorld extends DebuggerWorld>(
   overlay: Graphics,
   labels: Map<number, Text>,
   state: DebugState,
-  sections: DebugEditorSection<TWorld>[],
+  components: DebugInspectorComponent<TWorld>[],
   options: RuntimeDebuggerOptions<TWorld>,
 ) {
   renderOverview(sidebar, viewportHud, state, options.playback?.getState?.() ?? "playing");
   renderEntityList(world, sidebar, state.selectedEntity, options.getEntityTitle);
-  renderInspector(world, sidebar, state.selectedEntity, sections, options);
+  renderInspector(world, sidebar, state.selectedEntity, components, options);
   renderSystems(sidebar, state.systemMetrics);
   renderLog(sidebar, state.eventLog);
   renderPhysicsOverlay(world, overlay, labels, state.selectedEntity, options.getEntityTitle);
@@ -635,7 +674,7 @@ function renderInspector<TWorld extends DebuggerWorld>(
   world: TWorld,
   sidebar: HTMLElement,
   entity: Entity | undefined,
-  sections: DebugEditorSection<TWorld>[],
+  components: DebugInspectorComponent<TWorld>[],
   options: RuntimeDebuggerOptions<TWorld>,
 ) {
   const host = sidebar.querySelector<HTMLElement>("[data-inspector]");
@@ -667,9 +706,10 @@ function renderInspector<TWorld extends DebuggerWorld>(
     ]),
   ];
 
-  for (const section of sections) {
-    const fields = typeof section.fields === "function" ? section.fields(world, entity) : section.fields;
-    cards.push(renderCard(section.title, fields.map((field) => ({
+  for (const component of components) {
+    const fields = component.fields(world, entity);
+    if (fields.length === 0) continue;
+    cards.push(renderCard(component.title, fields.map((field) => ({
       label: field.label,
       value: field.secondary === undefined ? field.value : `${field.value}, ${field.secondary}`,
     }))));
