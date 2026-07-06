@@ -1,18 +1,22 @@
-import { loadSpriteSheet, sprite, transforms } from "@engine/renderer";
-import type { GameWorld } from "../app";
-import { actorStates, enemies, facings, velocities } from "../components";
+import { loadSpriteSheet, sprite, transforms, type SpriteAnimationFrame } from "@engine/renderer";
+import type { GameWorld } from "../../app";
+import { actorStates, facings, players, velocities } from "../components";
 
-const enemyClips = loadEnemyClips();
+const playerClips = loadPlayerClips();
 
-async function loadEnemyClips() {
-  const idleTextures = await loadSpriteSheet({ src: "/assets/Soldier_Idle.png", frameWidth: 100, frameHeight: 100, frames: 6 });
+async function loadPlayerClips() {
+  const [idleTextures, walkTextures] = await Promise.all([
+    loadSpriteSheet({ src: "/assets/Orc_Idle.png", frameWidth: 100, frameHeight: 100, frames: 6 }),
+    loadSpriteSheet({ src: "/assets/Orc_Walk.png", frameWidth: 100, frameHeight: 100, frames: 8 }),
+  ]);
 
   return {
     idle: idleTextures.map((texture) => ({ texture })),
+    walk: walkTextures.map((texture) => ({ texture })),
   };
 }
 
-export type EnemyPrefabProps = {
+export type PlayerPrefabProps = {
   x: number;
   y: number;
   rotation?: number;
@@ -22,11 +26,11 @@ export type EnemyPrefabProps = {
   spawnY?: number;
 };
 
-export async function EnemyPrefab(world: GameWorld, props: EnemyPrefabProps) {
+export async function PlayerPrefab(world: GameWorld, props: PlayerPrefabProps) {
   const bodyWidth = 16;
   const bodyHeight = 16;
   const e = world.spawn();
-  world.tags.add(e, "enemy");
+  world.tags.add(e, "player");
   transforms.set(e, {
     x: props.x,
     y: props.y,
@@ -34,15 +38,15 @@ export async function EnemyPrefab(world: GameWorld, props: EnemyPrefabProps) {
     scale: props.scale ?? 1,
   });
   velocities.set(e, { x: 0, y: 0 });
-  facings.set(e, "left");
+  facings.set(e, "right");
   actorStates.set(e, "idle");
-  enemies.set(e, {
-    speed: props.speed ?? 42,
+  players.set(e, {
+    speed: props.speed ?? 96,
     spawnX: props.spawnX ?? props.x,
     spawnY: props.spawnY ?? props.y,
   });
   world.physics.body.kinematic.set(e, { x: props.x, y: props.y, width: bodyWidth, height: bodyHeight });
-  const clips = await enemyClips;
+  const clips = await playerClips;
   sprite.set(e, {
     ...clips.idle[0],
     anchor: { x: 0.5, y: 0.5 },
@@ -55,6 +59,11 @@ export async function EnemyPrefab(world: GameWorld, props: EnemyPrefabProps) {
         fps: 4,
         loop: true,
         frames: clips.idle,
+      },
+      walk: {
+        fps: 8,
+        loop: true,
+        frames: clips.walk,
       },
     },
   });

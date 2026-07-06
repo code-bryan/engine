@@ -1,5 +1,5 @@
 import { createKeyboardInputSys } from "@engine/input";
-import type { GameWorld } from "../app";
+import type { GameWorld } from "../../app";
 import {
   createActorStateSystem,
   createEnemyFollowSystem,

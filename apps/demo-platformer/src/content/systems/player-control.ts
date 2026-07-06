@@ -1,5 +1,5 @@
 import { keyboard } from "@engine/input";
-import type { GameWorld } from "../app";
+import type { GameWorld } from "../../app";
 import { players, velocities } from "../components";
 
 export function createPlayerControlSystem(world: GameWorld) {

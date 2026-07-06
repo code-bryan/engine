@@ -1,5 +1,5 @@
 import { transforms } from "@engine/renderer";
-import type { GameWorld } from "../app";
+import type { GameWorld } from "../../app";
 import { enemies, players, velocities } from "../components";
 
 export function createRestartOnEnemyTouchSystem(world: GameWorld) {

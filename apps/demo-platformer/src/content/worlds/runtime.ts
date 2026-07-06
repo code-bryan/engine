@@ -1,6 +1,6 @@
 import { transforms, type TransformScale } from "@engine/renderer";
 import type { WorldData, WorldEntityBase } from "@engine/debugger";
-import type { GameWorld } from "../app";
+import type { GameWorld } from "../../app";
 import { enemies, players } from "../components";
 import { EnemyPrefab, PlayerPrefab } from "../prefabs";
 export type DemoWorldEntityKind = "player" | "enemy";
@@ -14,12 +14,19 @@ export type DemoWorldEntity = WorldEntityBase & {
 
 export type DemoWorldData = WorldData<DemoWorldEntity>;
 
+export type DemoContentNode = {
+  name: string;
+  path: string;
+  kind: "folder" | "world" | "file";
+  children?: DemoContentNode[];
+};
+
 export async function loadWorldDefinition(name: string): Promise<DemoWorldData> {
   const stored = readStoredWorld(name);
   if (stored) return stored;
 
   try {
-    const res = await fetch(`/api/world/${name}`);
+    const res = await fetch(`/api/world?path=${encodeURIComponent(name)}`);
     if (res.ok) {
       const fromFile = parseDemoWorldData(await res.json());
       if (fromFile) return fromFile;
@@ -34,12 +41,20 @@ export async function saveWorldDefinition(name: string, world: DemoWorldData): P
   const json = JSON.stringify(world, null, 2);
   window.localStorage.setItem(storageKey(name), json);
   try {
-    await fetch(`/api/world/${name}`, {
+    await fetch(`/api/world?path=${encodeURIComponent(name)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: json,
     });
   } catch {}
+}
+
+export async function fetchContentTree(): Promise<DemoContentNode[]> {
+  try {
+    const res = await fetch("/api/content/tree");
+    if (res.ok) return await res.json() as DemoContentNode[];
+  } catch {}
+  return [];
 }
 
 export async function materializeWorld(world: GameWorld, data: DemoWorldData) {
@@ -55,7 +70,7 @@ export async function materializeWorld(world: GameWorld, data: DemoWorldData) {
 export function serializeWorld(world: GameWorld): DemoWorldData {
   const entities: DemoWorldEntity[] = [];
 
-  for (const entity of Array.from(world.entities).sort((left, right) => left - right)) {
+  for (const entity of Array.from(world.entities as Iterable<number>).sort((left, right) => left - right)) {
     const transform = transforms.get(entity);
     if (!transform) continue;
 

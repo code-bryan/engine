@@ -70,7 +70,7 @@ export function ensureDebuggerStyles() {
       z-index: 10;
       display: grid;
       grid-template-columns: 270px 1fr 290px;
-      grid-template-rows: 56px 1fr 150px;
+      grid-template-rows: 56px minmax(0, 1fr) minmax(300px, 38vh);
       grid-template-areas:
         "top top top"
         "left . right"
@@ -206,8 +206,14 @@ export function ensureDebuggerStyles() {
     }
     .debugger-panel--bottom {
       grid-area: bottom;
-      grid-template-rows: minmax(0, 1fr);
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      align-items: stretch;
       min-height: 0;
+    }
+    .debugger-panel--bottom--content-open {
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+      gap: 10px;
     }
     .debugger-title {
       font-size: 13px;
@@ -357,6 +363,12 @@ export function ensureDebuggerStyles() {
       flex: 1;
       min-height: 0;
     }
+    .debugger-section--content {
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr);
+      gap: 10px;
+      min-height: 0;
+    }
     .debugger-section--entities {
       display: grid;
       grid-template-rows: auto auto minmax(0, 1fr);
@@ -404,6 +416,233 @@ export function ensureDebuggerStyles() {
       gap: 6px;
       min-height: 0;
       overflow: auto;
+    }
+    .debugger-content-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .debugger-content-breadcrumbs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .debugger-content-breadcrumb {
+      height: 20px;
+      padding: 0 6px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.03);
+      color: #a1a1aa;
+      cursor: pointer;
+      font: 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .debugger-content-breadcrumb.is-active {
+      background: rgba(37, 99, 235, 0.16);
+      color: #bfdbfe;
+    }
+    .debugger-content-actions {
+      display: flex;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .debugger-content-action {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      background: #18181b;
+      color: #a1a1aa;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+    }
+    .debugger-content-action:hover {
+      background: #27272a;
+      color: #e4e4e7;
+    }
+    .debugger-content-search {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 8px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      background: #09090b;
+    }
+    .debugger-content-search svg {
+      flex-shrink: 0;
+      color: #52525b;
+    }
+    .debugger-content-search__input {
+      margin-bottom: 0;
+      padding-left: 0;
+      border: none;
+      background: transparent;
+      outline: none;
+    }
+    .debugger-content-create {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 6px;
+      align-items: center;
+    }
+    .debugger-content-create__input {
+      margin-bottom: 0;
+    }
+    .debugger-content-create__actions {
+      display: flex;
+      gap: 4px;
+    }
+    .debugger-content-create__btn {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      background: #18181b;
+      color: #a1a1aa;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+    }
+    .debugger-content-create__btn:hover {
+      background: #27272a;
+      color: #e4e4e7;
+    }
+    .debugger-content-create__btn--confirm:not(:disabled) {
+      border-color: rgba(74, 222, 128, 0.3);
+      color: #4ade80;
+    }
+    .debugger-content-create__btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+    .debugger-content-create__error {
+      color: #f87171;
+      font-size: 10px;
+    }
+    .debugger-content-body {
+      display: grid;
+      grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+      gap: 10px;
+      min-height: 0;
+    }
+    .debugger-content-tree,
+    .debugger-content-browser {
+      min-height: 0;
+      overflow: auto;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      background: rgba(24, 24, 27, 0.65);
+    }
+    .debugger-content-tree {
+      padding: 6px;
+    }
+    .debugger-content-browser {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      padding: 8px;
+      gap: 8px;
+    }
+    .debugger-content-browser__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .debugger-content-browser__hint {
+      color: #71717a;
+      font-size: 10px;
+    }
+    .debugger-content-list {
+      display: grid;
+      gap: 6px;
+      align-content: start;
+      min-height: 0;
+      overflow: auto;
+    }
+    .debugger-content-item {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      padding: 8px;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      background: #09090b;
+      color: #d4d4d8;
+      cursor: pointer;
+      text-align: left;
+    }
+    .debugger-content-item:hover {
+      background: #18181b;
+    }
+    .debugger-content-item.is-active {
+      border-color: rgba(96, 165, 250, 0.4);
+      background: rgba(37, 99, 235, 0.18);
+      color: #bfdbfe;
+    }
+    .debugger-content-item__icon {
+      color: #93c5fd;
+    }
+    .debugger-content-item__name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .debugger-content-item__path {
+      color: #71717a;
+      font-size: 10px;
+      white-space: nowrap;
+    }
+    .debugger-content-tree__node {
+      display: grid;
+    }
+    .debugger-content-tree__row {
+      display: grid;
+      grid-template-columns: auto auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+      color: #a1a1aa;
+      cursor: pointer;
+      text-align: left;
+      font: inherit;
+    }
+    .debugger-content-tree__row:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: #e4e4e7;
+    }
+    .debugger-content-tree__row.is-selected {
+      border-color: rgba(96, 165, 250, 0.3);
+      background: rgba(37, 99, 235, 0.16);
+      color: #bfdbfe;
+    }
+    .debugger-content-tree__toggle {
+      width: 12px;
+      height: 12px;
+      display: grid;
+      place-items: center;
+      color: #71717a;
+    }
+    .debugger-content-tree__spacer {
+      width: 12px;
+      height: 12px;
+    }
+    .debugger-content-tree__icon {
+      color: #93c5fd;
+    }
+    .debugger-content-tree__name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .debugger-sidepanels {
       display: grid;
@@ -702,7 +941,7 @@ export function ensureDebuggerStyles() {
       flex-shrink: 0;
     }
     .debugger-section--worlds {
-      flex-shrink: 0;
+      min-height: 0;
       display: flex;
       flex-direction: column;
       gap: 6px;

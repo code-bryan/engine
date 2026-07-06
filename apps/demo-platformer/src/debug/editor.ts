@@ -1,7 +1,7 @@
-import { attachRuntimeDebugger, createStoreInspector, type DebugEditorField, type DebuggerWorld } from "@engine/debugger";
+import { attachRuntimeDebugger, createStoreInspector, type ContentTreeNode, type DebugEditorField, type DebuggerWorld } from "@engine/debugger";
 import { keyboard, pointer } from "@engine/input";
 import type { EngineApplication } from "@engine/renderer";
-import { actorStates, enemies, facings, players, velocities } from "../components";
+import { actorStates, enemies, facings, players, velocities } from "../content/components";
 import type { GameWorld } from "../app";
 
 export type DebugEditorPlayback = {
@@ -13,14 +13,15 @@ export type DebugEditorPlayback = {
   onWorldEdited?: (world: GameWorld) => void;
   onOpenLevel?: (data: unknown) => void;
   onLoadWorld?: (name: string) => void;
+  onCreateWorld?: (name: string) => void;
+  onCreateFolder?: (path: string) => void;
 };
 
 export type DebugEditorOptions = DebugEditorPlayback & {
-  worlds?: { name: string }[];
+  contentTree?: ContentTreeNode[];
   activeWorld?: string;
-  onCreateWorld?: (name: string) => void;
-  initialWorldsOpen?: boolean;
-  onWorldsToggled?: (open: boolean) => void;
+  initialContentDrawerOpen?: boolean;
+  onContentDrawerToggled?: (open: boolean) => void;
 };
 
 export function attachDebugEditor(world: GameWorld, engine: EngineApplication, options: DebugEditorOptions) {
@@ -29,11 +30,12 @@ export function attachDebugEditor(world: GameWorld, engine: EngineApplication, o
     playback,
     onWorldEdited: playback.onWorldEdited,
     onLoadWorld: playback.onLoadWorld,
-    worlds: options.worlds,
+    onCreateWorld: playback.onCreateWorld,
+    onCreateFolder: playback.onCreateFolder,
+    contentTree: options.contentTree,
     activeWorld: options.activeWorld,
-    onCreateWorld: options.onCreateWorld,
-    initialWorldsOpen: options.initialWorldsOpen,
-    onWorldsToggled: options.onWorldsToggled,
+    initialContentDrawerOpen: options.initialContentDrawerOpen,
+    onContentDrawerToggled: options.onContentDrawerToggled,
     onOpenLevel: playback.onOpenLevel ? () => {
       const input = document.createElement("input");
       input.type = "file";

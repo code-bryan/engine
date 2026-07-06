@@ -2,9 +2,13 @@ import {
   Camera,
   Check,
   Crosshair,
+  ChevronDown,
+  ChevronRight,
   Expand,
+  FileJson,
+  FilePlus2,
   FolderOpen,
-  Layers,
+  FolderPlus,
   LocateFixed,
   MousePointer2,
   Minus,
@@ -15,10 +19,12 @@ import {
   RotateCw,
   ScanSearch,
   StepForward,
+  RefreshCw,
+  Search,
   X,
 } from "lucide-react";
-import { useEffect, useRef } from "react";
-import type { EditorToolMode } from "../shared/types";
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import type { ContentTreeNode, EditorToolMode } from "../shared/types";
 
 export type DebuggerStatusCardView = {
   title: string;
@@ -112,16 +118,13 @@ export type DebuggerUiProps = {
   onToggleLogFilter: (cat: string) => void;
   onToggleLogPause: () => void;
   onOpenLevel?: () => void;
-  worldsOpen: boolean;
-  worlds: { name: string }[];
+  contentDrawerOpen: boolean;
+  contentTree: ContentTreeNode[];
   activeWorld?: string;
-  onToggleWorlds: () => void;
   onLoadWorld: (name: string) => void;
-  newWorldName: string | undefined;
-  onStartCreatingWorld: () => void;
-  onCancelCreatingWorld: () => void;
-  onSetNewWorldName: (value: string) => void;
-  onConfirmCreateWorld: () => void;
+  onCreateFolder?: (path: string) => void;
+  onCreateWorld: (path: string) => void;
+  onToggleContentDrawer: () => void;
 };
 
 export function DebuggerUi(props: DebuggerUiProps) {
@@ -166,8 +169,8 @@ export function DebuggerUi(props: DebuggerUiProps) {
               </div>
             </div>
             <div className="debugger-tool-group">
-              <button className={props.worldsOpen ? "is-active" : ""} onClick={props.onToggleWorlds} title="Worlds" aria-label="Worlds">
-                <Layers size={14} strokeWidth={2} />
+              <button className={props.contentDrawerOpen ? "is-active" : ""} onClick={props.onToggleContentDrawer} title="Content" aria-label="Content Drawer">
+                <FolderOpen size={14} strokeWidth={2} />
               </button>
             </div>
             <div className="debugger-tool-group" aria-label="Editor tools">
@@ -209,65 +212,6 @@ export function DebuggerUi(props: DebuggerUiProps) {
           </div>
         </header>
         <aside className="debugger-panel debugger-panel--left">
-          {props.worldsOpen && (
-            <section className="debugger-section debugger-section--worlds">
-              <div className="debugger-worlds-header">
-                <div className="debugger-section__title" style={{ marginBottom: 0 }}>Worlds</div>
-                {props.newWorldName === undefined && (
-                  <button className="debugger-worlds-new" onClick={props.onStartCreatingWorld} title="New World">+</button>
-                )}
-              </div>
-              <div className="debugger-worlds-list">
-                {props.worlds.map((w) => (
-                  <button
-                    key={w.name}
-                    className={`debugger-world-item${w.name === props.activeWorld ? " is-active" : ""}`}
-                    onClick={() => props.onLoadWorld(w.name)}
-                  >
-                    {w.name}
-                  </button>
-                ))}
-              </div>
-              {props.newWorldName !== undefined && (
-                <div className="debugger-worlds-create">
-                  <input
-                    className="debugger-input debugger-worlds-create__input"
-                    placeholder="world name…"
-                    value={props.newWorldName}
-                    autoFocus
-                    onChange={(e) => props.onSetNewWorldName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") props.onConfirmCreateWorld();
-                      if (e.key === "Escape") props.onCancelCreatingWorld();
-                    }}
-                  />
-                  <div className="debugger-worlds-create__actions">
-                    <button
-                      className="debugger-worlds-create__btn debugger-worlds-create__btn--confirm"
-                      onClick={props.onConfirmCreateWorld}
-                      title="Create"
-                      disabled={
-                        !props.newWorldName?.trim() ||
-                        props.worlds.some((w) => w.name === props.newWorldName?.trim())
-                      }
-                    >
-                      <Check size={12} strokeWidth={2.5} />
-                    </button>
-                    <button
-                      className="debugger-worlds-create__btn debugger-worlds-create__btn--cancel"
-                      onClick={props.onCancelCreatingWorld}
-                      title="Cancel"
-                    >
-                      <X size={12} strokeWidth={2.5} />
-                    </button>
-                  </div>
-                  {props.worlds.some((w) => w.name === props.newWorldName?.trim()) && props.newWorldName?.trim() && (
-                    <span className="debugger-worlds-create__error">already exists</span>
-                  )}
-                </div>
-              )}
-            </section>
-          )}
           <div className="debugger-sidepanels">
             {props.statusCards.map((card) => <RuntimeCard key={card.title} title={card.title} fields={card.fields} />)}
           </div>
@@ -358,8 +302,17 @@ export function DebuggerUi(props: DebuggerUiProps) {
             </div>
           </section>
         </aside>
-        <section className="debugger-panel debugger-panel--bottom">
-          <section className="debugger-section debugger-section--grow">
+        <section className={`debugger-panel debugger-panel--bottom${props.contentDrawerOpen ? " debugger-panel--bottom--content-open" : ""}`}>
+          {props.contentDrawerOpen && (
+            <ContentBrowser
+              tree={props.contentTree}
+              activeWorld={props.activeWorld}
+              onLoadWorld={props.onLoadWorld}
+              onCreateFolder={props.onCreateFolder}
+              onCreateWorld={props.onCreateWorld}
+            />
+          )}
+          <section className="debugger-section debugger-section--grow debugger-section--log">
             <div className="debugger-log-header">
               <div className="debugger-section__title">Event Log</div>
               <div className="debugger-log-controls">
@@ -391,6 +344,182 @@ export function DebuggerUi(props: DebuggerUiProps) {
         </section>
       </div>
     </>
+  );
+}
+
+function ContentBrowser(props: {
+  tree: ContentTreeNode[];
+  activeWorld?: string;
+  onLoadWorld: (name: string) => void;
+  onCreateFolder?: (path: string) => void;
+  onCreateWorld: (path: string) => void;
+}) {
+  const [selectedFolderPath, setSelectedFolderPath] = useState("");
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set([""]));
+  const [search, setSearch] = useState("");
+  const [createKind, setCreateKind] = useState<"folder" | "world" | undefined>();
+  const [createName, setCreateName] = useState("");
+
+  useEffect(() => {
+    const nextFolder = parentContentPath(props.activeWorld);
+    setSelectedFolderPath(nextFolder);
+    setExpandedFolders((prev) => {
+      const next = new Set(prev);
+      for (const crumb of breadcrumbPaths(nextFolder)) next.add(crumb.path);
+      return next;
+    });
+  }, [props.activeWorld]);
+
+  useEffect(() => {
+    setExpandedFolders((prev) => {
+      const next = new Set(prev);
+      for (const crumb of breadcrumbPaths(selectedFolderPath)) next.add(crumb.path);
+      return next;
+    });
+  }, [selectedFolderPath]);
+
+  const currentFolder = findContentFolder(props.tree, selectedFolderPath);
+  const currentChildren = currentFolder?.children ?? props.tree;
+  const filteredChildren = search.trim()
+    ? currentChildren.filter((node) => `${node.name} ${node.path}`.toLowerCase().includes(search.trim().toLowerCase()))
+    : currentChildren;
+  const currentBreadcrumbs = breadcrumbPaths(selectedFolderPath);
+
+  const startCreate = (kind: "folder" | "world") => {
+    setCreateKind(kind);
+    setCreateName("");
+  };
+
+  const confirmCreate = () => {
+    const name = createName.trim();
+    if (!name) return;
+    if (currentChildren.some((node) => node.name === name)) return;
+
+    const nextPath = joinContentPath(selectedFolderPath, name);
+    if (createKind === "folder") {
+      props.onCreateFolder?.(nextPath);
+    } else {
+      props.onCreateWorld(nextPath);
+    }
+    setCreateKind(undefined);
+    setCreateName("");
+  };
+
+  return (
+    <section className="debugger-section debugger-section--content">
+      <div className="debugger-content-header">
+        <div>
+          <div className="debugger-section__title" style={{ marginBottom: 4 }}>Content</div>
+          <div className="debugger-content-breadcrumbs">
+            {currentBreadcrumbs.map((crumb, index) => (
+              <button
+                key={crumb.path || "root"}
+                className={`debugger-content-breadcrumb${index === currentBreadcrumbs.length - 1 ? " is-active" : ""}`}
+                onClick={() => setSelectedFolderPath(crumb.path)}
+              >
+                {crumb.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="debugger-content-actions">
+          {props.onCreateFolder && (
+            <button className="debugger-content-action" onClick={() => startCreate("folder")} title="New Folder" aria-label="New Folder">
+              <FolderPlus size={13} strokeWidth={2} />
+            </button>
+          )}
+          <button className="debugger-content-action" onClick={() => startCreate("world")} title="New World" aria-label="New World">
+            <FilePlus2 size={13} strokeWidth={2} />
+          </button>
+          <button className="debugger-content-action" onClick={() => setSearch("")} title="Clear search" aria-label="Clear search">
+            <RefreshCw size={13} strokeWidth={2} />
+          </button>
+        </div>
+      </div>
+      <div className="debugger-content-search">
+        <Search size={13} strokeWidth={2} />
+        <input
+          className="debugger-input debugger-content-search__input"
+          placeholder="search content"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+        />
+      </div>
+      {createKind && (
+        <div className="debugger-content-create">
+          <input
+            className="debugger-input debugger-content-create__input"
+            autoFocus
+            placeholder={createKind === "folder" ? "folder name…" : "world name…"}
+            value={createName}
+            onChange={(event) => setCreateName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") confirmCreate();
+              if (event.key === "Escape") {
+                setCreateKind(undefined);
+                setCreateName("");
+              }
+            }}
+          />
+          <div className="debugger-content-create__actions">
+            <button className="debugger-content-create__btn debugger-content-create__btn--confirm" onClick={confirmCreate} disabled={!createName.trim() || currentChildren.some((node) => node.name === createName.trim())}>
+              <Check size={12} strokeWidth={2.5} />
+            </button>
+            <button
+              className="debugger-content-create__btn debugger-content-create__btn--cancel"
+              onClick={() => {
+                setCreateKind(undefined);
+                setCreateName("");
+              }}
+            >
+              <X size={12} strokeWidth={2.5} />
+            </button>
+          </div>
+          {currentChildren.some((node) => node.name === createName.trim()) && createName.trim() && (
+            <span className="debugger-content-create__error">already exists</span>
+          )}
+        </div>
+      )}
+      <div className="debugger-content-body">
+        <aside className="debugger-content-tree">
+          {props.tree.length === 0 ? (
+            <div className="debugger-content-empty">no content</div>
+          ) : (
+            props.tree.map((node) => renderContentTreeNode(node, 0, selectedFolderPath, expandedFolders, setExpandedFolders, setSelectedFolderPath, props.onLoadWorld))
+          )}
+        </aside>
+        <section className="debugger-content-browser">
+          <div className="debugger-content-browser__header">
+            <span className="debugger-section__title" style={{ marginBottom: 0 }}>Assets</span>
+            <span className="debugger-content-browser__hint">{search.trim() ? "filtered" : `${currentChildren.length} item${currentChildren.length === 1 ? "" : "s"}`}</span>
+          </div>
+          <div className="debugger-content-list">
+            {filteredChildren.length === 0 ? (
+              <div className="debugger-content-empty">{search.trim() ? "no matches" : "empty folder"}</div>
+            ) : filteredChildren.map((node) => (
+              <button
+                key={node.path}
+                className={`debugger-content-item${node.kind === "world" && node.path === props.activeWorld ? " is-active" : ""}`}
+                onClick={() => {
+                  if (node.kind === "folder") {
+                    setSelectedFolderPath(node.path);
+                    setExpandedFolders((prev) => new Set(prev).add(node.path));
+                    return;
+                  }
+                  if (node.kind === "world") props.onLoadWorld(node.path);
+                }}
+              >
+                <span className="debugger-content-item__icon">
+                  {node.kind === "folder" ? <FolderOpen size={13} strokeWidth={2} /> : <FileJson size={13} strokeWidth={2} />}
+                </span>
+                <span className="debugger-content-item__name">{node.name}</span>
+                <span className="debugger-content-item__path">{node.path || "root"}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      </div>
+    </section>
   );
 }
 
@@ -460,4 +589,87 @@ function InspectorField(
       <strong>{field.value}</strong>
     </div>
   );
+}
+
+function renderContentTreeNode(
+  node: ContentTreeNode,
+  depth: number,
+  selectedFolderPath: string,
+  expandedFolders: Set<string>,
+  setExpandedFolders: Dispatch<SetStateAction<Set<string>>>,
+  setSelectedFolderPath: (path: string) => void,
+  onLoadWorld: (path: string) => void,
+) {
+  const isFolder = node.kind === "folder";
+  const isExpanded = expandedFolders.has(node.path);
+  const isSelected = isFolder && node.path === selectedFolderPath;
+  const hasChildren = isFolder && (node.children?.length ?? 0) > 0;
+
+  return (
+    <div key={node.path} className="debugger-content-tree__node">
+      <button
+        className={`debugger-content-tree__row${isSelected ? " is-selected" : ""}`}
+        style={{ paddingLeft: `${depth * 14 + 6}px` }}
+        onClick={() => {
+          if (isFolder) {
+            setSelectedFolderPath(node.path);
+            const next = new Set(expandedFolders);
+            if (next.has(node.path)) next.delete(node.path);
+            else next.add(node.path);
+            setExpandedFolders(next);
+            return;
+          }
+          if (node.kind === "world") onLoadWorld(node.path);
+        }}
+      >
+        <span className="debugger-content-tree__toggle">
+          {isFolder ? (hasChildren ? (isExpanded ? <ChevronDown size={12} strokeWidth={2.2} /> : <ChevronRight size={12} strokeWidth={2.2} />) : <span className="debugger-content-tree__spacer" />) : <span className="debugger-content-tree__spacer" />}
+        </span>
+        <span className="debugger-content-tree__icon">
+          {isFolder ? <FolderOpen size={12} strokeWidth={2} /> : <FileJson size={12} strokeWidth={2} />}
+        </span>
+        <span className="debugger-content-tree__name">{node.name}</span>
+        {node.kind === "world" && <span className="debugger-pill">world</span>}
+      </button>
+      {isFolder && isExpanded && node.children?.length
+        ? node.children.map((child) => renderContentTreeNode(child, depth + 1, selectedFolderPath, expandedFolders, setExpandedFolders, setSelectedFolderPath, onLoadWorld))
+        : null}
+    </div>
+  );
+}
+
+function joinContentPath(parent: string, child: string) {
+  const cleanChild = child.trim().replace(/^\/+|\/+$/g, "");
+  if (!cleanChild) return parent;
+  if (!parent) return cleanChild;
+  return `${parent}/${cleanChild}`;
+}
+
+function parentContentPath(path?: string) {
+  if (!path) return "";
+  const parts = path.split("/").filter(Boolean);
+  parts.pop();
+  return parts.join("/");
+}
+
+function breadcrumbPaths(path: string) {
+  const parts = path.split("/").filter(Boolean);
+  const crumbs = [{ label: "Content", path: "" }];
+  let current = "";
+  for (const part of parts) {
+    current = current ? `${current}/${part}` : part;
+    crumbs.push({ label: part, path: current });
+  }
+  return crumbs;
+}
+
+function findContentFolder(nodes: ContentTreeNode[], targetPath: string): ContentTreeNode | undefined {
+  if (!targetPath) return { name: "Content", path: "", kind: "folder", children: nodes };
+  for (const node of nodes) {
+    if (node.kind !== "folder") continue;
+    if (node.path === targetPath) return node;
+    const found = findContentFolder(node.children ?? [], targetPath);
+    if (found) return found;
+  }
+  return undefined;
 }

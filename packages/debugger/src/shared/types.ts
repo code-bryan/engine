@@ -61,6 +61,13 @@ export type DebugGridOptions = {
   maxMinorScreenPx?: number;
 };
 
+export type ContentTreeNode = {
+  name: string;
+  path: string;
+  kind: "folder" | "world" | "file";
+  children?: ContentTreeNode[];
+};
+
 export type RuntimeDebuggerOptions<TWorld extends DebuggerWorld = DebuggerWorld> = {
   getEntityTitle?: (world: TWorld, entity: Entity) => string;
   sections?: DebugEditorSection<TWorld>[];
@@ -72,12 +79,13 @@ export type RuntimeDebuggerOptions<TWorld extends DebuggerWorld = DebuggerWorld>
   grid?: DebugGridOptions;
   onWorldEdited?: (world: TWorld) => void;
   onOpenLevel?: () => void;
-  worlds?: { name: string }[];
+  contentTree?: ContentTreeNode[];
   activeWorld?: string;
   onLoadWorld?: (name: string) => void;
   onCreateWorld?: (name: string) => void;
-  initialWorldsOpen?: boolean;
-  onWorldsToggled?: (open: boolean) => void;
+  onCreateFolder?: (path: string) => void;
+  initialContentDrawerOpen?: boolean;
+  onContentDrawerToggled?: (open: boolean) => void;
 };
 
 export type DebugEditor<TWorld extends DebuggerWorld = DebuggerWorld> = {
@@ -137,6 +145,5 @@ export type DebugState = {
   entityQuery: string;
   inspectorQuery: string;
   openDropdown: string | undefined;
-  worldsOpen: boolean;
-  newWorldName: string | undefined;
+  contentDrawerOpen: boolean;
 };

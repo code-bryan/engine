@@ -25,6 +25,7 @@ import { ALL_LOG_CATEGORIES } from "./shared/types";
 import { renderDebuggerUi, type DebuggerUiActions } from "./ui/view-models";
 
 export type {
+  ContentTreeNode,
   DebugEditorField,
   DebugEditorSection,
   DebugInspectorComponent,
@@ -78,8 +79,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     entityQuery: "",
     inspectorQuery: "",
     openDropdown: undefined,
-    worldsOpen: options.initialWorldsOpen ?? false,
-    newWorldName: undefined,
+    contentDrawerOpen: options.initialContentDrawerOpen ?? false,
   };
 
   const registry = getComponentRegistry();
@@ -266,34 +266,13 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
         openLevel() {
           options.onOpenLevel?.();
         },
-        toggleWorlds() {
-          state.worldsOpen = !state.worldsOpen;
-          options.onWorldsToggled?.(state.worldsOpen);
+        toggleContentDrawer() {
+          state.contentDrawerOpen = !state.contentDrawerOpen;
+          options.onContentDrawerToggled?.(state.contentDrawerOpen);
           refresh();
         },
         loadWorld(name) {
           options.onLoadWorld?.(name);
-        },
-        startCreatingWorld() {
-          state.newWorldName = "";
-          refresh();
-        },
-        cancelCreatingWorld() {
-          state.newWorldName = undefined;
-          refresh();
-        },
-        setNewWorldName(name) {
-          state.newWorldName = name;
-          refresh();
-        },
-        confirmCreateWorld() {
-          const name = state.newWorldName?.trim();
-          if (!name) return;
-          const exists = (options.worlds ?? []).some((w) => w.name === name);
-          if (exists) return;
-          state.newWorldName = undefined;
-          options.onCreateWorld?.(name);
-          refresh();
         },
         saveSnapshot() {
           state.snapshots.unshift(captureRegistrySnapshot(world, registry));

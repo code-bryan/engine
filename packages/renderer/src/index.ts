@@ -49,6 +49,7 @@ export const createSprite = (texture: Texture = Texture.WHITE) => new Sprite(tex
 
 export async function loadSpriteSheet(props: SpriteSheetProps) {
   const sheet = await Assets.load<Texture>(props.src);
+  sheet.source.scaleMode = "nearest";
 
   return Array.from({ length: props.frames }, (_, index) => new Texture({
     source: sheet.source,

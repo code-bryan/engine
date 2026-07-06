@@ -4,14 +4,15 @@ import { createEngineApplication } from "@engine/renderer";
 import { GameWorld } from "./app";
 import { attachDebugEditor } from "./debug/editor";
 import {
+  fetchContentTree,
   loadWorldDefinition,
   materializeWorld,
   parseDemoWorldData,
   saveWorldDefinition,
   serializeWorld,
   type DemoWorldData,
-} from "./worlds";
-import { bootstrapDemoSystems } from "./systems";
+} from "./content/worlds";
+import { bootstrapDemoSystems } from "./content/systems";
 
 const shell = document.createElement("main");
 shell.className = "app-shell";
@@ -24,25 +25,17 @@ shell.appendChild(viewport);
 let engine: Awaited<ReturnType<typeof createEngineApplication>> | undefined;
 let debuggerEditor: ReturnType<typeof attachDebugEditor> | undefined;
 let playbackState: "playing" | "paused" | "stopped" = "playing";
-let worldsDrawerOpen = false;
+let contentDrawerOpen = false;
 
-async function fetchWorldsList(): Promise<{ name: string }[]> {
-  try {
-    const res = await fetch("/api/worlds");
-    if (res.ok) return await res.json() as { name: string }[];
-  } catch {}
-  return [{ name: "world-01" }];
-}
-
-async function mountGame(startPlaying: boolean, worldName = "world-01", worldOverride?: DemoWorldData) {
+async function mountGame(startPlaying: boolean, worldName = "worlds/world-01", worldOverride?: DemoWorldData) {
   debuggerEditor?.destroy();
   engine?.destroy();
   viewport.replaceChildren();
 
   const gameWorld = new GameWorld(createPhysics({ gravity: { x: 0, y: 0 } }));
-  const [worldData, worlds] = await Promise.all([
+  const [worldData, contentTree] = await Promise.all([
     worldOverride ?? loadWorldDefinition(worldName),
-    fetchWorldsList(),
+    fetchContentTree(),
   ]);
   if (worldOverride) saveWorldDefinition(worldName, worldOverride);
   await materializeWorld(gameWorld, worldData);
@@ -52,7 +45,7 @@ async function mountGame(startPlaying: boolean, worldName = "world-01", worldOve
   engine = await createEngineApplication({
     world: gameWorld,
     mount: viewport,
-    pixi: { width: 320, height: 180, background: 0x2c2c38 },
+    pixi: { width: 320, height: 180, background: 0x2c2c38, roundPixels: true },
   });
 
   debuggerEditor = attachDebugEditor(gameWorld, engine, {
@@ -95,15 +88,19 @@ async function mountGame(startPlaying: boolean, worldName = "world-01", worldOve
       if (name === worldName) return;
       mountGame(false, name);
     },
-    onCreateWorld(name) {
-      saveWorldDefinition(name, { version: 1, entities: [] }).catch(() => {});
-      mountGame(false, name);
+    async onCreateWorld(name) {
+      await saveWorldDefinition(name, { version: 1, entities: [] });
+      await mountGame(false, name);
     },
-    initialWorldsOpen: worldsDrawerOpen,
-    onWorldsToggled(open) {
-      worldsDrawerOpen = open;
+    async onCreateFolder(path) {
+      await fetch(`/api/content/folder?path=${encodeURIComponent(path)}`, { method: "POST" });
+      await mountGame(false, worldName);
     },
-    worlds,
+    initialContentDrawerOpen: contentDrawerOpen,
+    onContentDrawerToggled(open) {
+      contentDrawerOpen = open;
+    },
+    contentTree,
     activeWorld: worldName,
   });
 
