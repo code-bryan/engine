@@ -1,6 +1,6 @@
 import { keyboard } from "@engine/input";
 import type { GameWorld } from "../../app";
-import { getComponentStore } from "../components";
+import { getComponentStore } from "../../runtimes/components";
 
 const players = getComponentStore<{ speed: number; spawnX: number; spawnY: number }>("player");
 const velocities = getComponentStore<{ x: number; y: number }>("velocity");

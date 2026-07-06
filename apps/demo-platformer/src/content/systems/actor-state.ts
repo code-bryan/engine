@@ -1,5 +1,5 @@
 import { sprite } from "@engine/renderer";
-import { getComponentStore } from "../components";
+import { getComponentStore } from "../../runtimes/components";
 
 const actorStates = getComponentStore<"idle" | "walk">("actor-state");
 const players = getComponentStore<{ speed: number; spawnX: number; spawnY: number }>("player");

@@ -1,7 +1,7 @@
 import { attachRuntimeDebugger, createStoreInspector, type ContentTreeNode, type DebugEditorField, type DebuggerWorld } from "@engine/debugger";
 import { keyboard, pointer } from "@engine/input";
 import type { EngineApplication } from "@engine/renderer";
-import { getComponentStore } from "../content/components";
+import { getComponentStore } from "../runtimes/components";
 import type { GameWorld } from "../app";
 
 const facings = getComponentStore<"left" | "right">("facing");

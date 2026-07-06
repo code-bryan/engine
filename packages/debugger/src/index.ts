@@ -4,11 +4,11 @@ import { sprites, transforms, type EngineApplication } from "@engine/renderer";
 import { Container, Graphics, Text, TextureSource, type SCALE_MODE } from "pixi.js";
 import { createRoot } from "react-dom/client";
 import { createBuiltinInspectorComponents, createStoreInspector, applyInspectorEdit } from "./inspectors";
-import { getEntityEditorBounds, hitEditorGizmo, type GizmoHit } from "./runtime/gizmo";
-import { resolveGridOptions } from "./runtime/grid";
-import { renderPhysicsOverlay } from "./runtime/overlay";
-import { captureRegistrySnapshot, captureWorldSnapshot, restoreRegistrySnapshot, restoreWorldSnapshot } from "./runtime/snapshots";
-import { ensureDebuggerStyles } from "./runtime/styles";
+import { getEntityEditorBounds, hitEditorGizmo, type GizmoHit } from "./runtimes/gizmo";
+import { resolveGridOptions } from "./runtimes/grid";
+import { renderPhysicsOverlay } from "./runtimes/overlay";
+import { captureRegistrySnapshot, captureWorldSnapshot, restoreRegistrySnapshot, restoreWorldSnapshot } from "./runtimes/snapshots";
+import { ensureDebuggerStyles } from "./runtimes/styles";
 import type {
   DebugEditor,
   DebugGridOptions,

@@ -1,7 +1,7 @@
 import { getComponentRegistry, type Entity } from "@engine/ecs-core";
 import { transforms, type TransformScale } from "@engine/renderer";
-import type { GameWorld } from "../../app";
-import { instantiatePrefab, type PrefabPlacement } from "../../runtime/prefabs";
+import type { GameWorld } from "../app";
+import { instantiatePrefab, type PrefabPlacement } from "./prefabs";
 
 export type DemoWorldEntity = PrefabPlacement;
 

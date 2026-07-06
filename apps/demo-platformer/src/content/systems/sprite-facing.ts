@@ -1,5 +1,5 @@
 import { transforms, type TransformScale } from "@engine/renderer";
-import { getComponentStore } from "../components";
+import { getComponentStore } from "../../runtimes/components";
 
 const facings = getComponentStore<"left" | "right">("facing");
 const velocities = getComponentStore<{ x: number; y: number }>("velocity");

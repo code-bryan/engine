@@ -7,7 +7,7 @@ export type ComponentDefinition = {
   defaultValue?: unknown;
 };
 
-const componentModules = import.meta.glob("./**/*.json", { eager: true, import: "default" }) as Record<string, unknown>;
+const componentModules = import.meta.glob("../content/components/*.json", { eager: true, import: "default" }) as Record<string, unknown>;
 
 const componentDefinitions = Object.values(componentModules)
   .map(parseComponentDefinition)
