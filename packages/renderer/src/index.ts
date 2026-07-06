@@ -193,8 +193,8 @@ export async function createEngineApplication(options: EngineApplicationOptions)
   await app.init(options.pixi);
   options.mount.appendChild(app.canvas);
 
-  options.world.addSystem(createSpriteAnimationSystem());
-  options.world.addSystem(createRenderSystem(app.stage));
+  options.world.addSystem("sprite-animation", createSpriteAnimationSystem());
+  options.world.addSystem("render", createRenderSystem(app.stage));
 
   let frame = 0;
   let last = performance.now();

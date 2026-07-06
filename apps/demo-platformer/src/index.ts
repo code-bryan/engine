@@ -17,6 +17,14 @@ import { GameWorld } from "./app";
 import { attachDebugEditor } from "./debug/editor";
 import { bootstrapDemoSystems } from "./content/systems";
 
+const defaultWorldSystems = [
+  "player-control",
+  "enemy-follow",
+  "actor-state",
+  "sprite-facing",
+  "restart-on-enemy-touch",
+];
+
 const shell = document.createElement("main");
 shell.className = "app-shell";
 document.body.appendChild(shell);
@@ -41,9 +49,10 @@ async function mountGame(startPlaying: boolean, worldName = "worlds/world-01", w
     fetchContentTree(),
     initializeDemoRuntime(),
   ]);
+  const activeWorldSystems = resolveWorldSystems(worldData.systems);
   if (worldOverride) saveWorldDefinition(worldName, worldOverride);
   await materializeWorld(gameWorld, worldData);
-  await bootstrapDemoSystems(gameWorld);
+  await bootstrapDemoSystems(gameWorld, activeWorldSystems);
   let authoredSnapshot = captureWorldSnapshot(gameWorld);
 
   engine = await createEngineApplication({
@@ -80,7 +89,7 @@ async function mountGame(startPlaying: boolean, worldName = "worlds/world-01", w
       return playbackState;
     },
     onWorldEdited(editedWorld) {
-      saveWorldDefinition(worldName, serializeWorld(editedWorld));
+      saveWorldDefinition(worldName, serializeWorld(editedWorld, activeWorldSystems));
       authoredSnapshot = captureWorldSnapshot(editedWorld);
     },
     onOpenLevel(data) {
@@ -93,7 +102,11 @@ async function mountGame(startPlaying: boolean, worldName = "worlds/world-01", w
       mountGame(false, name);
     },
     async onCreateWorld(name) {
-      await saveWorldDefinition(name, { version: 1, entities: [] });
+      await saveWorldDefinition(name, {
+        version: 1,
+        systems: defaultWorldSystems,
+        entities: [],
+      });
       await mountGame(false, name);
     },
     async onCreateFolder(path) {
@@ -118,6 +131,7 @@ async function mountGame(startPlaying: boolean, worldName = "worlds/world-01", w
     },
     contentTree,
     activeWorld: worldName,
+    activeSystems: activeWorldSystems,
   });
 
   if (startPlaying) {
@@ -146,4 +160,8 @@ function toTitleCase(value: string) {
     .filter(Boolean)
     .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function resolveWorldSystems(systems: string[]) {
+  return systems.length > 0 ? systems : defaultWorldSystems;
 }

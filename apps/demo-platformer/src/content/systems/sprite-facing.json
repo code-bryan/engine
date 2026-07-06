@@ -5,13 +5,15 @@
   "nodes": [
     { "id": "onUpdate", "type": "OnUpdate", "position": { "x": 120, "y": 80 } },
     { "id": "forEachVelocity", "type": "ForEachComponent", "position": { "x": 280, "y": 80 }, "data": { "component": "velocity" } },
-    { "id": "selectFacing", "type": "SelectFacingFromVelocity", "position": { "x": 460, "y": 80 }, "data": { "from": "velocity", "as": "facing", "left": "left", "right": "right" } },
-    { "id": "storeFacing", "type": "SetComponent", "position": { "x": 640, "y": 80 }, "data": { "component": "facing", "from": "facing" } },
-    { "id": "flipScale", "type": "SetTransformScaleFromFacing", "position": { "x": 820, "y": 80 }, "data": { "facingFrom": "facing", "left": "left", "right": "right" } }
+    { "id": "readVelocity", "type": "ReadComponent", "position": { "x": 460, "y": 80 }, "data": { "component": "velocity", "as": "velocity" } },
+    { "id": "selectFacing", "type": "SelectFacingFromVelocity", "position": { "x": 640, "y": 80 }, "data": { "from": "velocity", "as": "facing", "left": "left", "right": "right" } },
+    { "id": "storeFacing", "type": "SetComponent", "position": { "x": 820, "y": 80 }, "data": { "component": "facing", "from": "facing" } },
+    { "id": "flipScale", "type": "SetTransformScaleFromFacing", "position": { "x": 1000, "y": 80 }, "data": { "facingFrom": "facing", "left": "left", "right": "right" } }
   ],
   "edges": [
     { "from": { "node": "onUpdate", "port": "flow" }, "to": { "node": "forEachVelocity", "port": "flow" } },
-    { "from": { "node": "forEachVelocity", "port": "flow" }, "to": { "node": "selectFacing", "port": "flow" } },
+    { "from": { "node": "forEachVelocity", "port": "flow" }, "to": { "node": "readVelocity", "port": "flow" } },
+    { "from": { "node": "readVelocity", "port": "flow" }, "to": { "node": "selectFacing", "port": "flow" } },
     { "from": { "node": "selectFacing", "port": "flow" }, "to": { "node": "storeFacing", "port": "flow" } },
     { "from": { "node": "storeFacing", "port": "flow" }, "to": { "node": "flipScale", "port": "flow" } }
   ],

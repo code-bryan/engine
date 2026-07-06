@@ -122,6 +122,7 @@ export type DebuggerUiProps = {
   contentDrawerOpen: boolean;
   contentTree: ContentTreeNode[];
   activeWorld?: string;
+  activeSystems?: string[];
   onLoadWorld: (name: string) => void;
   onCreateFolder?: (path: string) => void;
   onCreateWorld: (path: string) => void;
@@ -309,6 +310,7 @@ export function DebuggerUi(props: DebuggerUiProps) {
             <ContentBrowser
               tree={props.contentTree}
               activeWorld={props.activeWorld}
+              activeSystems={props.activeSystems}
               onLoadWorld={props.onLoadWorld}
               onCreateFolder={props.onCreateFolder}
               onCreateWorld={props.onCreateWorld}
@@ -352,6 +354,7 @@ export function DebuggerUi(props: DebuggerUiProps) {
 function ContentBrowser(props: {
   tree: ContentTreeNode[];
   activeWorld?: string;
+  activeSystems?: string[];
   onLoadWorld: (name: string) => void;
   onCreateFolder?: (path: string) => void;
   onCreateWorld: (path: string) => void;
@@ -387,6 +390,7 @@ function ContentBrowser(props: {
     ? currentChildren.filter((node) => `${node.name} ${node.path}`.toLowerCase().includes(search.trim().toLowerCase()))
     : currentChildren;
   const currentBreadcrumbs = breadcrumbPaths(selectedFolderPath);
+  const activeSystems = new Set(props.activeSystems ?? []);
 
   const canCreateComponent = Boolean(props.onCreateComponent) && (selectedFolderPath === "components" || selectedFolderPath.startsWith("components/"));
 
@@ -497,13 +501,19 @@ function ContentBrowser(props: {
           {props.tree.length === 0 ? (
             <div className="debugger-content-empty">no content</div>
           ) : (
-            props.tree.map((node) => renderContentTreeNode(node, 0, selectedFolderPath, expandedFolders, setExpandedFolders, setSelectedFolderPath, props.onLoadWorld))
+            props.tree.map((node) => renderContentTreeNode(node, 0, selectedFolderPath, expandedFolders, setExpandedFolders, setSelectedFolderPath, props.onLoadWorld, activeSystems))
           )}
         </aside>
         <section className="debugger-content-browser">
           <div className="debugger-content-browser__header">
             <span className="debugger-section__title" style={{ marginBottom: 0 }}>Assets</span>
-            <span className="debugger-content-browser__hint">{search.trim() ? "filtered" : `${currentChildren.length} item${currentChildren.length === 1 ? "" : "s"}`}</span>
+            <span className="debugger-content-browser__hint">
+              {search.trim()
+                ? "filtered"
+                : selectedFolderPath === "systems"
+                  ? `${[...activeSystems].filter((name) => currentChildren.some((node) => node.kind === "graph" && node.name === name)).length} active / ${currentChildren.length} total`
+                  : `${currentChildren.length} item${currentChildren.length === 1 ? "" : "s"}`}
+            </span>
           </div>
           <div className="debugger-content-list">
             {filteredChildren.length === 0 ? (
@@ -526,7 +536,11 @@ function ContentBrowser(props: {
                 </span>
                 <span className="debugger-content-item__name">{node.name}</span>
                 <span className="debugger-content-item__path">{node.path || "root"}</span>
-                {node.kind !== "folder" && <span className="debugger-pill">{node.kind}</span>}
+                {node.kind === "graph" ? (
+                  <span className={`debugger-pill${activeSystems.has(node.name) ? " is-active" : ""}`}>
+                    {activeSystems.has(node.name) ? "active" : "available"}
+                  </span>
+                ) : node.kind !== "folder" ? <span className="debugger-pill">{node.kind}</span> : null}
               </button>
             ))}
           </div>
@@ -612,6 +626,7 @@ function renderContentTreeNode(
   setExpandedFolders: Dispatch<SetStateAction<Set<string>>>,
   setSelectedFolderPath: (path: string) => void,
   onLoadWorld: (path: string) => void,
+  activeSystems: Set<string>,
 ) {
   const isFolder = node.kind === "folder";
   const isExpanded = expandedFolders.has(node.path);
@@ -642,10 +657,14 @@ function renderContentTreeNode(
           {isFolder ? <FolderOpen size={12} strokeWidth={2} /> : node.kind === "component" || node.kind === "graph" ? <Puzzle size={12} strokeWidth={2} /> : <FileJson size={12} strokeWidth={2} />}
         </span>
         <span className="debugger-content-tree__name">{node.name}</span>
-        {node.kind !== "folder" && <span className="debugger-pill">{node.kind}</span>}
+        {node.kind === "graph" ? (
+          <span className={`debugger-pill${activeSystems.has(node.name) ? " is-active" : ""}`}>
+            {activeSystems.has(node.name) ? "active" : "available"}
+          </span>
+        ) : node.kind !== "folder" ? <span className="debugger-pill">{node.kind}</span> : null}
       </button>
       {isFolder && isExpanded && node.children?.length
-        ? node.children.map((child) => renderContentTreeNode(child, depth + 1, selectedFolderPath, expandedFolders, setExpandedFolders, setSelectedFolderPath, onLoadWorld))
+        ? node.children.map((child) => renderContentTreeNode(child, depth + 1, selectedFolderPath, expandedFolders, setExpandedFolders, setSelectedFolderPath, onLoadWorld, activeSystems))
         : null}
     </div>
   );

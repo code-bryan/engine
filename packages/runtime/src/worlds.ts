@@ -7,6 +7,7 @@ export type DemoWorldEntity = PrefabPlacement;
 
 export type DemoWorldData = {
   version: 1;
+  systems: string[];
   entities: DemoWorldEntity[];
 };
 
@@ -29,7 +30,7 @@ export async function loadWorldDefinition(name: string): Promise<DemoWorldData> 
     }
   } catch {}
 
-  return { version: 1, entities: [] };
+  return { version: 1, systems: [], entities: [] };
 }
 
 export async function saveWorldDefinition(name: string, world: DemoWorldData): Promise<void> {
@@ -59,7 +60,7 @@ export async function materializeWorld(world: DemoGameWorld, data: DemoWorldData
   }
 }
 
-export function serializeWorld(world: DemoGameWorld): DemoWorldData {
+export function serializeWorld(world: DemoGameWorld, systems: string[] = []): DemoWorldData {
   const entities: DemoWorldEntity[] = [];
 
   for (const entity of Array.from(world.entities as Iterable<Entity>).sort((left, right) => left - right)) {
@@ -79,22 +80,23 @@ export function serializeWorld(world: DemoGameWorld): DemoWorldData {
         x: transform.x,
         y: transform.y,
         rotation: transform.rotation ?? 0,
-        scale: normalizeScale(transform.scale).y,
+        scale: normalizeScale(transform.scale),
       },
       components: Object.keys(components).length > 0 ? components : undefined,
     });
   }
 
-  return { version: 1, entities };
+  return { version: 1, systems, entities };
 }
 
 export function parseDemoWorldData(raw: unknown): DemoWorldData | null {
   if (!raw || typeof raw !== "object") return null;
-  const parsed = raw as { version?: unknown; entities?: unknown };
+  const parsed = raw as { version?: unknown; systems?: unknown; entities?: unknown };
   if (parsed.version !== 1 || !Array.isArray(parsed.entities)) return null;
   const entities = parsed.entities.map(normalizeWorldEntity).filter((entity): entity is DemoWorldEntity => entity !== null);
   return {
     version: 1,
+    systems: normalizeStringArray(parsed.systems),
     entities,
   };
 }
@@ -182,13 +184,18 @@ function normalizeTransform(value: unknown): DemoWorldEntity["transform"] {
     x: typeof transform.x === "number" ? transform.x : 0,
     y: typeof transform.y === "number" ? transform.y : 0,
     rotation: typeof transform.rotation === "number" ? transform.rotation : 0,
-    scale: typeof transform.scale === "number" ? transform.scale : 1,
+    scale: normalizeScale(transform.scale),
   };
 }
 
 function normalizeComponents(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object") return {};
   return { ...(value as Record<string, unknown>) };
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is string => typeof entry === "string");
 }
 
 function cloneValue<T>(value: T): T {

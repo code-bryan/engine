@@ -76,7 +76,7 @@ export function renderDebuggerUi<TWorld extends DebuggerWorld>(
     entities: buildEntityItems(world, state, options.getEntityTitle),
     inspectorCards: buildInspectorCards(world, state, components, options),
     snapshots: buildSnapshotViews(state),
-    systems: buildSystemViews(world, state.systemMetrics, state.systemTimingHistory),
+    systems: buildSystemViews(world, state.systemMetrics, state.systemTimingHistory, options.activeSystems ?? []),
     logs: buildLogEntries(state),
     logFilters: logCategories.map((cat) => ({ cat, active: state.logFilter.has(cat) })),
     logPaused: state.logPaused,
@@ -104,6 +104,7 @@ export function renderDebuggerUi<TWorld extends DebuggerWorld>(
     contentDrawerOpen: state.contentDrawerOpen,
     contentTree: options.contentTree ?? [],
     activeWorld: options.activeWorld,
+    activeSystems: options.activeSystems ?? [],
     onLoadWorld: actions.loadWorld,
     onToggleContentDrawer: actions.toggleContentDrawer,
     onCreateFolder: options.onCreateFolder,
@@ -161,11 +162,15 @@ export function buildSystemViews<TWorld extends DebuggerWorld>(
   world: TWorld,
   metrics: FrameMetric[],
   history: Map<string, number[]>,
+  activeSystems: string[] = [],
 ): DebuggerSystemView[] {
   const entries = world.getSystemEntries();
   const metricByLabel = new Map(metrics.map((metric) => [metric.label, metric]));
+  const activeSet = new Set(activeSystems);
+  const visibleEntries = activeSet.size > 0 ? entries.filter((entry) => activeSet.has(entry.label)) : entries;
 
-  return entries.map((entry, index) => {
+  return visibleEntries.map((entry) => {
+    const index = entries.findIndex((candidate) => candidate.label === entry.label && candidate.enabled === entry.enabled);
     const metric = metricByLabel.get(entry.label);
     const hist = history.get(entry.label) ?? [];
     const cur = metric ? metric.durationMs : null;

@@ -21,6 +21,7 @@ export type DebugEditorPlayback = {
 export type DebugEditorOptions = DebugEditorPlayback & {
   contentTree?: ContentTreeNode[];
   activeWorld?: string;
+  activeSystems?: string[];
   initialContentDrawerOpen?: boolean;
   onContentDrawerToggled?: (open: boolean) => void;
 };
@@ -41,6 +42,7 @@ export function attachDebugEditor(world: GameWorld, engine: EngineApplication, o
     onCreateComponent: playback.onCreateComponent,
     contentTree: options.contentTree,
     activeWorld: options.activeWorld,
+    activeSystems: options.activeSystems,
     initialContentDrawerOpen: options.initialContentDrawerOpen,
     onContentDrawerToggled: options.onContentDrawerToggled,
     onOpenLevel: playback.onOpenLevel ? () => {

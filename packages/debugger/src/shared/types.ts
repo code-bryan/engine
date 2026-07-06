@@ -81,6 +81,7 @@ export type RuntimeDebuggerOptions<TWorld extends DebuggerWorld = DebuggerWorld>
   onOpenLevel?: () => void;
   contentTree?: ContentTreeNode[];
   activeWorld?: string;
+  activeSystems?: string[];
   onLoadWorld?: (name: string) => void;
   onCreateWorld?: (name: string) => void;
   onCreateFolder?: (path: string) => void;

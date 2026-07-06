@@ -14,10 +14,12 @@ export type RuntimeGraphSystem = {
   run: SystemFn;
 };
 
-export async function loadGraphSystems(world: DemoGameWorld): Promise<RuntimeGraphSystem[]> {
-  const tree = await fetchContentTree();
-  const graphNames = collectGraphNames(tree);
-  const graphs = await Promise.all(graphNames.map(async (name) => loadGraphDefinition(name)));
+export async function loadGraphSystems(world: DemoGameWorld, graphNames?: string[]): Promise<RuntimeGraphSystem[]> {
+  const names = graphNames ?? collectGraphNames(await fetchContentTree());
+  const requested = names.map((name) => name.trim()).filter(Boolean);
+  const uniqueNames = Array.from(new Set(requested));
+  const graphNamesToLoad = graphNames ? uniqueNames : uniqueNames;
+  const graphs = await Promise.all(graphNamesToLoad.map(async (name) => loadGraphDefinition(name)));
   const systems = graphs
     .filter((graph): graph is NonNullable<typeof graph> => graph !== null)
     .sort((left, right) => (left.metadata?.order ?? Number.POSITIVE_INFINITY) - (right.metadata?.order ?? Number.POSITIVE_INFINITY) || left.name.localeCompare(right.name))
@@ -28,8 +30,8 @@ export async function loadGraphSystems(world: DemoGameWorld): Promise<RuntimeGra
   return Promise.all(systems);
 }
 
-export async function registerGraphSystems(world: DemoGameWorld) {
-  for (const system of await loadGraphSystems(world)) {
+export async function registerGraphSystems(world: DemoGameWorld, graphNames?: string[]) {
+  for (const system of await loadGraphSystems(world, graphNames)) {
     world.addSystem(system.name, system.run);
   }
 }

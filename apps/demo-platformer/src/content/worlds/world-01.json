@@ -1,5 +1,11 @@
 {
   "version": 1,
+  "systems": [
+    "player-control",
+    "enemy-follow",
+    "actor-state",
+    "sprite-facing"
+  ],
   "entities": [
     {
       "prefab": "player",
