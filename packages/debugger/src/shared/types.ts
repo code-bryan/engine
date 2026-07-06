@@ -64,7 +64,7 @@ export type DebugGridOptions = {
 export type ContentTreeNode = {
   name: string;
   path: string;
-  kind: "folder" | "world" | "prefab" | "component" | "file";
+  kind: "folder" | "world" | "prefab" | "component" | "graph";
   children?: ContentTreeNode[];
 };
 

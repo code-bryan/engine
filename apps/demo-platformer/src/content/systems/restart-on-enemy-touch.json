@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "name": "restart-on-enemy-touch",
+  "entrypoint": "onUpdate",
+  "nodes": [
+    { "id": "onUpdate", "type": "OnUpdate", "position": { "x": 120, "y": 80 } },
+    { "id": "forEachPlayer", "type": "ForEachTag", "position": { "x": 280, "y": 80 }, "data": { "tag": "player" } },
+    { "id": "checkCollision", "type": "CollisionWithTag", "position": { "x": 460, "y": 80 }, "data": { "tag": "enemy" } },
+    { "id": "reset", "type": "ResetTaggedEntities", "position": { "x": 640, "y": 80 }, "data": { "tags": ["player", "enemy"] } }
+  ],
+  "edges": [
+    { "from": { "node": "onUpdate", "port": "flow" }, "to": { "node": "forEachPlayer", "port": "flow" } },
+    { "from": { "node": "forEachPlayer", "port": "flow" }, "to": { "node": "checkCollision", "port": "flow" } },
+    { "from": { "node": "checkCollision", "port": "flow" }, "to": { "node": "reset", "port": "flow" } }
+  ],
+  "metadata": {
+    "order": 50,
+    "description": "Reset player and enemies when they touch"
+  }
+}

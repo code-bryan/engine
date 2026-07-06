@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "name": "actor-state",
+  "entrypoint": "onUpdate",
+  "nodes": [
+    { "id": "onUpdate", "type": "OnUpdate", "position": { "x": 120, "y": 80 } },
+    { "id": "forEachPlayer", "type": "ForEachTag", "position": { "x": 280, "y": 80 }, "data": { "tag": "player" } },
+    { "id": "readVelocity", "type": "ReadComponent", "position": { "x": 460, "y": 80 }, "data": { "component": "velocity", "as": "velocity" } },
+    { "id": "selectState", "type": "SelectStateFromVelocity", "position": { "x": 640, "y": 80 }, "data": { "from": "velocity", "as": "state", "idle": "idle", "moving": "walk" } },
+    { "id": "storeState", "type": "SetComponent", "position": { "x": 820, "y": 80 }, "data": { "component": "actor-state", "from": "state" } },
+    { "id": "setAnimation", "type": "SetAnimationState", "position": { "x": 1000, "y": 80 }, "data": { "from": "state" } }
+  ],
+  "edges": [
+    { "from": { "node": "onUpdate", "port": "flow" }, "to": { "node": "forEachPlayer", "port": "flow" } },
+    { "from": { "node": "forEachPlayer", "port": "flow" }, "to": { "node": "readVelocity", "port": "flow" } },
+    { "from": { "node": "readVelocity", "port": "flow" }, "to": { "node": "selectState", "port": "flow" } },
+    { "from": { "node": "selectState", "port": "flow" }, "to": { "node": "storeState", "port": "flow" } },
+    { "from": { "node": "storeState", "port": "flow" }, "to": { "node": "setAnimation", "port": "flow" } }
+  ],
+  "metadata": {
+    "order": 30,
+    "description": "Switch actor animation state based on movement"
+  }
+}

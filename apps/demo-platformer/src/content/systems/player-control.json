@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "name": "player-control",
+  "entrypoint": "onUpdate",
+  "nodes": [
+    { "id": "onUpdate", "type": "OnUpdate", "position": { "x": 120, "y": 80 } },
+    { "id": "forEachPlayer", "type": "ForEachTag", "position": { "x": 280, "y": 80 }, "data": { "tag": "player" } },
+    {
+      "id": "readInput",
+      "type": "ReadInputAxes",
+      "position": { "x": 460, "y": 80 },
+      "data": {
+        "as": "axes",
+        "positiveX": ["ArrowRight", "KeyD"],
+        "negativeX": ["ArrowLeft", "KeyA"],
+        "positiveY": ["ArrowDown", "KeyS"],
+        "negativeY": ["ArrowUp", "KeyW"]
+      }
+    },
+    { "id": "readSpeed", "type": "ReadComponent", "position": { "x": 640, "y": 80 }, "data": { "component": "player", "field": "speed", "as": "speed" } },
+    { "id": "buildVelocity", "type": "BuildVelocity", "position": { "x": 840, "y": 80 }, "data": { "axesFrom": "axes", "speedFrom": "speed", "as": "velocity" } },
+    { "id": "setVelocity", "type": "SetComponent", "position": { "x": 1040, "y": 80 }, "data": { "component": "velocity", "from": "velocity" } },
+    { "id": "syncVelocity", "type": "SetPhysicsVelocity", "position": { "x": 1240, "y": 80 }, "data": { "from": "velocity" } }
+  ],
+  "edges": [
+    { "from": { "node": "onUpdate", "port": "flow" }, "to": { "node": "forEachPlayer", "port": "flow" } },
+    { "from": { "node": "forEachPlayer", "port": "flow" }, "to": { "node": "readInput", "port": "flow" } },
+    { "from": { "node": "readInput", "port": "flow" }, "to": { "node": "readSpeed", "port": "flow" } },
+    { "from": { "node": "readSpeed", "port": "flow" }, "to": { "node": "buildVelocity", "port": "flow" } },
+    { "from": { "node": "buildVelocity", "port": "flow" }, "to": { "node": "setVelocity", "port": "flow" } },
+    { "from": { "node": "setVelocity", "port": "flow" }, "to": { "node": "syncVelocity", "port": "flow" } }
+  ],
+  "metadata": {
+    "order": 10,
+    "description": "Move the player with keyboard input"
+  }
+}

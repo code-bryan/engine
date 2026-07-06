@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "name": "enemy-follow",
+  "entrypoint": "onUpdate",
+  "nodes": [
+    { "id": "onUpdate", "type": "OnUpdate", "position": { "x": 120, "y": 80 } },
+    { "id": "findPlayer", "type": "FindFirstTag", "position": { "x": 280, "y": 80 }, "data": { "tag": "player", "as": "playerEntity" } },
+    { "id": "readPlayerTransform", "type": "ReadTransform", "position": { "x": 460, "y": 80 }, "data": { "entityFrom": "playerEntity", "as": "playerTransform" } },
+    { "id": "forEachEnemy", "type": "ForEachTag", "position": { "x": 640, "y": 80 }, "data": { "tag": "enemy" } },
+    { "id": "readSpeed", "type": "ReadComponent", "position": { "x": 820, "y": 80 }, "data": { "component": "enemy", "field": "speed", "as": "speed" } },
+    { "id": "direction", "type": "BuildDirectionToTarget", "position": { "x": 1000, "y": 80 }, "data": { "targetFrom": "playerTransform", "as": "direction" } },
+    { "id": "velocity", "type": "MultiplyVector", "position": { "x": 1180, "y": 80 }, "data": { "vectorFrom": "direction", "scalarFrom": "speed", "as": "velocity" } },
+    { "id": "storeVelocity", "type": "SetComponent", "position": { "x": 1360, "y": 80 }, "data": { "component": "velocity", "from": "velocity" } },
+    { "id": "applyVelocity", "type": "SetPhysicsVelocity", "position": { "x": 1540, "y": 80 }, "data": { "from": "velocity" } }
+  ],
+  "edges": [
+    { "from": { "node": "onUpdate", "port": "flow" }, "to": { "node": "findPlayer", "port": "flow" } },
+    { "from": { "node": "findPlayer", "port": "flow" }, "to": { "node": "readPlayerTransform", "port": "flow" } },
+    { "from": { "node": "readPlayerTransform", "port": "flow" }, "to": { "node": "forEachEnemy", "port": "flow" } },
+    { "from": { "node": "forEachEnemy", "port": "flow" }, "to": { "node": "readSpeed", "port": "flow" } },
+    { "from": { "node": "readSpeed", "port": "flow" }, "to": { "node": "direction", "port": "flow" } },
+    { "from": { "node": "direction", "port": "flow" }, "to": { "node": "velocity", "port": "flow" } },
+    { "from": { "node": "velocity", "port": "flow" }, "to": { "node": "storeVelocity", "port": "flow" } },
+    { "from": { "node": "storeVelocity", "port": "flow" }, "to": { "node": "applyVelocity", "port": "flow" } }
+  ],
+  "metadata": {
+    "order": 20,
+    "description": "Enemies move toward the player"
+  }
+}

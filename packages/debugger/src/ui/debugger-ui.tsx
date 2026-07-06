@@ -522,7 +522,7 @@ function ContentBrowser(props: {
                 }}
               >
                 <span className="debugger-content-item__icon">
-                  {node.kind === "folder" ? <FolderOpen size={13} strokeWidth={2} /> : node.kind === "component" ? <Puzzle size={13} strokeWidth={2} /> : <FileJson size={13} strokeWidth={2} />}
+                  {node.kind === "folder" ? <FolderOpen size={13} strokeWidth={2} /> : node.kind === "component" || node.kind === "graph" ? <Puzzle size={13} strokeWidth={2} /> : <FileJson size={13} strokeWidth={2} />}
                 </span>
                 <span className="debugger-content-item__name">{node.name}</span>
                 <span className="debugger-content-item__path">{node.path || "root"}</span>
@@ -639,7 +639,7 @@ function renderContentTreeNode(
           {isFolder ? (hasChildren ? (isExpanded ? <ChevronDown size={12} strokeWidth={2.2} /> : <ChevronRight size={12} strokeWidth={2.2} />) : <span className="debugger-content-tree__spacer" />) : <span className="debugger-content-tree__spacer" />}
         </span>
         <span className="debugger-content-tree__icon">
-          {isFolder ? <FolderOpen size={12} strokeWidth={2} /> : node.kind === "component" ? <Puzzle size={12} strokeWidth={2} /> : <FileJson size={12} strokeWidth={2} />}
+          {isFolder ? <FolderOpen size={12} strokeWidth={2} /> : node.kind === "component" || node.kind === "graph" ? <Puzzle size={12} strokeWidth={2} /> : <FileJson size={12} strokeWidth={2} />}
         </span>
         <span className="debugger-content-tree__name">{node.name}</span>
         {node.kind !== "folder" && <span className="debugger-pill">{node.kind}</span>}

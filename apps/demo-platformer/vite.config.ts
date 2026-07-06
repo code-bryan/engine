@@ -6,7 +6,7 @@ import { defineConfig, type Plugin } from "vite";
 type ContentTreeNode = {
   name: string;
   path: string;
-  kind: "folder" | "world" | "prefab" | "component" | "file";
+  kind: "folder" | "world" | "prefab" | "component" | "graph";
   children?: ContentTreeNode[];
 };
 
@@ -107,7 +107,7 @@ async function readContentTree(root: string, base = ""): Promise<ContentTreeNode
     return left.name.localeCompare(right.name);
   });
 
-  const nodes = await Promise.all(sorted.map(async (entry) => {
+  const nodes = await Promise.all(sorted.map(async (entry): Promise<ContentTreeNode | null> => {
     const path = base ? `${base}/${entry.name}` : entry.name;
     const abs = join(root, entry.name);
     if (entry.isDirectory()) {
@@ -119,27 +119,26 @@ async function readContentTree(root: string, base = ""): Promise<ContentTreeNode
       } satisfies ContentTreeNode;
     }
     if (entry.isFile() && entry.name.endsWith(".json")) {
-        const kind: ContentTreeNode["kind"] = path.startsWith("worlds/")
-          ? "world"
-          : path.startsWith("prefabs/")
-            ? "prefab"
-            : path.startsWith("components/")
-              ? "component"
-              : "file";
+      const kind = path.startsWith("worlds/")
+        ? "world"
+        : path.startsWith("prefabs/")
+          ? "prefab"
+          : path.startsWith("components/")
+            ? "component"
+            : path.startsWith("systems/")
+              ? "graph"
+              : null;
+      if (!kind) return null;
       return {
         name: entry.name.replace(/\.json$/, ""),
         path: path.replace(/\.json$/, ""),
         kind,
       } satisfies ContentTreeNode;
     }
-    return {
-      name: entry.name,
-      path,
-      kind: "file",
-    } satisfies ContentTreeNode;
+    return null;
   }));
 
-  return nodes;
+  return nodes.filter((node) => node !== null);
 }
 
 async function createSafePath(root: string, relPath: string) {

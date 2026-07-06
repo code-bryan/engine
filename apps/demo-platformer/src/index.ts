@@ -43,7 +43,7 @@ async function mountGame(startPlaying: boolean, worldName = "worlds/world-01", w
   ]);
   if (worldOverride) saveWorldDefinition(worldName, worldOverride);
   await materializeWorld(gameWorld, worldData);
-  bootstrapDemoSystems(gameWorld);
+  await bootstrapDemoSystems(gameWorld);
   let authoredSnapshot = captureWorldSnapshot(gameWorld);
 
   engine = await createEngineApplication({

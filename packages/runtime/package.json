@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@engine/ecs-core": "workspace:*",
+    "@engine/input": "workspace:*",
     "@engine/physics": "workspace:*",
     "@engine/renderer": "workspace:*"
   }

@@ -13,7 +13,7 @@ export type DemoWorldData = {
 export type DemoContentNode = {
   name: string;
   path: string;
-  kind: "folder" | "world" | "prefab" | "component" | "file";
+  kind: "folder" | "world" | "prefab" | "component" | "graph";
   children?: DemoContentNode[];
 };
 
