@@ -1,8 +1,14 @@
 import { attachRuntimeDebugger, createStoreInspector, type ContentTreeNode, type DebugEditorField, type DebuggerWorld } from "@engine/debugger";
 import { keyboard, pointer } from "@engine/input";
 import type { EngineApplication } from "@engine/renderer";
-import { actorStates, enemies, facings, players, velocities } from "../content/components";
+import { getComponentStore } from "../content/components";
 import type { GameWorld } from "../app";
+
+const facings = getComponentStore<"left" | "right">("facing");
+const actorStates = getComponentStore<"idle" | "walk">("actor-state");
+const velocities = getComponentStore<{ x: number; y: number }>("velocity");
+const players = getComponentStore<{ speed: number; spawnX: number; spawnY: number }>("player");
+const enemies = getComponentStore<{ speed: number; spawnX: number; spawnY: number }>("enemy");
 
 export type DebugEditorPlayback = {
   onPlay: () => void;
@@ -15,6 +21,7 @@ export type DebugEditorPlayback = {
   onLoadWorld?: (name: string) => void;
   onCreateWorld?: (name: string) => void;
   onCreateFolder?: (path: string) => void;
+  onCreateComponent?: (path: string) => void;
 };
 
 export type DebugEditorOptions = DebugEditorPlayback & {
@@ -32,6 +39,7 @@ export function attachDebugEditor(world: GameWorld, engine: EngineApplication, o
     onLoadWorld: playback.onLoadWorld,
     onCreateWorld: playback.onCreateWorld,
     onCreateFolder: playback.onCreateFolder,
+    onCreateComponent: playback.onCreateComponent,
     contentTree: options.contentTree,
     activeWorld: options.activeWorld,
     initialContentDrawerOpen: options.initialContentDrawerOpen,

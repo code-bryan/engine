@@ -1,23 +1,19 @@
+import { getComponentRegistry, type Entity } from "@engine/ecs-core";
 import { transforms, type TransformScale } from "@engine/renderer";
-import type { WorldData, WorldEntityBase } from "@engine/debugger";
 import type { GameWorld } from "../../app";
-import { enemies, players } from "../components";
-import { EnemyPrefab, PlayerPrefab } from "../prefabs";
-export type DemoWorldEntityKind = "player" | "enemy";
+import { instantiatePrefab, type PrefabPlacement } from "../../runtime/prefabs";
 
-export type DemoWorldEntity = WorldEntityBase & {
-  kind: DemoWorldEntityKind;
-  speed?: number;
-  spawnX?: number;
-  spawnY?: number;
+export type DemoWorldEntity = PrefabPlacement;
+
+export type DemoWorldData = {
+  version: 1;
+  entities: DemoWorldEntity[];
 };
-
-export type DemoWorldData = WorldData<DemoWorldEntity>;
 
 export type DemoContentNode = {
   name: string;
   path: string;
-  kind: "folder" | "world" | "file";
+  kind: "folder" | "world" | "prefab" | "component" | "file";
   children?: DemoContentNode[];
 };
 
@@ -26,7 +22,7 @@ export async function loadWorldDefinition(name: string): Promise<DemoWorldData> 
   if (stored) return stored;
 
   try {
-    const res = await fetch(`/api/world?path=${encodeURIComponent(name)}`);
+    const res = await fetch(`/api/content/file?path=${encodeURIComponent(name)}`);
     if (res.ok) {
       const fromFile = parseDemoWorldData(await res.json());
       if (fromFile) return fromFile;
@@ -41,7 +37,7 @@ export async function saveWorldDefinition(name: string, world: DemoWorldData): P
   const json = JSON.stringify(world, null, 2);
   window.localStorage.setItem(storageKey(name), json);
   try {
-    await fetch(`/api/world?path=${encodeURIComponent(name)}`, {
+    await fetch(`/api/content/file?path=${encodeURIComponent(name)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: json,
@@ -59,51 +55,34 @@ export async function fetchContentTree(): Promise<DemoContentNode[]> {
 
 export async function materializeWorld(world: GameWorld, data: DemoWorldData) {
   for (const entity of data.entities) {
-    if (entity.kind === "player") {
-      await PlayerPrefab(world, entity);
-      continue;
-    }
-    await EnemyPrefab(world, entity);
+    await instantiatePrefab(world, entity);
   }
 }
 
 export function serializeWorld(world: GameWorld): DemoWorldData {
   const entities: DemoWorldEntity[] = [];
 
-  for (const entity of Array.from(world.entities as Iterable<number>).sort((left, right) => left - right)) {
+  for (const entity of Array.from(world.entities as Iterable<Entity>).sort((left, right) => left - right)) {
     const transform = transforms.get(entity);
     if (!transform) continue;
 
-    const scale = normalizeScale(transform.scale);
+    const prefab = world.tags.list(entity)[0] ?? "entity";
+    const components: Record<string, unknown> = {};
+    for (const { id, store } of getComponentRegistry()) {
+      const value = store.get(entity);
+      if (value !== undefined) components[id] = cloneValue(value);
+    }
 
-    const player = players.get(entity);
-    if (player) {
-      entities.push({
-        kind: "player",
+    entities.push({
+      prefab,
+      transform: {
         x: transform.x,
         y: transform.y,
         rotation: transform.rotation ?? 0,
-        scale: scale.y,
-        speed: player.speed,
-        spawnX: player.spawnX,
-        spawnY: player.spawnY,
-      });
-      continue;
-    }
-
-    const enemy = enemies.get(entity);
-    if (enemy) {
-      entities.push({
-        kind: "enemy",
-        x: transform.x,
-        y: transform.y,
-        rotation: transform.rotation ?? 0,
-        scale: scale.y,
-        speed: enemy.speed,
-        spawnX: enemy.spawnX,
-        spawnY: enemy.spawnY,
-      });
-    }
+        scale: normalizeScale(transform.scale).y,
+      },
+      components: Object.keys(components).length > 0 ? components : undefined,
+    });
   }
 
   return { version: 1, entities };
@@ -113,9 +92,10 @@ export function parseDemoWorldData(raw: unknown): DemoWorldData | null {
   if (!raw || typeof raw !== "object") return null;
   const parsed = raw as { version?: unknown; entities?: unknown };
   if (parsed.version !== 1 || !Array.isArray(parsed.entities)) return null;
+  const entities = parsed.entities.map(normalizeWorldEntity).filter((entity): entity is DemoWorldEntity => entity !== null);
   return {
     version: 1,
-    entities: parsed.entities.filter(isDemoWorldEntity),
+    entities,
   };
 }
 
@@ -139,10 +119,80 @@ function normalizeScale(scale?: TransformScale) {
   return typeof scale === "number" ? { x: scale, y: scale } : scale;
 }
 
-function isDemoWorldEntity(value: unknown): value is DemoWorldEntity {
-  if (!value || typeof value !== "object") return false;
-  const entity = value as Partial<DemoWorldEntity>;
-  return (entity.kind === "player" || entity.kind === "enemy")
-    && typeof entity.x === "number"
-    && typeof entity.y === "number";
+function normalizeWorldEntity(value: unknown): DemoWorldEntity | null {
+  if (!value || typeof value !== "object") return null;
+  const entity = value as {
+    prefab?: unknown;
+    transform?: unknown;
+    components?: unknown;
+    kind?: unknown;
+    x?: unknown;
+    y?: unknown;
+    rotation?: unknown;
+    scale?: unknown;
+    speed?: unknown;
+    spawnX?: unknown;
+    spawnY?: unknown;
+  };
+
+  if (typeof entity.prefab === "string") {
+    return {
+      prefab: entity.prefab,
+      transform: normalizeTransform(entity.transform),
+      components: normalizeComponents(entity.components),
+    };
+  }
+
+  if (typeof entity.kind !== "string") return null;
+  if (typeof entity.x !== "number" || typeof entity.y !== "number") return null;
+
+  const prefab = entity.kind;
+  const components = normalizeComponents(entity.components);
+  if (prefab === "player") {
+    components.player = {
+      speed: typeof entity.speed === "number" ? entity.speed : 96,
+      spawnX: typeof entity.spawnX === "number" ? entity.spawnX : entity.x,
+      spawnY: typeof entity.spawnY === "number" ? entity.spawnY : entity.y,
+    };
+  }
+  if (prefab === "enemy") {
+    components.enemy = {
+      speed: typeof entity.speed === "number" ? entity.speed : 42,
+      spawnX: typeof entity.spawnX === "number" ? entity.spawnX : entity.x,
+      spawnY: typeof entity.spawnY === "number" ? entity.spawnY : entity.y,
+    };
+  }
+
+  return {
+    prefab,
+    transform: {
+      x: entity.x,
+      y: entity.y,
+      rotation: typeof entity.rotation === "number" ? entity.rotation : 0,
+      scale: typeof entity.scale === "number" ? entity.scale : 1,
+    },
+    components: Object.keys(components).length > 0 ? components : undefined,
+  };
+}
+
+function normalizeTransform(value: unknown): DemoWorldEntity["transform"] {
+  if (!value || typeof value !== "object") return undefined;
+  const transform = value as Partial<NonNullable<DemoWorldEntity["transform"]>>;
+  return {
+    x: typeof transform.x === "number" ? transform.x : 0,
+    y: typeof transform.y === "number" ? transform.y : 0,
+    rotation: typeof transform.rotation === "number" ? transform.rotation : 0,
+    scale: typeof transform.scale === "number" ? transform.scale : 1,
+  };
+}
+
+function normalizeComponents(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object") return {};
+  return { ...(value as Record<string, unknown>) };
+}
+
+function cloneValue<T>(value: T): T {
+  if (value === null || typeof value !== "object") return value;
+  if (typeof structuredClone === "function") return structuredClone(value);
+  return JSON.parse(JSON.stringify(value)) as T;
 }

@@ -1,11 +1,12 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { type IncomingMessage, type ServerResponse } from "node:http";
 import { dirname, join, relative, resolve } from "node:path";
 import { defineConfig, type Plugin } from "vite";
 
 type ContentTreeNode = {
   name: string;
   path: string;
-  kind: "folder" | "world" | "file";
+  kind: "folder" | "world" | "prefab" | "component" | "file";
   children?: ContentTreeNode[];
 };
 
@@ -62,49 +63,8 @@ function worldEditorPlugin(): Plugin {
           return;
         }
 
-        if (pathName !== "/api/world") return next();
-        const worldPath = contentPath;
-
-        if (req.method === "GET") {
-          resolveWorldFile(contentDir, worldPath)
-            .then((filePath) => readFile(filePath, "utf-8"))
-            .then((data) => {
-              res.setHeader("Content-Type", "application/json");
-              res.end(data);
-            })
-            .catch(() => {
-              res.statusCode = 404;
-              res.end(JSON.stringify({ error: "not found" }));
-            });
-          return;
-        }
-
-        if (req.method === "POST") {
-          const chunks: Buffer[] = [];
-          req.on("data", (chunk: Buffer) => chunks.push(chunk));
-          req.on("end", () => {
-            const body = Buffer.concat(chunks).toString("utf-8");
-            try {
-              JSON.parse(body);
-            } catch {
-              res.statusCode = 400;
-              res.end(JSON.stringify({ error: "invalid JSON" }));
-              return;
-            }
-            resolveWorldFile(contentDir, worldPath)
-              .then(async (filePath) => {
-                await mkdir(dirname(filePath), { recursive: true });
-                await writeFile(filePath, body, "utf-8");
-              })
-              .then(() => {
-                res.setHeader("Content-Type", "application/json");
-                res.end(JSON.stringify({ ok: true }));
-              })
-              .catch(() => {
-                res.statusCode = 500;
-                res.end(JSON.stringify({ error: "write failed" }));
-              });
-          });
+        if (pathName === "/api/content/file" || pathName === "/api/world") {
+          serveJsonFile(contentDir, contentPath, req, res);
           return;
         }
 
@@ -159,10 +119,17 @@ async function readContentTree(root: string, base = ""): Promise<ContentTreeNode
       } satisfies ContentTreeNode;
     }
     if (entry.isFile() && entry.name.endsWith(".json")) {
+        const kind: ContentTreeNode["kind"] = path.startsWith("worlds/")
+          ? "world"
+          : path.startsWith("prefabs/")
+            ? "prefab"
+            : path.startsWith("components/")
+              ? "component"
+              : "file";
       return {
         name: entry.name.replace(/\.json$/, ""),
         path: path.replace(/\.json$/, ""),
-        kind: "world",
+        kind,
       } satisfies ContentTreeNode;
     }
     return {
@@ -175,12 +142,58 @@ async function readContentTree(root: string, base = ""): Promise<ContentTreeNode
   return nodes;
 }
 
-async function resolveWorldFile(root: string, relPath: string) {
-  return resolveContentPath(root, `${normalizeContentPath(relPath)}.json`);
-}
-
 async function createSafePath(root: string, relPath: string) {
   return resolveContentPath(root, normalizeContentPath(relPath));
+}
+
+function serveJsonFile(root: string, relPath: string, req: IncomingMessage, res: ServerResponse) {
+  let filePath: string;
+  try {
+    filePath = resolveJsonFilePath(root, relPath);
+  } catch (error) {
+    res.statusCode = 400;
+    res.end(JSON.stringify({ error: error instanceof Error ? error.message : "invalid path" }));
+    return;
+  }
+
+  if (req.method === "GET") {
+    readFile(filePath, "utf-8")
+      .then((data) => {
+        res.setHeader("Content-Type", "application/json");
+        res.end(data);
+      })
+      .catch(() => {
+        res.statusCode = 404;
+        res.end(JSON.stringify({ error: "not found" }));
+      });
+    return;
+  }
+
+  if (req.method === "POST") {
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    req.on("end", () => {
+      const body = Buffer.concat(chunks).toString("utf-8");
+      try {
+        JSON.parse(body);
+      } catch {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: "invalid JSON" }));
+        return;
+      }
+      mkdir(dirname(filePath), { recursive: true })
+        .then(() => writeFile(filePath, body, "utf-8"))
+        .then(() => {
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ ok: true }));
+        })
+        .catch(() => {
+          res.statusCode = 500;
+          res.end(JSON.stringify({ error: "write failed" }));
+        });
+    });
+    return;
+  }
 }
 
 function normalizeContentPath(relPath: string) {
@@ -197,4 +210,10 @@ function resolveContentPath(root: string, relPath: string) {
     throw new Error("invalid path");
   }
   return absolute;
+}
+
+function resolveJsonFilePath(root: string, relPath: string) {
+  const normalized = normalizeContentPath(relPath);
+  const withExt = normalized.endsWith(".json") ? normalized : `${normalized}.json`;
+  return resolveContentPath(root, withExt);
 }

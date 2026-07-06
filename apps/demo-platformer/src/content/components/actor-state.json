@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "id": "actor-state",
+  "label": "Actor State",
+  "defaultValue": "idle"
+}

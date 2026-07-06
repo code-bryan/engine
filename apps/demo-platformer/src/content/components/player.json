@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "id": "player",
+  "label": "Player",
+  "defaultValue": {
+    "speed": 96,
+    "spawnX": 0,
+    "spawnY": 0
+  }
+}

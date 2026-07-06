@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "id": "velocity",
+  "label": "Velocity",
+  "defaultValue": {
+    "x": 0,
+    "y": 0
+  }
+}

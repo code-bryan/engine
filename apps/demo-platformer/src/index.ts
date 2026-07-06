@@ -96,6 +96,16 @@ async function mountGame(startPlaying: boolean, worldName = "worlds/world-01", w
       await fetch(`/api/content/folder?path=${encodeURIComponent(path)}`, { method: "POST" });
       await mountGame(false, worldName);
     },
+    async onCreateComponent(path) {
+      const componentName = path.split("/").filter(Boolean).at(-1) ?? "component";
+      await saveContentJson(path, {
+        version: 1,
+        id: componentName,
+        label: toTitleCase(componentName),
+        defaultValue: {},
+      });
+      await mountGame(false, worldName);
+    },
     initialContentDrawerOpen: contentDrawerOpen,
     onContentDrawerToggled(open) {
       contentDrawerOpen = open;
@@ -115,3 +125,19 @@ async function mountGame(startPlaying: boolean, worldName = "worlds/world-01", w
 }
 
 await mountGame(true);
+
+async function saveContentJson(path: string, data: unknown) {
+  await fetch(`/api/content/file?path=${encodeURIComponent(path)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data, null, 2),
+  });
+}
+
+function toTitleCase(value: string) {
+  return value
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(" ");
+}

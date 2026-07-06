@@ -108,6 +108,7 @@ export function renderDebuggerUi<TWorld extends DebuggerWorld>(
     onToggleContentDrawer: actions.toggleContentDrawer,
     onCreateFolder: options.onCreateFolder,
     onCreateWorld: options.onCreateWorld ?? (() => {}),
+    onCreateComponent: options.onCreateComponent,
   }));
 }
 

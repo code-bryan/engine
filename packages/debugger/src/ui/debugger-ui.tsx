@@ -15,6 +15,7 @@ import {
   Pause,
   Plus,
   Play,
+  Puzzle,
   Redo2,
   RotateCw,
   ScanSearch,
@@ -124,6 +125,7 @@ export type DebuggerUiProps = {
   onLoadWorld: (name: string) => void;
   onCreateFolder?: (path: string) => void;
   onCreateWorld: (path: string) => void;
+  onCreateComponent?: (path: string) => void;
   onToggleContentDrawer: () => void;
 };
 
@@ -353,11 +355,12 @@ function ContentBrowser(props: {
   onLoadWorld: (name: string) => void;
   onCreateFolder?: (path: string) => void;
   onCreateWorld: (path: string) => void;
+  onCreateComponent?: (path: string) => void;
 }) {
   const [selectedFolderPath, setSelectedFolderPath] = useState("");
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set([""]));
   const [search, setSearch] = useState("");
-  const [createKind, setCreateKind] = useState<"folder" | "world" | undefined>();
+  const [createKind, setCreateKind] = useState<"folder" | "world" | "component" | undefined>();
   const [createName, setCreateName] = useState("");
 
   useEffect(() => {
@@ -385,7 +388,9 @@ function ContentBrowser(props: {
     : currentChildren;
   const currentBreadcrumbs = breadcrumbPaths(selectedFolderPath);
 
-  const startCreate = (kind: "folder" | "world") => {
+  const canCreateComponent = Boolean(props.onCreateComponent) && (selectedFolderPath === "components" || selectedFolderPath.startsWith("components/"));
+
+  const startCreate = (kind: "folder" | "world" | "component") => {
     setCreateKind(kind);
     setCreateName("");
   };
@@ -398,6 +403,8 @@ function ContentBrowser(props: {
     const nextPath = joinContentPath(selectedFolderPath, name);
     if (createKind === "folder") {
       props.onCreateFolder?.(nextPath);
+    } else if (createKind === "component") {
+      props.onCreateComponent?.(nextPath);
     } else {
       props.onCreateWorld(nextPath);
     }
@@ -428,6 +435,11 @@ function ContentBrowser(props: {
               <FolderPlus size={13} strokeWidth={2} />
             </button>
           )}
+          {canCreateComponent && (
+            <button className="debugger-content-action" onClick={() => startCreate("component")} title="New Component" aria-label="New Component">
+              <Puzzle size={13} strokeWidth={2} />
+            </button>
+          )}
           <button className="debugger-content-action" onClick={() => startCreate("world")} title="New World" aria-label="New World">
             <FilePlus2 size={13} strokeWidth={2} />
           </button>
@@ -450,7 +462,7 @@ function ContentBrowser(props: {
           <input
             className="debugger-input debugger-content-create__input"
             autoFocus
-            placeholder={createKind === "folder" ? "folder name…" : "world name…"}
+            placeholder={createKind === "folder" ? "folder name…" : createKind === "component" ? "component name…" : "world name…"}
             value={createName}
             onChange={(event) => setCreateName(event.target.value)}
             onKeyDown={(event) => {
@@ -510,10 +522,11 @@ function ContentBrowser(props: {
                 }}
               >
                 <span className="debugger-content-item__icon">
-                  {node.kind === "folder" ? <FolderOpen size={13} strokeWidth={2} /> : <FileJson size={13} strokeWidth={2} />}
+                  {node.kind === "folder" ? <FolderOpen size={13} strokeWidth={2} /> : node.kind === "component" ? <Puzzle size={13} strokeWidth={2} /> : <FileJson size={13} strokeWidth={2} />}
                 </span>
                 <span className="debugger-content-item__name">{node.name}</span>
                 <span className="debugger-content-item__path">{node.path || "root"}</span>
+                {node.kind !== "folder" && <span className="debugger-pill">{node.kind}</span>}
               </button>
             ))}
           </div>
@@ -626,10 +639,10 @@ function renderContentTreeNode(
           {isFolder ? (hasChildren ? (isExpanded ? <ChevronDown size={12} strokeWidth={2.2} /> : <ChevronRight size={12} strokeWidth={2.2} />) : <span className="debugger-content-tree__spacer" />) : <span className="debugger-content-tree__spacer" />}
         </span>
         <span className="debugger-content-tree__icon">
-          {isFolder ? <FolderOpen size={12} strokeWidth={2} /> : <FileJson size={12} strokeWidth={2} />}
+          {isFolder ? <FolderOpen size={12} strokeWidth={2} /> : node.kind === "component" ? <Puzzle size={12} strokeWidth={2} /> : <FileJson size={12} strokeWidth={2} />}
         </span>
         <span className="debugger-content-tree__name">{node.name}</span>
-        {node.kind === "world" && <span className="debugger-pill">world</span>}
+        {node.kind !== "folder" && <span className="debugger-pill">{node.kind}</span>}
       </button>
       {isFolder && isExpanded && node.children?.length
         ? node.children.map((child) => renderContentTreeNode(child, depth + 1, selectedFolderPath, expandedFolders, setExpandedFolders, setSelectedFolderPath, onLoadWorld))

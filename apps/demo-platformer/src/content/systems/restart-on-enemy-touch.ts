@@ -1,6 +1,10 @@
 import { transforms } from "@engine/renderer";
 import type { GameWorld } from "../../app";
-import { enemies, players, velocities } from "../components";
+import { getComponentStore } from "../components";
+
+const enemies = getComponentStore<{ speed: number; spawnX: number; spawnY: number }>("enemy");
+const players = getComponentStore<{ speed: number; spawnX: number; spawnY: number }>("player");
+const velocities = getComponentStore<{ x: number; y: number }>("velocity");
 
 export function createRestartOnEnemyTouchSystem(world: GameWorld) {
   return () => {

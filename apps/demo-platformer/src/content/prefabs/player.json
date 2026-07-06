@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "name": "player",
+  "components": [
+    {
+      "component": "tag",
+      "value": "player"
+    },
+    {
+      "component": "transform",
+      "value": {
+        "rotation": 0,
+        "scale": 1
+      }
+    },
+    {
+      "component": "physics.body",
+      "value": {
+        "kind": "kinematic",
+        "width": 16,
+        "height": 16
+      }
+    },
+    {
+      "component": "sprite",
+      "value": {
+        "anchor": {
+          "x": 0.5,
+          "y": 0.5
+        },
+        "offset": {
+          "x": 8,
+          "y": 8
+        }
+      }
+    },
+    {
+      "component": "sprite.animation",
+      "value": {
+        "initial": "idle",
+        "clips": {
+          "idle": {
+            "sheet": {
+              "src": "/assets/Orc_Idle.png",
+              "frameWidth": 100,
+              "frameHeight": 100,
+              "frames": 6
+            },
+            "fps": 4,
+            "loop": true
+          },
+          "walk": {
+            "sheet": {
+              "src": "/assets/Orc_Walk.png",
+              "frameWidth": 100,
+              "frameHeight": 100,
+              "frames": 8
+            },
+            "fps": 8,
+            "loop": true
+          }
+        }
+      }
+    },
+    {
+      "component": "velocity",
+      "value": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "component": "facing",
+      "value": "right"
+    },
+    {
+      "component": "actor-state",
+      "value": "idle"
+    },
+    {
+      "component": "player",
+      "value": {
+        "speed": 96
+      }
+    }
+  ]
+}
