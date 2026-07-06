@@ -10,11 +10,45 @@ export type DebugEditorPlayback = {
   onStop: () => void;
   onStep: () => void;
   getState: () => "playing" | "paused" | "stopped";
+  onWorldEdited?: (world: GameWorld) => void;
+  onOpenLevel?: (data: unknown) => void;
+  onLoadWorld?: (name: string) => void;
 };
 
-export function attachDebugEditor(world: GameWorld, engine: EngineApplication, playback: DebugEditorPlayback) {
+export type DebugEditorOptions = DebugEditorPlayback & {
+  worlds?: { name: string }[];
+  activeWorld?: string;
+  onCreateWorld?: (name: string) => void;
+  initialWorldsOpen?: boolean;
+  onWorldsToggled?: (open: boolean) => void;
+};
+
+export function attachDebugEditor(world: GameWorld, engine: EngineApplication, options: DebugEditorOptions) {
+  const playback = options;
   return attachRuntimeDebugger(world, engine, {
     playback,
+    onWorldEdited: playback.onWorldEdited,
+    onLoadWorld: playback.onLoadWorld,
+    worlds: options.worlds,
+    activeWorld: options.activeWorld,
+    onCreateWorld: options.onCreateWorld,
+    initialWorldsOpen: options.initialWorldsOpen,
+    onWorldsToggled: options.onWorldsToggled,
+    onOpenLevel: playback.onOpenLevel ? () => {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = ".json";
+      input.onchange = () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        file.text().then((text) => {
+          try {
+            playback.onOpenLevel!(JSON.parse(text));
+          } catch {}
+        });
+      };
+      input.click();
+    } : undefined,
     grid: {
       snapSize: 16,
       majorEvery: 4,

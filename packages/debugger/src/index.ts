@@ -38,6 +38,7 @@ export type {
   DebugWorldSnapshot,
   DebuggerWorld,
 } from "./shared/types";
+export type { WorldEntityBase, WorldData } from "./shared/world";
 export { createStoreInspector, captureWorldSnapshot, restoreWorldSnapshot };
 
 export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
@@ -77,6 +78,8 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     entityQuery: "",
     inspectorQuery: "",
     openDropdown: undefined,
+    worldsOpen: options.initialWorldsOpen ?? false,
+    newWorldName: undefined,
   };
 
   const registry = getComponentRegistry();
@@ -257,6 +260,39 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
         },
         editInspector(entity, componentId, key, value) {
           applyInspectorEdit(world, componentInspectorMap, entity, componentId, key, value);
+          options.onWorldEdited?.(world);
+          refresh();
+        },
+        openLevel() {
+          options.onOpenLevel?.();
+        },
+        toggleWorlds() {
+          state.worldsOpen = !state.worldsOpen;
+          options.onWorldsToggled?.(state.worldsOpen);
+          refresh();
+        },
+        loadWorld(name) {
+          options.onLoadWorld?.(name);
+        },
+        startCreatingWorld() {
+          state.newWorldName = "";
+          refresh();
+        },
+        cancelCreatingWorld() {
+          state.newWorldName = undefined;
+          refresh();
+        },
+        setNewWorldName(name) {
+          state.newWorldName = name;
+          refresh();
+        },
+        confirmCreateWorld() {
+          const name = state.newWorldName?.trim();
+          if (!name) return;
+          const exists = (options.worlds ?? []).some((w) => w.name === name);
+          if (exists) return;
+          state.newWorldName = undefined;
+          options.onCreateWorld?.(name);
           refresh();
         },
         saveSnapshot() {
@@ -406,6 +442,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
       const worldPt = toWorldPoint(engine.app.canvas, engine.app.stage, event.clientX, event.clientY);
       applyGizmoDrag(world, gizmoDrag, worldPt, gridOptions.snapSize);
       engine.tick(0);
+      options.onWorldEdited?.(world);
       didDrag = true;
       suppressCanvasClick = true;
       refresh();
@@ -423,6 +460,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
       }
       world.physics.reset(entityDrag.entity, { x: nextX, y: nextY }, { x: 0, y: 0 });
       engine.tick(0);
+      options.onWorldEdited?.(world);
       didDrag = true;
       suppressCanvasClick = true;
       refresh();

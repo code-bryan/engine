@@ -196,7 +196,9 @@ export function ensureDebuggerStyles() {
     }
     .debugger-panel--left {
       grid-area: left;
-      grid-template-rows: auto auto minmax(0, 1fr);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
     }
     .debugger-panel--right {
       grid-area: right;
@@ -352,6 +354,8 @@ export function ensureDebuggerStyles() {
     .debugger-section--grow {
       display: grid;
       grid-template-rows: auto minmax(0, 1fr);
+      flex: 1;
+      min-height: 0;
     }
     .debugger-section--entities {
       display: grid;
@@ -696,6 +700,86 @@ export function ensureDebuggerStyles() {
       background: rgba(255, 255, 255, 0.12);
       margin: 0 2px;
       flex-shrink: 0;
+    }
+    .debugger-section--worlds {
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .debugger-worlds-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .debugger-worlds-new {
+      width: 20px;
+      height: 20px;
+      padding: 0;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 6px;
+      background: #18181b;
+      color: #a1a1aa;
+      cursor: pointer;
+      font: 14px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      display: grid;
+      place-items: center;
+    }
+    .debugger-worlds-new:hover { background: #27272a; color: #e4e4e7; }
+    .debugger-worlds-list {
+      display: grid;
+      align-content: start;
+      gap: 3px;
+      max-height: 120px;
+      overflow: auto;
+    }
+    .debugger-world-item {
+      display: flex;
+      align-items: center;
+      padding: 6px 8px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: #09090b;
+      color: #a1a1aa;
+      cursor: pointer;
+      font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+      text-align: left;
+    }
+    .debugger-world-item:hover { background: #18181b; color: #e4e4e7; }
+    .debugger-world-item.is-active {
+      border-color: rgba(96, 165, 250, 0.4);
+      background: rgba(37, 99, 235, 0.18);
+      color: #bfdbfe;
+    }
+    .debugger-worlds-create {
+      display: grid;
+      gap: 4px;
+    }
+    .debugger-worlds-create__input {
+      margin-bottom: 0 !important;
+    }
+    .debugger-worlds-create__actions {
+      display: flex;
+      gap: 4px;
+    }
+    .debugger-worlds-create__btn {
+      flex: 1;
+      height: 24px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px;
+      background: #18181b;
+      color: #a1a1aa;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+    }
+    .debugger-worlds-create__btn:hover { background: #27272a; color: #e4e4e7; }
+    .debugger-worlds-create__btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .debugger-worlds-create__btn--confirm:not(:disabled) { border-color: rgba(74,222,128,0.3); color: #4ade80; }
+    .debugger-worlds-create__btn--cancel:not(:disabled):hover { border-color: rgba(248,113,113,0.3); color: #f87171; }
+    .debugger-worlds-create__error {
+      font-size: 10px;
+      color: #f87171;
     }
   `;
   document.head.appendChild(style);

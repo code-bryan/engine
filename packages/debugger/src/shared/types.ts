@@ -70,6 +70,14 @@ export type RuntimeDebuggerOptions<TWorld extends DebuggerWorld = DebuggerWorld>
   playback?: DebugPlayback;
   trackedStores?: DebugTrackedStore[];
   grid?: DebugGridOptions;
+  onWorldEdited?: (world: TWorld) => void;
+  onOpenLevel?: () => void;
+  worlds?: { name: string }[];
+  activeWorld?: string;
+  onLoadWorld?: (name: string) => void;
+  onCreateWorld?: (name: string) => void;
+  initialWorldsOpen?: boolean;
+  onWorldsToggled?: (open: boolean) => void;
 };
 
 export type DebugEditor<TWorld extends DebuggerWorld = DebuggerWorld> = {
@@ -129,4 +137,6 @@ export type DebugState = {
   entityQuery: string;
   inspectorQuery: string;
   openDropdown: string | undefined;
+  worldsOpen: boolean;
+  newWorldName: string | undefined;
 };

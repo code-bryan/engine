@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "entities": [
+    {
+      "kind": "player",
+      "x": 0,
+      "y": 80,
+      "rotation": 0,
+      "scale": 1,
+      "speed": 96,
+      "spawnX": 32,
+      "spawnY": 64
+    },
+    {
+      "kind": "enemy",
+      "x": 304,
+      "y": 80,
+      "rotation": 0,
+      "scale": 1,
+      "speed": 42,
+      "spawnX": 220,
+      "spawnY": 64
+    }
+  ]
+}

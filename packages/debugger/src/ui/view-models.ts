@@ -44,6 +44,13 @@ export type DebuggerUiActions = {
   toggleSystem: (index: number) => void;
   toggleLogFilter: (cat: string) => void;
   toggleLogPause: () => void;
+  openLevel: () => void;
+  toggleWorlds: () => void;
+  loadWorld: (name: string) => void;
+  startCreatingWorld: () => void;
+  cancelCreatingWorld: () => void;
+  setNewWorldName: (name: string) => void;
+  confirmCreateWorld: () => void;
 };
 
 export function renderDebuggerUi<TWorld extends DebuggerWorld>(
@@ -97,6 +104,17 @@ export function renderDebuggerUi<TWorld extends DebuggerWorld>(
     onToggleSystem: actions.toggleSystem,
     onToggleLogFilter: actions.toggleLogFilter,
     onToggleLogPause: actions.toggleLogPause,
+    onOpenLevel: actions.openLevel,
+    worldsOpen: state.worldsOpen,
+    worlds: options.worlds ?? [],
+    activeWorld: options.activeWorld,
+    onToggleWorlds: actions.toggleWorlds,
+    onLoadWorld: actions.loadWorld,
+    newWorldName: state.newWorldName,
+    onStartCreatingWorld: actions.startCreatingWorld,
+    onCancelCreatingWorld: actions.cancelCreatingWorld,
+    onSetNewWorldName: actions.setNewWorldName,
+    onConfirmCreateWorld: actions.confirmCreateWorld,
   }));
 }
 

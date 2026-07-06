@@ -16,16 +16,35 @@ async function loadPlayerClips() {
   };
 }
 
-export async function PlayerPrefab(world: GameWorld, props: { x: number; y: number }) {
+export type PlayerPrefabProps = {
+  x: number;
+  y: number;
+  rotation?: number;
+  scale?: number;
+  speed?: number;
+  spawnX?: number;
+  spawnY?: number;
+};
+
+export async function PlayerPrefab(world: GameWorld, props: PlayerPrefabProps) {
   const bodyWidth = 16;
   const bodyHeight = 16;
   const e = world.spawn();
   world.tags.add(e, "player");
-  transforms.set(e, { x: props.x, y: props.y, scale: 1 });
+  transforms.set(e, {
+    x: props.x,
+    y: props.y,
+    rotation: props.rotation ?? 0,
+    scale: props.scale ?? 1,
+  });
   velocities.set(e, { x: 0, y: 0 });
   facings.set(e, "right");
   actorStates.set(e, "idle");
-  players.set(e, { speed: 96, spawnX: props.x, spawnY: props.y });
+  players.set(e, {
+    speed: props.speed ?? 96,
+    spawnX: props.spawnX ?? props.x,
+    spawnY: props.spawnY ?? props.y,
+  });
   world.physics.body.kinematic.set(e, { x: props.x, y: props.y, width: bodyWidth, height: bodyHeight });
   const clips = await playerClips;
   sprite.set(e, {

@@ -1,7 +1,10 @@
 import {
   Camera,
+  Check,
   Crosshair,
   Expand,
+  FolderOpen,
+  Layers,
   LocateFixed,
   MousePointer2,
   Minus,
@@ -12,6 +15,7 @@ import {
   RotateCw,
   ScanSearch,
   StepForward,
+  X,
 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { EditorToolMode } from "../shared/types";
@@ -107,6 +111,17 @@ export type DebuggerUiProps = {
   onToggleSystem: (index: number) => void;
   onToggleLogFilter: (cat: string) => void;
   onToggleLogPause: () => void;
+  onOpenLevel?: () => void;
+  worldsOpen: boolean;
+  worlds: { name: string }[];
+  activeWorld?: string;
+  onToggleWorlds: () => void;
+  onLoadWorld: (name: string) => void;
+  newWorldName: string | undefined;
+  onStartCreatingWorld: () => void;
+  onCancelCreatingWorld: () => void;
+  onSetNewWorldName: (value: string) => void;
+  onConfirmCreateWorld: () => void;
 };
 
 export function DebuggerUi(props: DebuggerUiProps) {
@@ -150,6 +165,11 @@ export function DebuggerUi(props: DebuggerUiProps) {
                 </button>
               </div>
             </div>
+            <div className="debugger-tool-group">
+              <button className={props.worldsOpen ? "is-active" : ""} onClick={props.onToggleWorlds} title="Worlds" aria-label="Worlds">
+                <Layers size={14} strokeWidth={2} />
+              </button>
+            </div>
             <div className="debugger-tool-group" aria-label="Editor tools">
               <button className={props.toolMode === "select" ? "is-active" : ""} onClick={() => props.onSetToolMode("select")} title="Select Tool" aria-label="Select Tool">
                 <MousePointer2 size={14} strokeWidth={2} />
@@ -164,6 +184,11 @@ export function DebuggerUi(props: DebuggerUiProps) {
                 <RotateCw size={14} strokeWidth={2} />
               </button>
             </div>
+          {props.onOpenLevel && (
+            <button onClick={props.onOpenLevel} title="Open Level" aria-label="Open Level">
+              <FolderOpen size={14} strokeWidth={2} />
+            </button>
+          )}
           </div>
           <div className="debugger-toolbar__playback">
             <button className={props.playbackState === "playing" ? "is-active" : ""} onClick={() => props.onPlaybackAction("play")} title="Play" aria-label="Play"><Play size={14} fill="currentColor" strokeWidth={2} /></button>
@@ -184,6 +209,65 @@ export function DebuggerUi(props: DebuggerUiProps) {
           </div>
         </header>
         <aside className="debugger-panel debugger-panel--left">
+          {props.worldsOpen && (
+            <section className="debugger-section debugger-section--worlds">
+              <div className="debugger-worlds-header">
+                <div className="debugger-section__title" style={{ marginBottom: 0 }}>Worlds</div>
+                {props.newWorldName === undefined && (
+                  <button className="debugger-worlds-new" onClick={props.onStartCreatingWorld} title="New World">+</button>
+                )}
+              </div>
+              <div className="debugger-worlds-list">
+                {props.worlds.map((w) => (
+                  <button
+                    key={w.name}
+                    className={`debugger-world-item${w.name === props.activeWorld ? " is-active" : ""}`}
+                    onClick={() => props.onLoadWorld(w.name)}
+                  >
+                    {w.name}
+                  </button>
+                ))}
+              </div>
+              {props.newWorldName !== undefined && (
+                <div className="debugger-worlds-create">
+                  <input
+                    className="debugger-input debugger-worlds-create__input"
+                    placeholder="world name…"
+                    value={props.newWorldName}
+                    autoFocus
+                    onChange={(e) => props.onSetNewWorldName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") props.onConfirmCreateWorld();
+                      if (e.key === "Escape") props.onCancelCreatingWorld();
+                    }}
+                  />
+                  <div className="debugger-worlds-create__actions">
+                    <button
+                      className="debugger-worlds-create__btn debugger-worlds-create__btn--confirm"
+                      onClick={props.onConfirmCreateWorld}
+                      title="Create"
+                      disabled={
+                        !props.newWorldName?.trim() ||
+                        props.worlds.some((w) => w.name === props.newWorldName?.trim())
+                      }
+                    >
+                      <Check size={12} strokeWidth={2.5} />
+                    </button>
+                    <button
+                      className="debugger-worlds-create__btn debugger-worlds-create__btn--cancel"
+                      onClick={props.onCancelCreatingWorld}
+                      title="Cancel"
+                    >
+                      <X size={12} strokeWidth={2.5} />
+                    </button>
+                  </div>
+                  {props.worlds.some((w) => w.name === props.newWorldName?.trim()) && props.newWorldName?.trim() && (
+                    <span className="debugger-worlds-create__error">already exists</span>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
           <div className="debugger-sidepanels">
             {props.statusCards.map((card) => <RuntimeCard key={card.title} title={card.title} fields={card.fields} />)}
           </div>

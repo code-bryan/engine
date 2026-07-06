@@ -12,16 +12,35 @@ async function loadEnemyClips() {
   };
 }
 
-export async function EnemyPrefab(world: GameWorld, props: { x: number; y: number }) {
+export type EnemyPrefabProps = {
+  x: number;
+  y: number;
+  rotation?: number;
+  scale?: number;
+  speed?: number;
+  spawnX?: number;
+  spawnY?: number;
+};
+
+export async function EnemyPrefab(world: GameWorld, props: EnemyPrefabProps) {
   const bodyWidth = 16;
   const bodyHeight = 16;
   const e = world.spawn();
   world.tags.add(e, "enemy");
-  transforms.set(e, { x: props.x, y: props.y, scale: 1 });
+  transforms.set(e, {
+    x: props.x,
+    y: props.y,
+    rotation: props.rotation ?? 0,
+    scale: props.scale ?? 1,
+  });
   velocities.set(e, { x: 0, y: 0 });
   facings.set(e, "left");
   actorStates.set(e, "idle");
-  enemies.set(e, { speed: 42, spawnX: props.x, spawnY: props.y });
+  enemies.set(e, {
+    speed: props.speed ?? 42,
+    spawnX: props.spawnX ?? props.x,
+    spawnY: props.spawnY ?? props.y,
+  });
   world.physics.body.kinematic.set(e, { x: props.x, y: props.y, width: bodyWidth, height: bodyHeight });
   const clips = await enemyClips;
   sprite.set(e, {
