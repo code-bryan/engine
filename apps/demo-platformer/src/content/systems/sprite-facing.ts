@@ -1,10 +1,9 @@
 import { transforms, type TransformScale } from "@engine/renderer";
-import { getComponentStore } from "../../runtimes/components";
-
-const facings = getComponentStore<"left" | "right">("facing");
-const velocities = getComponentStore<{ x: number; y: number }>("velocity");
+import { getComponentStore } from "@engine/runtime";
 
 export function createSpriteFacingSystem() {
+  const facings = getComponentStore<"left" | "right">("facing");
+  const velocities = getComponentStore<{ x: number; y: number }>("velocity");
   return () => {
     for (const [entity, velocity] of velocities) {
       if (velocity.x === 0) continue;

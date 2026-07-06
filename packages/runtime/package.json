@@ -1,0 +1,16 @@
+{
+  "name": "@engine/runtime",
+  "type": "module",
+  "version": "0.0.0",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "build": "bun run typecheck",
+    "typecheck": "tsc -p ../../tsconfig.json --noEmit",
+    "test": "bun test --pass-with-no-tests"
+  },
+  "dependencies": {
+    "@engine/ecs-core": "workspace:*",
+    "@engine/physics": "workspace:*",
+    "@engine/renderer": "workspace:*"
+  }
+}

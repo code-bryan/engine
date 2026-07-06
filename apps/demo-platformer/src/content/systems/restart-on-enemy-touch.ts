@@ -1,23 +1,27 @@
 import { transforms } from "@engine/renderer";
+import { getComponentStore } from "@engine/runtime";
 import type { GameWorld } from "../../app";
-import { getComponentStore } from "../../runtimes/components";
-
-const enemies = getComponentStore<{ speed: number; spawnX: number; spawnY: number }>("enemy");
-const players = getComponentStore<{ speed: number; spawnX: number; spawnY: number }>("player");
-const velocities = getComponentStore<{ x: number; y: number }>("velocity");
 
 export function createRestartOnEnemyTouchSystem(world: GameWorld) {
+  const enemies = getComponentStore<{ speed: number; spawnX: number; spawnY: number }>("enemy");
+  const players = getComponentStore<{ speed: number; spawnX: number; spawnY: number }>("player");
+  const velocities = getComponentStore<{ x: number; y: number }>("velocity");
   return () => {
     for (const playerEntity of world.tags.with("player")) {
       const player = world.physics.collider(world, playerEntity);
       if (!player.collide("enemy")) continue;
-      resetGame(world);
+      resetGame(world, players, enemies, velocities);
       return;
     }
   };
 }
 
-function resetGame(world: GameWorld) {
+function resetGame(
+  world: GameWorld,
+  players: Map<number, { speed: number; spawnX: number; spawnY: number }>,
+  enemies: Map<number, { speed: number; spawnX: number; spawnY: number }>,
+  velocities: Map<number, { x: number; y: number }>,
+) {
   for (const [e, player] of players) {
     const transform = transforms.get(e);
     const velocity = velocities.get(e);

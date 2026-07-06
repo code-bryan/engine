@@ -1,6 +1,6 @@
 import { getComponentRegistry, type Entity } from "@engine/ecs-core";
 import { transforms, type TransformScale } from "@engine/renderer";
-import type { GameWorld } from "../app";
+import type { DemoGameWorld } from "./types";
 import { instantiatePrefab, type PrefabPlacement } from "./prefabs";
 
 export type DemoWorldEntity = PrefabPlacement;
@@ -53,13 +53,13 @@ export async function fetchContentTree(): Promise<DemoContentNode[]> {
   return [];
 }
 
-export async function materializeWorld(world: GameWorld, data: DemoWorldData) {
+export async function materializeWorld(world: DemoGameWorld, data: DemoWorldData) {
   for (const entity of data.entities) {
     await instantiatePrefab(world, entity);
   }
 }
 
-export function serializeWorld(world: GameWorld): DemoWorldData {
+export function serializeWorld(world: DemoGameWorld): DemoWorldData {
   const entities: DemoWorldEntity[] = [];
 
   for (const entity of Array.from(world.entities as Iterable<Entity>).sort((left, right) => left - right)) {

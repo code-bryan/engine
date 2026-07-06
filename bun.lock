@@ -29,6 +29,7 @@
         "@engine/loader": "workspace:*",
         "@engine/physics": "workspace:*",
         "@engine/renderer": "workspace:*",
+        "@engine/runtime": "workspace:*",
       },
     },
     "packages/debugger": {
@@ -55,6 +56,15 @@
       "name": "@engine/renderer",
       "version": "0.0.0",
     },
+    "packages/runtime": {
+      "name": "@engine/runtime",
+      "version": "0.0.0",
+      "dependencies": {
+        "@engine/ecs-core": "workspace:*",
+        "@engine/physics": "workspace:*",
+        "@engine/renderer": "workspace:*",
+      },
+    },
   },
   "packages": {
     "@emnapi/core": ["@emnapi/core@1.11.1", "", { "dependencies": { "@emnapi/wasi-threads": "1.2.2", "tslib": "^2.4.0" } }, "sha512-RSvbQmHzdKzNsLYa/wHrbc3KN4sYLKAdPZxqiM2HATqv/SBk2/ENSHpvXGaLOMcsAyz0poEGqkmmKYG3OWiJEQ=="],
@@ -76,6 +86,8 @@
     "@engine/physics": ["@engine/physics@workspace:packages/physics"],
 
     "@engine/renderer": ["@engine/renderer@workspace:packages/renderer"],
+
+    "@engine/runtime": ["@engine/runtime@workspace:packages/runtime"],
 
     "@napi-rs/wasm-runtime": ["@napi-rs/wasm-runtime@1.1.6", "", { "dependencies": { "@tybys/wasm-util": "^0.10.3" }, "peerDependencies": { "@emnapi/core": "^1.7.1", "@emnapi/runtime": "^1.7.1" } }, "sha512-ZLv/JdUfkvOy9eCnnBaGfiO+XimbjebAeO+MRQqD/B+FR1tnRN0tpKSJHRbE8sFfS6aqsXZ67TQjfwfsxULVbg=="],
 

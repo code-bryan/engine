@@ -1,14 +1,8 @@
 import { attachRuntimeDebugger, createStoreInspector, type ContentTreeNode, type DebugEditorField, type DebuggerWorld } from "@engine/debugger";
+import { getComponentStore } from "@engine/runtime";
 import { keyboard, pointer } from "@engine/input";
 import type { EngineApplication } from "@engine/renderer";
-import { getComponentStore } from "../runtimes/components";
 import type { GameWorld } from "../app";
-
-const facings = getComponentStore<"left" | "right">("facing");
-const actorStates = getComponentStore<"idle" | "walk">("actor-state");
-const velocities = getComponentStore<{ x: number; y: number }>("velocity");
-const players = getComponentStore<{ speed: number; spawnX: number; spawnY: number }>("player");
-const enemies = getComponentStore<{ speed: number; spawnX: number; spawnY: number }>("enemy");
 
 export type DebugEditorPlayback = {
   onPlay: () => void;
@@ -33,6 +27,11 @@ export type DebugEditorOptions = DebugEditorPlayback & {
 
 export function attachDebugEditor(world: GameWorld, engine: EngineApplication, options: DebugEditorOptions) {
   const playback = options;
+  const facings = getComponentStore<"left" | "right">("facing");
+  const actorStates = getComponentStore<"idle" | "walk">("actor-state");
+  const velocities = getComponentStore<{ x: number; y: number }>("velocity");
+  const players = getComponentStore<{ speed: number; spawnX: number; spawnY: number }>("player");
+  const enemies = getComponentStore<{ speed: number; spawnX: number; spawnY: number }>("enemy");
   return attachRuntimeDebugger(world, engine, {
     playback,
     onWorldEdited: playback.onWorldEdited,
@@ -90,23 +89,23 @@ export function attachDebugEditor(world: GameWorld, engine: EngineApplication, o
       return `${tag.slice(0, 1).toUpperCase()}${tag.slice(1)}_${entity}`;
     },
     components: [
-      createStoreInspector({
+      createStoreInspector<"left" | "right">({
         id: "facing",
         title: "Facing",
         store: facings,
         fields(value) {
-          return [{ label: "Value", value }];
+          return [{ label: "Value", value: String(value) }];
         },
       }),
-      createStoreInspector({
+      createStoreInspector<"idle" | "walk">({
         id: "actor-state",
         title: "Actor State",
         store: actorStates,
         fields(value) {
-          return [{ label: "Value", value }];
+          return [{ label: "Value", value: String(value) }];
         },
       }),
-      createStoreInspector({
+      createStoreInspector<{ x: number; y: number }>({
         id: "velocity",
         title: "Velocity",
         store: velocities,
@@ -123,7 +122,7 @@ export function attachDebugEditor(world: GameWorld, engine: EngineApplication, o
           if (key === "y") value.y = numeric;
         },
       }),
-      createStoreInspector({
+      createStoreInspector<{ speed: number; spawnX: number; spawnY: number }>({
         id: "player",
         title: "Player",
         store: players,
@@ -142,7 +141,7 @@ export function attachDebugEditor(world: GameWorld, engine: EngineApplication, o
           if (key === "spawnY") value.spawnY = numeric;
         },
       }),
-      createStoreInspector({
+      createStoreInspector<{ speed: number; spawnX: number; spawnY: number }>({
         id: "enemy",
         title: "Enemy",
         store: enemies,

@@ -1,17 +1,20 @@
 import { captureWorldSnapshot, restoreWorldSnapshot } from "@engine/debugger";
-import { createPhysics } from "@engine/physics";
-import { createEngineApplication } from "@engine/renderer";
-import { GameWorld } from "./app";
-import { attachDebugEditor } from "./debug/editor";
 import {
+  initializeDemoRuntime,
   fetchContentTree,
   loadWorldDefinition,
   materializeWorld,
   parseDemoWorldData,
+  type ComponentDefinition,
+  registerComponentDefinition,
   saveWorldDefinition,
   serializeWorld,
   type DemoWorldData,
-} from "./content/worlds";
+} from "@engine/runtime";
+import { createPhysics } from "@engine/physics";
+import { createEngineApplication } from "@engine/renderer";
+import { GameWorld } from "./app";
+import { attachDebugEditor } from "./debug/editor";
 import { bootstrapDemoSystems } from "./content/systems";
 
 const shell = document.createElement("main");
@@ -36,6 +39,7 @@ async function mountGame(startPlaying: boolean, worldName = "worlds/world-01", w
   const [worldData, contentTree] = await Promise.all([
     worldOverride ?? loadWorldDefinition(worldName),
     fetchContentTree(),
+    initializeDemoRuntime(),
   ]);
   if (worldOverride) saveWorldDefinition(worldName, worldOverride);
   await materializeWorld(gameWorld, worldData);
@@ -98,12 +102,14 @@ async function mountGame(startPlaying: boolean, worldName = "worlds/world-01", w
     },
     async onCreateComponent(path) {
       const componentName = path.split("/").filter(Boolean).at(-1) ?? "component";
-      await saveContentJson(path, {
+      const definition: ComponentDefinition = {
         version: 1,
         id: componentName,
         label: toTitleCase(componentName),
         defaultValue: {},
-      });
+      };
+      await saveContentJson(path, definition);
+      registerComponentDefinition(definition);
       await mountGame(false, worldName);
     },
     initialContentDrawerOpen: contentDrawerOpen,

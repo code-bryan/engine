@@ -1,12 +1,11 @@
 import { transforms } from "@engine/renderer";
+import { getComponentStore } from "@engine/runtime";
 import type { GameWorld } from "../../app";
-import { getComponentStore } from "../../runtimes/components";
-
-const enemies = getComponentStore<{ speed: number; spawnX: number; spawnY: number }>("enemy");
-const players = getComponentStore<{ speed: number; spawnX: number; spawnY: number }>("player");
-const velocities = getComponentStore<{ x: number; y: number }>("velocity");
 
 export function createEnemyFollowSystem(world: GameWorld) {
+  const enemies = getComponentStore<{ speed: number; spawnX: number; spawnY: number }>("enemy");
+  const players = getComponentStore<{ speed: number; spawnX: number; spawnY: number }>("player");
+  const velocities = getComponentStore<{ x: number; y: number }>("velocity");
   return () => {
     const playerEntity = players.keys().next().value;
     if (playerEntity === undefined) return;

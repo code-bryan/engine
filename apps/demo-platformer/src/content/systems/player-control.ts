@@ -1,11 +1,10 @@
 import { keyboard } from "@engine/input";
+import { getComponentStore } from "@engine/runtime";
 import type { GameWorld } from "../../app";
-import { getComponentStore } from "../../runtimes/components";
-
-const players = getComponentStore<{ speed: number; spawnX: number; spawnY: number }>("player");
-const velocities = getComponentStore<{ x: number; y: number }>("velocity");
 
 export function createPlayerControlSystem(world: GameWorld) {
+  const players = getComponentStore<{ speed: number; spawnX: number; spawnY: number }>("player");
+  const velocities = getComponentStore<{ x: number; y: number }>("velocity");
   return () => {
     const keys = keyboard.get(0)?.keys;
     if (!keys) return;

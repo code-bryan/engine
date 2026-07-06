@@ -9,7 +9,7 @@ import {
   type SpriteAnimationClip,
   type TransformScale,
 } from "@engine/renderer";
-import type { GameWorld } from "../app";
+import type { DemoGameWorld } from "./types";
 
 export type PrefabTransform = {
   x?: number;
@@ -71,7 +71,7 @@ type ResolvedPrefabTransform = {
 const prefabCache = new Map<string, Promise<PrefabDefinition | null>>();
 const spriteSheetCache = new Map<string, Promise<Awaited<ReturnType<typeof loadSpriteSheet>>>>();
 
-export async function instantiatePrefab(world: GameWorld, placement: PrefabPlacement) {
+export async function instantiatePrefab(world: DemoGameWorld, placement: PrefabPlacement) {
   const definition = await loadPrefabDefinition(placement.prefab);
   if (!definition) throw new Error(`prefab not found: ${placement.prefab}`);
 
@@ -116,7 +116,7 @@ function resolveTransform(definition: PrefabDefinition, placement: PrefabPlaceme
 }
 
 async function applyPrefabComponent(
-  world: GameWorld,
+  world: DemoGameWorld,
   entity: Entity,
   entry: PrefabComponentDefinition,
   registry: Map<string, Map<Entity, unknown>>,
