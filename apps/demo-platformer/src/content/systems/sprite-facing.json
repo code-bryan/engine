@@ -1,21 +1,156 @@
 {
-  "version": 1,
+  "version": 3,
   "name": "sprite-facing",
-  "entrypoint": "onUpdate",
+  "entrypoint": "1757159b-b19d-4523-8b36-decc9c41f3b1",
+  "variables": [],
   "nodes": [
-    { "id": "onUpdate", "type": "OnUpdate", "position": { "x": 120, "y": 80 } },
-    { "id": "forEachVelocity", "type": "ForEachComponent", "position": { "x": 280, "y": 80 }, "data": { "component": "velocity" } },
-    { "id": "readVelocity", "type": "ReadComponent", "position": { "x": 460, "y": 80 }, "data": { "component": "velocity", "as": "velocity" } },
-    { "id": "selectFacing", "type": "SelectFacingFromVelocity", "position": { "x": 640, "y": 80 }, "data": { "from": "velocity", "as": "facing", "left": "left", "right": "right" } },
-    { "id": "storeFacing", "type": "SetComponent", "position": { "x": 820, "y": 80 }, "data": { "component": "facing", "from": "facing" } },
-    { "id": "flipScale", "type": "SetTransformScaleFromFacing", "position": { "x": 1000, "y": 80 }, "data": { "facingFrom": "facing", "left": "left", "right": "right" } }
+    {
+      "id": "1757159b-b19d-4523-8b36-decc9c41f3b1",
+      "type": "OnUpdate",
+      "position": {
+        "x": 120,
+        "y": 80
+      }
+    },
+    {
+      "id": "55a317a1-af97-416a-abbf-4b21547def75",
+      "type": "ForEachEntityWithComponent",
+      "position": {
+        "x": 510,
+        "y": 181
+      },
+      "data": {
+        "component": "velocity"
+      }
+    },
+    {
+      "id": "bfe34634-e9dd-4cc1-9b77-6cba545441b3",
+      "type": "GetComponent",
+      "position": {
+        "x": 838,
+        "y": 209
+      },
+      "data": {
+        "component": "velocity"
+      }
+    },
+    {
+      "id": "57a0580a-3017-46bd-a026-e0895846e71b",
+      "type": "ChooseFacingFromVelocity",
+      "position": {
+        "x": 1176,
+        "y": 213
+      },
+      "data": {
+        "left": "left",
+        "right": "right"
+      }
+    },
+    {
+      "id": "d5535b85-49ef-4a05-bb52-b73e92197ab7",
+      "type": "SetComponent",
+      "position": {
+        "x": 1505,
+        "y": 348
+      },
+      "data": {
+        "component": "facing"
+      }
+    },
+    {
+      "id": "4980a99e-703c-4a5a-8e15-b354d2cead42",
+      "type": "FlipSpriteFacing",
+      "position": {
+        "x": 1880,
+        "y": 201
+      },
+      "data": {
+        "left": "left",
+        "right": "right"
+      }
+    }
   ],
   "edges": [
-    { "from": { "node": "onUpdate", "port": "flow" }, "to": { "node": "forEachVelocity", "port": "flow" } },
-    { "from": { "node": "forEachVelocity", "port": "flow" }, "to": { "node": "readVelocity", "port": "flow" } },
-    { "from": { "node": "readVelocity", "port": "flow" }, "to": { "node": "selectFacing", "port": "flow" } },
-    { "from": { "node": "selectFacing", "port": "flow" }, "to": { "node": "storeFacing", "port": "flow" } },
-    { "from": { "node": "storeFacing", "port": "flow" }, "to": { "node": "flipScale", "port": "flow" } }
+    {
+      "from": {
+        "node": "1757159b-b19d-4523-8b36-decc9c41f3b1",
+        "port": "flow"
+      },
+      "to": {
+        "node": "55a317a1-af97-416a-abbf-4b21547def75",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "55a317a1-af97-416a-abbf-4b21547def75",
+        "port": "flow"
+      },
+      "to": {
+        "node": "bfe34634-e9dd-4cc1-9b77-6cba545441b3",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "bfe34634-e9dd-4cc1-9b77-6cba545441b3",
+        "port": "value"
+      },
+      "to": {
+        "node": "57a0580a-3017-46bd-a026-e0895846e71b",
+        "port": "velocity"
+      }
+    },
+    {
+      "from": {
+        "node": "bfe34634-e9dd-4cc1-9b77-6cba545441b3",
+        "port": "flow"
+      },
+      "to": {
+        "node": "57a0580a-3017-46bd-a026-e0895846e71b",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "57a0580a-3017-46bd-a026-e0895846e71b",
+        "port": "facing"
+      },
+      "to": {
+        "node": "d5535b85-49ef-4a05-bb52-b73e92197ab7",
+        "port": "value"
+      }
+    },
+    {
+      "from": {
+        "node": "57a0580a-3017-46bd-a026-e0895846e71b",
+        "port": "facing"
+      },
+      "to": {
+        "node": "4980a99e-703c-4a5a-8e15-b354d2cead42",
+        "port": "facing"
+      }
+    },
+    {
+      "from": {
+        "node": "57a0580a-3017-46bd-a026-e0895846e71b",
+        "port": "flow"
+      },
+      "to": {
+        "node": "d5535b85-49ef-4a05-bb52-b73e92197ab7",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "d5535b85-49ef-4a05-bb52-b73e92197ab7",
+        "port": "flow"
+      },
+      "to": {
+        "node": "4980a99e-703c-4a5a-8e15-b354d2cead42",
+        "port": "flow"
+      }
+    }
   ],
   "metadata": {
     "order": 40,

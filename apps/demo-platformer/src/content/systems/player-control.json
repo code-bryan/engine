@@ -1,34 +1,156 @@
 {
-  "version": 1,
+  "version": 3,
   "name": "player-control",
-  "entrypoint": "onUpdate",
-  "nodes": [
-    { "id": "onUpdate", "type": "OnUpdate", "position": { "x": 120, "y": 80 } },
-    { "id": "forEachPlayer", "type": "ForEachTag", "position": { "x": 280, "y": 80 }, "data": { "tag": "player" } },
+  "entrypoint": "1fd28581-ff3c-4200-85de-06ac8e8ba043",
+  "variables": [
     {
-      "id": "readInput",
-      "type": "ReadInputAxes",
-      "position": { "x": 460, "y": 80 },
-      "data": {
-        "as": "axes",
-        "positiveX": ["ArrowRight", "KeyD"],
-        "negativeX": ["ArrowLeft", "KeyA"],
-        "positiveY": ["ArrowDown", "KeyS"],
-        "negativeY": ["ArrowUp", "KeyW"]
+      "name": "enabled",
+      "scope": "public",
+      "type": "boolean",
+      "default": true
+    }
+  ],
+  "nodes": [
+    {
+      "id": "1fd28581-ff3c-4200-85de-06ac8e8ba043",
+      "type": "OnUpdate",
+      "position": {
+        "x": 120,
+        "y": 80
       }
     },
-    { "id": "readSpeed", "type": "ReadComponent", "position": { "x": 640, "y": 80 }, "data": { "component": "player", "field": "speed", "as": "speed" } },
-    { "id": "buildVelocity", "type": "BuildVelocity", "position": { "x": 840, "y": 80 }, "data": { "axesFrom": "axes", "speedFrom": "speed", "as": "velocity" } },
-    { "id": "setVelocity", "type": "SetComponent", "position": { "x": 1040, "y": 80 }, "data": { "component": "velocity", "from": "velocity" } },
-    { "id": "syncVelocity", "type": "SetPhysicsVelocity", "position": { "x": 1240, "y": 80 }, "data": { "from": "velocity" } }
+    {
+      "id": "4ba918c4-b440-43ab-ada1-b0206fc5bd78",
+      "type": "ForEachEntityWithTag",
+      "position": {
+        "x": 445,
+        "y": 58
+      },
+      "data": {
+        "tag": "player"
+      }
+    },
+    {
+      "id": "7c10fdd9-7e30-4ab3-94f5-d38b9e2b1a74",
+      "type": "ReadInput",
+      "position": {
+        "x": 794,
+        "y": 119
+      }
+    },
+    {
+      "id": "2a762780-1476-45eb-abc5-111e4866d13b",
+      "type": "GetComponent",
+      "position": {
+        "x": 1164,
+        "y": 263
+      },
+      "data": {
+        "component": "player",
+        "field": "speed"
+      }
+    },
+    {
+      "id": "0381665f-72ef-4e3d-94fd-18fc07942e8d",
+      "type": "ScaleVector",
+      "position": {
+        "x": 1576,
+        "y": 104
+      }
+    },
+    {
+      "id": "d77ab043-1bf8-43b0-8772-6a566f4a32bc",
+      "type": "SetComponent",
+      "position": {
+        "x": 1922,
+        "y": 182
+      },
+      "data": {
+        "component": "velocity"
+      }
+    }
   ],
   "edges": [
-    { "from": { "node": "onUpdate", "port": "flow" }, "to": { "node": "forEachPlayer", "port": "flow" } },
-    { "from": { "node": "forEachPlayer", "port": "flow" }, "to": { "node": "readInput", "port": "flow" } },
-    { "from": { "node": "readInput", "port": "flow" }, "to": { "node": "readSpeed", "port": "flow" } },
-    { "from": { "node": "readSpeed", "port": "flow" }, "to": { "node": "buildVelocity", "port": "flow" } },
-    { "from": { "node": "buildVelocity", "port": "flow" }, "to": { "node": "setVelocity", "port": "flow" } },
-    { "from": { "node": "setVelocity", "port": "flow" }, "to": { "node": "syncVelocity", "port": "flow" } }
+    {
+      "from": {
+        "node": "1fd28581-ff3c-4200-85de-06ac8e8ba043",
+        "port": "flow"
+      },
+      "to": {
+        "node": "4ba918c4-b440-43ab-ada1-b0206fc5bd78",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "4ba918c4-b440-43ab-ada1-b0206fc5bd78",
+        "port": "flow"
+      },
+      "to": {
+        "node": "7c10fdd9-7e30-4ab3-94f5-d38b9e2b1a74",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "7c10fdd9-7e30-4ab3-94f5-d38b9e2b1a74",
+        "port": "flow"
+      },
+      "to": {
+        "node": "2a762780-1476-45eb-abc5-111e4866d13b",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "2a762780-1476-45eb-abc5-111e4866d13b",
+        "port": "flow"
+      },
+      "to": {
+        "node": "0381665f-72ef-4e3d-94fd-18fc07942e8d",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "0381665f-72ef-4e3d-94fd-18fc07942e8d",
+        "port": "flow"
+      },
+      "to": {
+        "node": "d77ab043-1bf8-43b0-8772-6a566f4a32bc",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "7c10fdd9-7e30-4ab3-94f5-d38b9e2b1a74",
+        "port": "vector"
+      },
+      "to": {
+        "node": "0381665f-72ef-4e3d-94fd-18fc07942e8d",
+        "port": "vector"
+      }
+    },
+    {
+      "from": {
+        "node": "2a762780-1476-45eb-abc5-111e4866d13b",
+        "port": "value"
+      },
+      "to": {
+        "node": "0381665f-72ef-4e3d-94fd-18fc07942e8d",
+        "port": "scale"
+      }
+    },
+    {
+      "from": {
+        "node": "0381665f-72ef-4e3d-94fd-18fc07942e8d",
+        "port": "vector"
+      },
+      "to": {
+        "node": "d77ab043-1bf8-43b0-8772-6a566f4a32bc",
+        "port": "value"
+      }
+    }
   ],
   "metadata": {
     "order": 10,

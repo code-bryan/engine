@@ -1,21 +1,161 @@
 {
-  "version": 1,
+  "version": 3,
   "name": "actor-state",
-  "entrypoint": "onUpdate",
+  "entrypoint": "6f8946e6-bd1b-4d12-a112-b0d3178ffd69",
+  "variables": [],
   "nodes": [
-    { "id": "onUpdate", "type": "OnUpdate", "position": { "x": 120, "y": 80 } },
-    { "id": "forEachPlayer", "type": "ForEachTag", "position": { "x": 280, "y": 80 }, "data": { "tag": "player" } },
-    { "id": "readVelocity", "type": "ReadComponent", "position": { "x": 460, "y": 80 }, "data": { "component": "velocity", "as": "velocity" } },
-    { "id": "selectState", "type": "SelectStateFromVelocity", "position": { "x": 640, "y": 80 }, "data": { "from": "velocity", "as": "state", "idle": "idle", "moving": "walk" } },
-    { "id": "storeState", "type": "SetComponent", "position": { "x": 820, "y": 80 }, "data": { "component": "actor-state", "from": "state" } },
-    { "id": "setAnimation", "type": "SetAnimationState", "position": { "x": 1000, "y": 80 }, "data": { "from": "state" } }
+    {
+      "id": "6f8946e6-bd1b-4d12-a112-b0d3178ffd69",
+      "type": "OnUpdate",
+      "position": {
+        "x": -299,
+        "y": 33
+      }
+    },
+    {
+      "id": "dcb57f41-644f-483b-8213-e513dff48ea4",
+      "type": "ForEachEntityWithTag",
+      "position": {
+        "x": 93,
+        "y": 104
+      },
+      "data": {
+        "tag": "player"
+      }
+    },
+    {
+      "id": "4865a1d7-6b49-4a2a-970c-9165fb24e05d",
+      "type": "GetComponent",
+      "position": {
+        "x": 464,
+        "y": 140
+      },
+      "data": {
+        "component": "velocity"
+      }
+    },
+    {
+      "id": "1b6b5aa0-115e-4f27-afa5-e6c6fe99e18f",
+      "type": "IsMoving",
+      "position": {
+        "x": 813,
+        "y": 130
+      }
+    },
+    {
+      "id": "2e8d3d69-8f10-4d1c-8df4-4c1d6b3f0a11",
+      "type": "If",
+      "position": {
+        "x": 1139,
+        "y": 131
+      }
+    },
+    {
+      "id": "3a1a9b44-c430-4612-9d94-861146341175",
+      "type": "SetComponent",
+      "position": {
+        "x": 1534,
+        "y": 37
+      },
+      "data": {
+        "component": "actor-state",
+        "value": "walk"
+      }
+    },
+    {
+      "id": "8fc624ca-3b60-4341-935b-e25608b202c5",
+      "type": "SetComponent",
+      "position": {
+        "x": 1524,
+        "y": 274
+      },
+      "data": {
+        "component": "actor-state",
+        "value": "idle"
+      }
+    }
   ],
   "edges": [
-    { "from": { "node": "onUpdate", "port": "flow" }, "to": { "node": "forEachPlayer", "port": "flow" } },
-    { "from": { "node": "forEachPlayer", "port": "flow" }, "to": { "node": "readVelocity", "port": "flow" } },
-    { "from": { "node": "readVelocity", "port": "flow" }, "to": { "node": "selectState", "port": "flow" } },
-    { "from": { "node": "selectState", "port": "flow" }, "to": { "node": "storeState", "port": "flow" } },
-    { "from": { "node": "storeState", "port": "flow" }, "to": { "node": "setAnimation", "port": "flow" } }
+    {
+      "from": {
+        "node": "6f8946e6-bd1b-4d12-a112-b0d3178ffd69",
+        "port": "flow"
+      },
+      "to": {
+        "node": "dcb57f41-644f-483b-8213-e513dff48ea4",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "dcb57f41-644f-483b-8213-e513dff48ea4",
+        "port": "flow"
+      },
+      "to": {
+        "node": "4865a1d7-6b49-4a2a-970c-9165fb24e05d",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "4865a1d7-6b49-4a2a-970c-9165fb24e05d",
+        "port": "value"
+      },
+      "to": {
+        "node": "1b6b5aa0-115e-4f27-afa5-e6c6fe99e18f",
+        "port": "velocity"
+      }
+    },
+    {
+      "from": {
+        "node": "4865a1d7-6b49-4a2a-970c-9165fb24e05d",
+        "port": "flow"
+      },
+      "to": {
+        "node": "1b6b5aa0-115e-4f27-afa5-e6c6fe99e18f",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "1b6b5aa0-115e-4f27-afa5-e6c6fe99e18f",
+        "port": "condition"
+      },
+      "to": {
+        "node": "2e8d3d69-8f10-4d1c-8df4-4c1d6b3f0a11",
+        "port": "condition"
+      }
+    },
+    {
+      "from": {
+        "node": "1b6b5aa0-115e-4f27-afa5-e6c6fe99e18f",
+        "port": "flow"
+      },
+      "to": {
+        "node": "2e8d3d69-8f10-4d1c-8df4-4c1d6b3f0a11",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "2e8d3d69-8f10-4d1c-8df4-4c1d6b3f0a11",
+        "port": "then"
+      },
+      "to": {
+        "node": "3a1a9b44-c430-4612-9d94-861146341175",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "2e8d3d69-8f10-4d1c-8df4-4c1d6b3f0a11",
+        "port": "else"
+      },
+      "to": {
+        "node": "8fc624ca-3b60-4341-935b-e25608b202c5",
+        "port": "flow"
+      }
+    }
   ],
   "metadata": {
     "order": 30,

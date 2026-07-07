@@ -226,10 +226,6 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
           state.lockTarget = state.lockTarget !== undefined ? undefined : state.selectedEntity;
           refresh();
         },
-        toggleWorldSystem(name) {
-          options.onToggleWorldSystem?.(name);
-          refresh();
-        },
         setToolMode(mode) {
           state.toolMode = mode;
           refresh();

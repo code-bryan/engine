@@ -13,13 +13,25 @@
         "x": 0,
         "y": 80,
         "rotation": 0,
-        "scale": 1
+        "scale": {
+          "x": 1,
+          "y": 1
+        }
       },
       "components": {
+        "actor-state": {
+          "x": 0,
+          "y": 0
+        },
+        "facing": "right",
         "player": {
           "speed": 96,
           "spawnX": 32,
           "spawnY": 64
+        },
+        "velocity": {
+          "x": 0,
+          "y": 0
         }
       }
     },
@@ -29,13 +41,22 @@
         "x": 304,
         "y": 80,
         "rotation": 0,
-        "scale": 1
+        "scale": {
+          "x": 1,
+          "y": 1
+        }
       },
       "components": {
+        "actor-state": "idle",
         "enemy": {
           "speed": 42,
           "spawnX": 220,
           "spawnY": 64
+        },
+        "facing": "left",
+        "velocity": {
+          "x": 0,
+          "y": 0
         }
       }
     }

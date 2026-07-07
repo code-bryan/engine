@@ -22,9 +22,12 @@ import {
   StepForward,
   RefreshCw,
   Search,
+  Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { createPortal } from "react-dom";
+import { useEffect, useLayoutEffect, useRef, useState, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction } from "react";
+import { GRAPH_NODE_LIBRARY, type GraphDefinition, type GraphNodeDefinition, type GraphNodeSpec, type GraphVariableDefinition } from "@engine/runtime";
 import type { ContentTreeNode, EditorToolMode } from "../shared/types";
 
 export type DebuggerStatusCardView = {
@@ -116,7 +119,6 @@ export type DebuggerUiProps = {
   onSaveSnapshot: () => void;
   onRestoreSnapshot: (index: number) => void;
   onToggleSystem: (index: number) => void;
-  onToggleWorldSystem?: (name: string) => void;
   onToggleLogFilter: (cat: string) => void;
   onToggleLogPause: () => void;
   onOpenLevel?: () => void;
@@ -356,7 +358,6 @@ function ContentBrowser(props: {
   tree: ContentTreeNode[];
   activeWorld?: string;
   activeSystems?: string[];
-  onToggleWorldSystem?: (name: string) => void;
   onLoadWorld: (name: string) => void;
   onCreateFolder?: (path: string) => void;
   onCreateWorld: (path: string) => void;
@@ -501,32 +502,6 @@ function ContentBrowser(props: {
           onChange={(event) => setSearch(event.target.value)}
         />
       </div>
-      <div className="debugger-content-systems-header">
-        <div className="debugger-section__title" style={{ marginBottom: 0 }}>World Systems</div>
-        <span className="debugger-content-browser__hint">{props.activeSystems?.length ?? 0} loaded</span>
-      </div>
-      <div className="debugger-content-systems">
-        {(props.activeSystems ?? []).length === 0 ? (
-          <div className="debugger-content-empty">no systems loaded</div>
-        ) : (props.activeSystems ?? []).map((name) => (
-          <div className="debugger-content-system-row" key={name}>
-            <button className="debugger-content-system" onClick={() => setOpenGraphName(name)}>
-              <span className="debugger-content-system__name">{name}</span>
-              <span className="debugger-pill is-active">loaded</span>
-            </button>
-            {props.onToggleWorldSystem && (
-              <button
-                className="debugger-content-system__toggle"
-                onClick={() => props.onToggleWorldSystem?.(name)}
-                title="Remove from world"
-                aria-label={`Remove ${name} from world`}
-              >
-                <X size={12} strokeWidth={2.4} />
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
       {createKind && (
         <div className="debugger-content-create">
           <input
@@ -581,22 +556,6 @@ function ContentBrowser(props: {
                   : `${currentChildren.length} item${currentChildren.length === 1 ? "" : "s"}`}
             </span>
           </div>
-          {selectedFolderPath === "systems" && props.onToggleWorldSystem && (
-            <div className="debugger-content-systems">
-              {currentChildren.filter((node) => node.kind === "graph").map((node) => (
-                <button
-                  key={node.path}
-                  className={`debugger-content-system${activeSystems.has(node.name) ? " is-active" : ""}`}
-                  onClick={() => props.onToggleWorldSystem?.(node.name)}
-                >
-                  <span className="debugger-content-system__name">{node.name}</span>
-                  <span className={`debugger-pill${activeSystems.has(node.name) ? " is-active" : ""}`}>
-                    {activeSystems.has(node.name) ? "loaded" : "disabled"}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
           <div className="debugger-content-list">
             {filteredChildren.length === 0 ? (
               <div className="debugger-content-empty">{search.trim() ? "no matches" : "empty folder"}</div>
@@ -620,30 +579,28 @@ function ContentBrowser(props: {
                 <span className="debugger-content-item__name">{node.name}</span>
                 <span className="debugger-content-item__path">{node.path || "root"}</span>
                 {node.kind === "graph" ? (
-                  <button
-                    className={`debugger-content-item__action${activeSystems.has(node.name) ? " is-active" : ""}`}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      props.onToggleWorldSystem?.(node.name);
-                    }}
-                    title={activeSystems.has(node.name) ? "Remove from world" : "Add to world"}
-                    aria-label={activeSystems.has(node.name) ? `Remove ${node.name}` : `Add ${node.name}`}
-                  >
+                  <span className={`debugger-pill${activeSystems.has(node.name) ? " is-active" : ""}`}>
                     {activeSystems.has(node.name) ? "loaded" : "available"}
-                  </button>
+                  </span>
                 ) : node.kind !== "folder" ? <span className="debugger-pill">{node.kind}</span> : null}
               </button>
             ))}
           </div>
         </section>
       </div>
-      {openGraphName && (
+      {openGraphName && createPortal(
         <GraphDialog
           graph={openGraph}
           loading={openGraphLoading}
           error={openGraphError}
           onClose={() => setOpenGraphName(undefined)}
-        />
+          onChange={(nextGraph) => setOpenGraph(nextGraph)}
+          onSave={(nextGraph) => {
+            setOpenGraph(nextGraph);
+            void saveGraphAsset(nextGraph);
+          }}
+        />,
+        document.body,
       )}
     </section>
   );
@@ -805,25 +762,7 @@ function findContentFolder(nodes: ContentTreeNode[], targetPath: string): Conten
   return undefined;
 }
 
-type GraphAsset = {
-  version: 1;
-  name: string;
-  entrypoint: string;
-  nodes: Array<{
-    id: string;
-    type: string;
-    position: { x: number; y: number };
-    data?: Record<string, unknown>;
-  }>;
-  edges: Array<{
-    from: { node: string; port: string };
-    to: { node: string; port: string };
-  }>;
-  metadata?: {
-    order?: number;
-    description?: string;
-  };
-};
+type GraphAsset = GraphDefinition;
 
 async function fetchGraphAsset(name: string): Promise<GraphAsset | null> {
   const response = await fetch(`/api/content/file?path=${encodeURIComponent(`systems/${name}`)}`);
@@ -832,18 +771,40 @@ async function fetchGraphAsset(name: string): Promise<GraphAsset | null> {
   return parseGraphAsset(raw);
 }
 
+async function saveGraphAsset(graph: GraphAsset): Promise<void> {
+  await fetch(`/api/content/file?path=${encodeURIComponent(`systems/${graph.name}`)}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(graph, null, 2),
+  });
+}
+
 function parseGraphAsset(value: unknown): GraphAsset | null {
   if (!value || typeof value !== "object") return null;
-  const parsed = value as Partial<GraphAsset>;
-  if (parsed.version !== 1 || typeof parsed.name !== "string" || typeof parsed.entrypoint !== "string" || !Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
+  const parsed = value as {
+    version?: unknown;
+    name?: unknown;
+    entrypoint?: unknown;
+    variables?: unknown;
+    nodes?: unknown;
+    edges?: unknown;
+    metadata?: unknown;
+  };
+  if (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3) return null;
+  if (typeof parsed.name !== "string" || typeof parsed.entrypoint !== "string" || !Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
     return null;
   }
-  const nodes = parsed.nodes.filter(isGraphNode);
+  const version = parsed.version;
+  const nodes = version === 1 ? parsed.nodes.filter(isLegacyGraphNode) : parsed.nodes.filter(isGraphNode);
   const edges = parsed.edges.filter(isGraphEdge);
+  const variables = version === 1 ? [] : Array.isArray(parsed.variables) ? parsed.variables.filter(isGraphVariable) : [];
   return {
-    version: 1,
+    version: 3,
     name: parsed.name,
     entrypoint: parsed.entrypoint,
+    variables,
     nodes,
     edges,
     metadata: typeof parsed.metadata === "object" && parsed.metadata !== null ? parsed.metadata as GraphAsset["metadata"] : undefined,
@@ -854,11 +815,34 @@ function isGraphNode(value: unknown): value is GraphAsset["nodes"][number] {
   if (!value || typeof value !== "object") return false;
   const node = value as Partial<GraphAsset["nodes"][number]>;
   return typeof node.id === "string"
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(node.id)
     && typeof node.type === "string"
     && typeof node.position === "object"
     && node.position !== null
     && typeof (node.position as { x?: unknown }).x === "number"
     && typeof (node.position as { y?: unknown }).y === "number";
+}
+
+function isLegacyGraphNode(value: unknown): value is GraphAsset["nodes"][number] {
+  if (!value || typeof value !== "object") return false;
+  const node = value as Partial<GraphAsset["nodes"][number]>;
+  return typeof node.id === "string"
+    && typeof node.type === "string"
+    && typeof node.position === "object"
+    && node.position !== null
+    && typeof (node.position as { x?: unknown }).x === "number"
+    && typeof (node.position as { y?: unknown }).y === "number";
+}
+
+function isGraphVariable(value: unknown): value is GraphVariableDefinition {
+  if (!value || typeof value !== "object") return false;
+  const variable = value as Partial<GraphVariableDefinition> & { default?: unknown };
+  return typeof variable.name === "string"
+    && variable.name.trim() !== ""
+    && (variable.scope === "private" || variable.scope === "public")
+    && typeof variable.type === "string"
+    && variable.type.trim() !== ""
+    && Object.prototype.hasOwnProperty.call(variable, "default");
 }
 
 function isGraphEdge(value: unknown): value is GraphAsset["edges"][number] {
@@ -879,10 +863,190 @@ function GraphDialog(props: {
   loading: boolean;
   error?: string;
   onClose: () => void;
+  onChange: (graph: GraphAsset) => void;
+  onSave: (graph: GraphAsset) => void;
 }) {
-  const graph = props.graph;
-  const bounds = graph ? computeGraphBounds(graph) : { x: 0, y: 0, width: 960, height: 540 };
+  const [graph, setGraph] = useState<GraphAsset | null>(props.graph);
+  const graphRef = useRef<GraphAsset | null>(props.graph);
+  const [bounds, setBounds] = useState(() => props.graph ? computeGraphBounds(props.graph) : { x: 0, y: 0, width: 960, height: 540 });
+  const canvasRef = useRef<HTMLDivElement | null>(null);
+  const portRefs = useRef(new Map<string, HTMLSpanElement>());
+  const [portPoints, setPortPoints] = useState<Record<string, { x: number; y: number }>>({});
+  const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>(props.graph?.entrypoint);
+  const [selectedEdgeKey, setSelectedEdgeKey] = useState<string | undefined>();
   const nodeMap = new Map(graph?.nodes.map((node) => [node.id, node]) ?? []);
+  const selectedNode = selectedNodeId ? graph?.nodes.find((node) => node.id === selectedNodeId) : undefined;
+  const selectedEdge = selectedEdgeKey && graph ? graph.edges.find((edge) => edgeKey(edge) === selectedEdgeKey) : undefined;
+  const dragState = useRef<{
+    nodeId: string;
+    pointerId: number;
+    sourceGraph: GraphAsset;
+    startX: number;
+    startY: number;
+  } | null>(null);
+
+  useEffect(() => {
+    setGraph(props.graph);
+    graphRef.current = props.graph;
+    setBounds(props.graph ? computeGraphBounds(props.graph) : { x: 0, y: 0, width: 960, height: 540 });
+    setSelectedNodeId(props.graph?.entrypoint);
+    setSelectedEdgeKey(undefined);
+  }, [props.graph]);
+
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current;
+    const currentGraph = graphRef.current;
+    if (!canvas || !currentGraph) return;
+
+    const measure = () => {
+      const canvasRect = canvas.getBoundingClientRect();
+      const next: Record<string, { x: number; y: number }> = {};
+      for (const [key, element] of portRefs.current) {
+        const rect = element.getBoundingClientRect();
+        next[key] = {
+          x: rect.left - canvasRect.left + rect.width / 2,
+          y: rect.top - canvasRect.top + rect.height / 2,
+        };
+      }
+      setPortPoints(next);
+    };
+
+    measure();
+    const raf = requestAnimationFrame(measure);
+    const resizeObserver = new ResizeObserver(measure);
+    resizeObserver.observe(canvas);
+    for (const element of portRefs.current.values()) resizeObserver.observe(element);
+    return () => {
+      cancelAnimationFrame(raf);
+      resizeObserver.disconnect();
+    };
+  }, [graph, bounds]);
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      const drag = dragState.current;
+      const currentGraph = graphRef.current;
+      if (!drag || !currentGraph || event.pointerId !== drag.pointerId) return;
+
+      const deltaX = event.clientX - drag.startX;
+      const deltaY = event.clientY - drag.startY;
+      const nextGraph = moveGraphNode(drag.sourceGraph, drag.nodeId, deltaX, deltaY);
+      graphRef.current = nextGraph;
+      setGraph(nextGraph);
+      props.onChange(nextGraph);
+    };
+
+    const finishDrag = (event: PointerEvent) => {
+      const drag = dragState.current;
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      dragState.current = null;
+      const currentGraph = graphRef.current;
+      if (currentGraph) props.onSave(currentGraph);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", finishDrag);
+    window.addEventListener("pointercancel", finishDrag);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", finishDrag);
+      window.removeEventListener("pointercancel", finishDrag);
+    };
+  }, [props.onChange, props.onSave]);
+
+  const beginDrag = (event: ReactPointerEvent<HTMLDivElement>, nodeId: string) => {
+    const currentGraph = graphRef.current;
+    if (!currentGraph) return;
+    setSelectedNodeId(nodeId);
+    dragState.current = {
+      nodeId,
+      pointerId: event.pointerId,
+      sourceGraph: currentGraph,
+      startX: event.clientX,
+      startY: event.clientY,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  };
+
+  const updateGraph = (nextGraph: GraphAsset) => {
+    graphRef.current = nextGraph;
+    setGraph(nextGraph);
+    props.onChange(nextGraph);
+  };
+
+  const deleteNode = (nodeId: string) => {
+    const currentGraph = graphRef.current;
+    if (!currentGraph) return;
+    const nextNodes = currentGraph.nodes.filter((node) => node.id !== nodeId);
+    const nextEdges = currentGraph.edges.filter((edge) => edge.from.node !== nodeId && edge.to.node !== nodeId);
+    const nextGraph = {
+      ...currentGraph,
+      nodes: nextNodes,
+      edges: nextEdges,
+      entrypoint: currentGraph.entrypoint === nodeId ? (nextNodes[0]?.id ?? currentGraph.entrypoint) : currentGraph.entrypoint,
+    };
+    updateGraph(nextGraph);
+    setSelectedNodeId((current) => {
+      if (current !== nodeId) return current;
+      return nextGraph.nodes.some((node) => node.id === nextGraph.entrypoint)
+        ? nextGraph.entrypoint
+        : nextGraph.nodes[0]?.id;
+    });
+    setSelectedEdgeKey(undefined);
+  };
+
+  const deleteEdge = (edgeId: string) => {
+    const currentGraph = graphRef.current;
+    if (!currentGraph) return;
+    const nextGraph = {
+      ...currentGraph,
+      edges: currentGraph.edges.filter((edge) => edgeKey(edge) !== edgeId),
+    };
+    updateGraph(nextGraph);
+    setSelectedEdgeKey((current) => (current === edgeId ? undefined : current));
+  };
+
+  const addNode = (spec: GraphNodeSpec) => {
+    const currentGraph = graphRef.current;
+    if (!currentGraph) return;
+    const node = createGraphNode(spec, {
+      x: bounds.x + 180 + currentGraph.nodes.length * 18,
+      y: bounds.y + 160 + currentGraph.nodes.length * 12,
+    });
+    const nextGraph = {
+      ...currentGraph,
+      nodes: [...currentGraph.nodes, node],
+    };
+    updateGraph(nextGraph);
+    setSelectedNodeId(node.id);
+  };
+
+  const updateNodeData = (nodeId: string, field: string, nextValue: string, type: GraphNodeSpec["fields"][number]["type"]) => {
+    const currentGraph = graphRef.current;
+    if (!currentGraph) return;
+    const parsedValue = parseEditableValue(nextValue, type);
+    const nextGraph = {
+      ...currentGraph,
+      nodes: currentGraph.nodes.map((node) => node.id === nodeId
+        ? {
+            ...node,
+            data: {
+              ...(node.data ?? {}),
+              [field]: parsedValue,
+            },
+          }
+        : node),
+    };
+    updateGraph(nextGraph);
+  };
+
+  const updateVariable = (index: number, patch: Partial<GraphVariableDefinition>) => {
+    const currentGraph = graphRef.current;
+    if (!currentGraph) return;
+    const nextVariables = currentGraph.variables.map((variable, variableIndex) => variableIndex === index ? { ...variable, ...patch } : variable);
+    updateGraph({ ...currentGraph, variables: nextVariables });
+  };
 
   return (
     <div className="debugger-graph-dialog" role="dialog" aria-modal="true" onClick={props.onClose}>
@@ -901,65 +1065,359 @@ function GraphDialog(props: {
         {props.loading && <div className="debugger-content-empty">loading graph…</div>}
         {props.error && <div className="debugger-content-empty">{props.error}</div>}
         {graph && !props.loading && !props.error && (
-          <>
-            <div className="debugger-graph-meta">
-              <span>entrypoint: <strong>{graph.entrypoint}</strong></span>
-              <span>nodes: <strong>{graph.nodes.length}</strong></span>
-              <span>edges: <strong>{graph.edges.length}</strong></span>
-              <span>order: <strong>{graph.metadata?.order ?? "n/a"}</strong></span>
-            </div>
-            {graph.metadata?.description && <div className="debugger-graph-description">{graph.metadata.description}</div>}
-            <div className="debugger-graph-canvas__scroll">
-              <div className="debugger-graph-canvas" style={{ width: `${bounds.width}px`, height: `${bounds.height}px` }}>
-                <svg className="debugger-graph-canvas__edges" width={bounds.width} height={bounds.height} viewBox={`0 0 ${bounds.width} ${bounds.height}`}>
-                  {graph.edges.map((edge, index) => {
-                    const from = nodeMap.get(edge.from.node);
-                    const to = nodeMap.get(edge.to.node);
-                    if (!from || !to) return null;
-                    const fromPoint = getGraphNodeCenter(from, bounds);
-                    const toPoint = getGraphNodeCenter(to, bounds);
-                    const mid = (fromPoint.x + toPoint.x) / 2;
-                    const path = `M ${fromPoint.x} ${fromPoint.y} C ${mid} ${fromPoint.y}, ${mid} ${toPoint.y}, ${toPoint.x} ${toPoint.y}`;
-                    return <path key={`${edge.from.node}-${edge.to.node}-${index}`} d={path} />;
-                  })}
-                </svg>
-                {graph.nodes.map((node) => (
-                  <div
-                    key={node.id}
-                    className={`debugger-graph-node${node.id === graph.entrypoint ? " is-entrypoint" : ""}`}
-                    style={{
-                      left: `${node.position.x - bounds.x}px`,
-                      top: `${node.position.y - bounds.y}px`,
-                    }}
+          <div style={{ display: "grid", gridTemplateColumns: "260px minmax(0, 1fr) 320px", gap: 12, alignItems: "start" }}>
+            <aside className="debugger-panel" style={{ minHeight: 0 }}>
+              <div className="debugger-graph-side-title">Palette</div>
+              <div style={{ display: "grid", gap: 6 }}>
+                {GRAPH_NODE_LIBRARY.map((spec) => (
+                  <button
+                    key={spec.type}
+                    className="debugger-content-action"
+                    style={{ justifyContent: "space-between", width: "100%", padding: "8px 10px", display: "flex" }}
+                    onClick={() => addNode(spec)}
                   >
-                    <div className="debugger-graph-node__title">{node.id}</div>
-                    <div className="debugger-graph-node__type">{node.type}</div>
-                    {node.data && Object.keys(node.data).length > 0 && (
-                      <div className="debugger-graph-node__data">
-                        {Object.entries(node.data).map(([key, value]) => (
-                          <div key={key} className="debugger-graph-node__row">
-                            <span>{key}</span>
-                            <strong>{formatGraphValue(value)}</strong>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <span>{spec.label}</span>
+                    <span style={{ color: "#94a3b8" }}>{spec.type}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="debugger-graph-side-title" style={{ marginTop: 12 }}>Variables</div>
+              <div style={{ display: "grid", gap: 8 }}>
+                {graph.variables.length === 0 ? <div className="debugger-content-empty">no variables</div> : graph.variables.map((variable, index) => (
+                  <div key={`${variable.name}-${index}`} className="debugger-graph-variable">
+                    <input className="debugger-input" value={variable.name} onChange={(event) => updateVariable(index, { name: event.target.value })} />
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                      <select className="debugger-input" value={variable.scope} onChange={(event) => updateVariable(index, { scope: event.target.value as GraphVariableDefinition["scope"] })}>
+                        <option value="private">private</option>
+                        <option value="public">public</option>
+                      </select>
+                      <input className="debugger-input" value={variable.type} onChange={(event) => updateVariable(index, { type: event.target.value })} />
+                    </div>
+                    <textarea
+                      className="debugger-input"
+                      rows={3}
+                      value={formatJsonValue(variable.default)}
+                      onChange={(event) => updateVariable(index, { default: parseJsonInput(event.target.value, variable.default) })}
+                    />
                   </div>
                 ))}
               </div>
-            </div>
-          </>
+            </aside>
+            <section style={{ minWidth: 0 }}>
+              <div className="debugger-graph-meta">
+                <span>entrypoint: <strong>{graph.entrypoint}</strong></span>
+                <span>nodes: <strong>{graph.nodes.length}</strong></span>
+                <span>edges: <strong>{graph.edges.length}</strong></span>
+                <span>order: <strong>{graph.metadata?.order ?? "n/a"}</strong></span>
+              </div>
+              {typeof graph.metadata?.description === "string" && <div className="debugger-graph-description">{graph.metadata.description}</div>}
+              <div className="debugger-graph-canvas__scroll">
+                <div ref={canvasRef} className="debugger-graph-canvas" style={{ width: `${bounds.width}px`, height: `${bounds.height}px` }}>
+                  <svg className="debugger-graph-canvas__edges" width={bounds.width} height={bounds.height} viewBox={`0 0 ${bounds.width} ${bounds.height}`}>
+                    <defs>
+                      <marker id="graph-edge-end" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+                        <path d="M 0 0 L 9 4.5 L 0 9 z" fill="#93c5fd" />
+                      </marker>
+                      <marker id="graph-edge-start" markerWidth="12" markerHeight="12" refX="6" refY="6" orient="auto" markerUnits="strokeWidth">
+                        <circle cx="6" cy="6" r="3.4" fill="#38bdf8" />
+                      </marker>
+                      <marker id="graph-edge-terminal" markerWidth="12" markerHeight="12" refX="6" refY="6" orient="auto" markerUnits="strokeWidth">
+                        <circle cx="6" cy="6" r="4" fill="#e0f2fe" stroke="#0f172a" strokeWidth="1.5" />
+                      </marker>
+                    </defs>
+                    {graph.edges.map((edge, index) => {
+                      const from = nodeMap.get(edge.from.node);
+                      const to = nodeMap.get(edge.to.node);
+                      if (!from || !to) return null;
+                      const id = edgeKey(edge);
+                      const isSelected = selectedEdgeKey === id;
+                      const fromPoint = portPoints[`${edge.from.node}:output:${edge.from.port}`] ?? getGraphPortPoint(from, edge.from.port, "output", bounds);
+                      const toPoint = portPoints[`${edge.to.node}:input:${edge.to.port}`] ?? getGraphPortPoint(to, edge.to.port, "input", bounds);
+                      const mid = (fromPoint.x + toPoint.x) / 2;
+                      const path = `M ${fromPoint.x} ${fromPoint.y} C ${mid} ${fromPoint.y}, ${mid} ${toPoint.y}, ${toPoint.x} ${toPoint.y}`;
+                      return (
+                        <g key={`${edge.from.node}-${edge.to.node}-${index}`}>
+                          <path
+                            d={path}
+                            className={`debugger-graph-edge${isSelected ? " is-selected" : ""}`}
+                            markerEnd="url(#graph-edge-end)"
+                            markerStart="url(#graph-edge-start)"
+                            onClick={() => setSelectedEdgeKey(id)}
+                          />
+                          <circle cx={fromPoint.x} cy={fromPoint.y} r={4.5} className="debugger-graph-edge__start" />
+                          <circle cx={toPoint.x} cy={toPoint.y} r={5.5} className="debugger-graph-edge__end" />
+                          <text x={fromPoint.x + 8} y={fromPoint.y - 8} className="debugger-graph-edge-label debugger-graph-edge-label--from">out</text>
+                          <text x={toPoint.x - 8} y={toPoint.y + 14} className="debugger-graph-edge-label debugger-graph-edge-label--to">in</text>
+                        </g>
+                      );
+                    })}
+                  </svg>
+                  {graph.nodes.map((node) => {
+                    const spec = GRAPH_NODE_LIBRARY.find((entry) => entry.type === node.type);
+                    const isSelected = node.id === selectedNodeId;
+                    return (
+                      <div
+                        key={node.id}
+                        className={`debugger-graph-node${node.id === graph.entrypoint ? " is-entrypoint" : ""}${isSelected ? " is-selected" : ""}`}
+                        onPointerDown={(event) => beginDrag(event, node.id)}
+                        onClick={() => setSelectedNodeId(node.id)}
+                        style={{
+                          left: `${node.position.x - bounds.x}px`,
+                          top: `${node.position.y - bounds.y}px`,
+                        }}
+                      >
+                        <div className="debugger-graph-node__title-row">
+                          <div>
+                            <div className="debugger-graph-node__title">{spec?.label ?? node.type}</div>
+                            <div className="debugger-graph-node__type">{node.id}</div>
+                          </div>
+                          <button
+                            className="debugger-graph-node__delete"
+                            title="Delete node"
+                            aria-label="Delete node"
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              deleteNode(node.id);
+                            }}
+                          >
+                            <Trash2 size={11} strokeWidth={2.5} />
+                          </button>
+                        </div>
+                        <div className="debugger-graph-node__ports">
+                          <div className="debugger-graph-node__ports-col">
+                            {spec?.inputs.map((port) => (
+                              <span
+                                key={`${node.id}-in-${port.name}`}
+                                className="debugger-graph-port debugger-graph-port--input"
+                                data-port-direction="in"
+                                data-port-kind={port.kind}
+                              >
+                                <span
+                                  className="debugger-graph-port__anchor"
+                                  ref={(element) => {
+                                    const key = `${node.id}:input:${port.name}`;
+                                    if (element) portRefs.current.set(key, element);
+                                    else portRefs.current.delete(key);
+                                  }}
+                                >
+                                  {port.kind === "flow"
+                                    ? <ChevronRight size={10} strokeWidth={2.6} className="debugger-graph-port__icon" />
+                                    : null}
+                                </span>
+                                <span className="debugger-graph-port__label">{port.label ?? port.name}</span>
+                              </span>
+                            ))}
+                          </div>
+                          <div className="debugger-graph-node__ports-col debugger-graph-node__ports-col--right">
+                            {spec?.outputs.map((port) => (
+                              <span
+                                key={`${node.id}-out-${port.name}`}
+                                className="debugger-graph-port debugger-graph-port--output"
+                                data-port-direction="out"
+                                data-port-kind={port.kind}
+                              >
+                                <span className="debugger-graph-port__label">{port.label ?? port.name}</span>
+                                <span
+                                  className="debugger-graph-port__anchor"
+                                  ref={(element) => {
+                                    const key = `${node.id}:output:${port.name}`;
+                                    if (element) portRefs.current.set(key, element);
+                                    else portRefs.current.delete(key);
+                                  }}
+                                >
+                                  {port.kind === "flow"
+                                    ? <ChevronRight size={10} strokeWidth={2.6} className="debugger-graph-port__icon" />
+                                    : null}
+                                </span>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        {node.data && Object.keys(node.data).length > 0 && (
+                          <div className="debugger-graph-node__data">
+                            {Object.entries(node.data).map(([key, value]) => (
+                              <div key={key} className="debugger-graph-node__row">
+                                <span>{key}</span>
+                                <strong>{formatGraphValue(value)}</strong>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+            <aside className="debugger-panel" style={{ minHeight: 0 }}>
+              <div className="debugger-graph-side-title">Inspector</div>
+              <div className="debugger-graph-meta" style={{ marginTop: 0 }}>
+                <span>selected: <strong>{selectedNode?.id ?? "none"}</strong></span>
+                <span>version: <strong>{graph.version}</strong></span>
+              </div>
+              {selectedNode ? (
+                <>
+                  <div className="debugger-graph-description" style={{ marginBottom: 8 }}>{selectedNode.type}</div>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <div className="debugger-field"><span>UUID</span><strong>{selectedNode.id}</strong></div>
+                    {GRAPH_NODE_LIBRARY.find((spec) => spec.type === selectedNode.type)?.fields.map((field) => (
+                      <label key={field.name} className="debugger-field debugger-field--editable">
+                        <span>{field.label}</span>
+                        <input
+                          className="debugger-field__input"
+                          value={formatEditableValue(selectedNode.data?.[field.name], field.type)}
+                          onChange={(event) => updateNodeData(selectedNode.id, field.name, event.target.value, field.type)}
+                        />
+                      </label>
+                    ))}
+                    <div className="debugger-field">
+                      <span>Ports</span>
+                      <strong>{describeNodePorts(selectedNode.type)}</strong>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="debugger-content-empty">select a node</div>
+              )}
+              <div className="debugger-graph-side-title" style={{ marginTop: 14 }}>Connections</div>
+              <div className="debugger-graph-connection-list">
+                {graph.edges.length === 0 ? (
+                  <div className="debugger-content-empty">no connections</div>
+                ) : graph.edges.map((edge) => {
+                  const id = edgeKey(edge);
+                  const from = nodeMap.get(edge.from.node);
+                  const to = nodeMap.get(edge.to.node);
+                  const isSelected = selectedEdgeKey === id;
+                  return (
+                    <div
+                      key={id}
+                      className={`debugger-graph-connection${isSelected ? " is-selected" : ""}`}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedEdgeKey(id)}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
+                        setSelectedEdgeKey(id);
+                      }}
+                    >
+                      <span className="debugger-graph-connection__flow">
+                        {from ? `${from.type}.${edge.from.port}` : edge.from.node}
+                        <strong>→</strong>
+                        {to ? `${to.type}.${edge.to.port}` : edge.to.node}
+                      </span>
+                      <span className="debugger-graph-connection__actions">
+                        <span className={`debugger-pill${isSelected ? " is-active" : ""}`}>wire</span>
+                        <button
+                          className="debugger-graph-connection__delete"
+                          aria-label="Delete connection"
+                          title="Delete connection"
+                          onPointerDown={(event) => event.stopPropagation()}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            deleteEdge(id);
+                          }}
+                        >
+                          <Trash2 size={11} strokeWidth={2.5} />
+                        </button>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </aside>
+          </div>
         )}
       </div>
     </div>
   );
 }
 
+function createGraphNode(spec: GraphNodeSpec, position: { x: number; y: number }): GraphAsset["nodes"][number] {
+  return {
+    id: crypto.randomUUID(),
+    type: spec.type,
+    position: {
+      x: Math.round(position.x),
+      y: Math.round(position.y),
+    },
+    data: {},
+  };
+}
+
+function parseEditableValue(value: string, type: GraphNodeSpec["fields"][number]["type"]) {
+  if (type === "number") {
+    const numeric = Number(value);
+    return Number.isNaN(numeric) ? 0 : numeric;
+  }
+  if (type === "boolean") return value.trim().toLowerCase() === "true";
+  if (type === "json") {
+    if (value.trim() === "") return undefined;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value;
+    }
+  }
+  return value;
+}
+
+function formatEditableValue(value: unknown, type: GraphNodeSpec["fields"][number]["type"]) {
+  if (value === undefined) return "";
+  if (type === "json") return JSON.stringify(value, null, 2);
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function parseJsonInput(input: string, fallback: unknown) {
+  if (input.trim() === "") return fallback;
+  try {
+    return JSON.parse(input);
+  } catch {
+    return fallback;
+  }
+}
+
+function formatJsonValue(value: unknown) {
+  if (value === undefined) return "";
+  return JSON.stringify(value, null, 2);
+}
+
+function describeNodePorts(type: GraphNodeDefinition["type"]) {
+  const spec = GRAPH_NODE_LIBRARY.find((entry) => entry.type === type);
+  if (!spec) return "flow";
+  const inputs = spec.inputs.map((port) => port.name).join(", ") || "-";
+  const outputs = spec.outputs.map((port) => port.name).join(", ") || "-";
+  return `in: ${inputs} | out: ${outputs}`;
+}
+
+function edgeKey(edge: GraphAsset["edges"][number]) {
+  return `${edge.from.node}:${edge.from.port}->${edge.to.node}:${edge.to.port}`;
+}
+
+function moveGraphNode(graph: GraphAsset, nodeId: string, deltaX: number, deltaY: number): GraphAsset {
+  return {
+    ...graph,
+    nodes: graph.nodes.map((node) => (
+      node.id === nodeId
+        ? {
+            ...node,
+            position: {
+              x: Math.round(node.position.x + deltaX),
+              y: Math.round(node.position.y + deltaY),
+            },
+          }
+        : node
+    )),
+  };
+}
+
 function computeGraphBounds(graph: GraphAsset) {
-  const padX = 72;
-  const padY = 60;
-  const cardWidth = 188;
-  const cardHeight = 112;
+  const padX = 112;
+  const padY = 96;
+  const cardWidth = 246;
+  const cardHeight = 176;
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
@@ -973,21 +1431,39 @@ function computeGraphBounds(graph: GraphAsset) {
   }
 
   if (!Number.isFinite(minX) || !Number.isFinite(minY)) {
-    return { x: 0, y: 0, width: 960, height: 540 };
+    return { x: 0, y: 0, width: 1400, height: 900 };
   }
 
   return {
     x: minX - padX,
     y: minY - padY,
-    width: Math.max(960, maxX - minX + padX * 2),
-    height: Math.max(540, maxY - minY + padY * 2),
+    width: Math.max(1400, maxX - minX + padX * 2),
+    height: Math.max(900, maxY - minY + padY * 2),
   };
 }
 
 function getGraphNodeCenter(node: GraphAsset["nodes"][number], bounds: { x: number; y: number }) {
   return {
-    x: node.position.x - bounds.x + 94,
-    y: node.position.y - bounds.y + 56,
+    x: node.position.x - bounds.x + 123,
+    y: node.position.y - bounds.y + 88,
+  };
+}
+
+function getGraphPortPoint(
+  node: GraphAsset["nodes"][number],
+  portName: string,
+  direction: "input" | "output",
+  bounds: { x: number; y: number },
+) {
+  const spec = GRAPH_NODE_LIBRARY.find((entry) => entry.type === node.type);
+  const ports = direction === "input" ? spec?.inputs ?? [] : spec?.outputs ?? [];
+  const portIndex = Math.max(0, ports.findIndex((port) => port.name === portName));
+  const center = getGraphNodeCenter(node, bounds);
+  const xOffset = direction === "input" ? -116 : 116;
+  const yOffset = -42 + Math.min(portIndex, 4) * 20;
+  return {
+    x: center.x + xOffset,
+    y: center.y + yOffset,
   };
 }
 

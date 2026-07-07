@@ -1,17 +1,18 @@
 {
-  "version": 1,
+  "version": 3,
   "name": "restart-on-enemy-touch",
-  "entrypoint": "onUpdate",
+  "entrypoint": "879c7398-621f-4bf3-a120-5b2db85739d2",
+  "variables": [],
   "nodes": [
-    { "id": "onUpdate", "type": "OnUpdate", "position": { "x": 120, "y": 80 } },
-    { "id": "forEachPlayer", "type": "ForEachTag", "position": { "x": 280, "y": 80 }, "data": { "tag": "player" } },
-    { "id": "checkCollision", "type": "CollisionWithTag", "position": { "x": 460, "y": 80 }, "data": { "tag": "enemy" } },
-    { "id": "reset", "type": "ResetTaggedEntities", "position": { "x": 640, "y": 80 }, "data": { "tags": ["player", "enemy"] } }
+    { "id": "879c7398-621f-4bf3-a120-5b2db85739d2", "type": "OnUpdate", "position": { "x": 120, "y": 80 } },
+    { "id": "22e1c379-3dcd-4a52-beda-aae9a5e95fa6", "type": "ForEachEntityWithTag", "position": { "x": 280, "y": 80 }, "data": { "tag": "player" } },
+    { "id": "da0ddc8e-e2af-44e7-ba1f-f073f8b2f965", "type": "CheckCollisionWithTag", "position": { "x": 460, "y": 80 }, "data": { "tag": "enemy" } },
+    { "id": "307f7c33-6e04-46f8-b88b-416c7f6a29c4", "type": "ResetTaggedEntities", "position": { "x": 640, "y": 80 }, "data": { "tags": ["player", "enemy"] } }
   ],
   "edges": [
-    { "from": { "node": "onUpdate", "port": "flow" }, "to": { "node": "forEachPlayer", "port": "flow" } },
-    { "from": { "node": "forEachPlayer", "port": "flow" }, "to": { "node": "checkCollision", "port": "flow" } },
-    { "from": { "node": "checkCollision", "port": "flow" }, "to": { "node": "reset", "port": "flow" } }
+    { "from": { "node": "879c7398-621f-4bf3-a120-5b2db85739d2", "port": "flow" }, "to": { "node": "22e1c379-3dcd-4a52-beda-aae9a5e95fa6", "port": "flow" } },
+    { "from": { "node": "22e1c379-3dcd-4a52-beda-aae9a5e95fa6", "port": "flow" }, "to": { "node": "da0ddc8e-e2af-44e7-ba1f-f073f8b2f965", "port": "flow" } },
+    { "from": { "node": "da0ddc8e-e2af-44e7-ba1f-f073f8b2f965", "port": "flow" }, "to": { "node": "307f7c33-6e04-46f8-b88b-416c7f6a29c4", "port": "flow" } }
   ],
   "metadata": {
     "order": 50,

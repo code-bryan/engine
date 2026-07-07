@@ -132,12 +132,6 @@ async function mountGame(startPlaying: boolean, worldName = "worlds/world-01", w
     contentTree,
     activeWorld: worldName,
     activeSystems: activeWorldSystems,
-    onToggleWorldSystem(name) {
-      const nextSystems = toggleWorldSystem(activeWorldSystems, name);
-      activeWorldSystems.length = 0;
-      activeWorldSystems.push(...nextSystems);
-      saveWorldDefinition(worldName, serializeWorld(gameWorld, activeWorldSystems));
-    },
   });
 
   if (startPlaying) {
@@ -170,11 +164,4 @@ function toTitleCase(value: string) {
 
 function resolveWorldSystems(systems: string[]) {
   return systems.length > 0 ? systems : defaultWorldSystems;
-}
-
-function toggleWorldSystem(systems: string[], name: string) {
-  const next = new Set(systems);
-  if (next.has(name)) next.delete(name);
-  else next.add(name);
-  return Array.from(next);
 }

@@ -731,13 +731,13 @@ export function ensureDebuggerStyles() {
       z-index: 40;
       display: grid;
       place-items: center;
-      padding: 24px;
+      padding: 16px;
       background: rgba(9, 9, 11, 0.72);
       backdrop-filter: blur(10px);
     }
     .debugger-graph-dialog__panel {
-      width: min(1200px, 100%);
-      max-height: min(900px, 100%);
+      width: min(1600px, calc(100vw - 32px));
+      height: min(980px, calc(100vh - 32px));
       display: grid;
       grid-template-rows: auto auto auto minmax(0, 1fr);
       gap: 10px;
@@ -771,6 +771,22 @@ export function ensureDebuggerStyles() {
       color: #d4d4d8;
       font-size: 12px;
     }
+    .debugger-graph-side-title {
+      color: #f4f4f5;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 8px;
+    }
+    .debugger-graph-variable {
+      display: grid;
+      gap: 6px;
+      padding: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      background: rgba(24, 24, 27, 0.75);
+    }
     .debugger-graph-canvas__scroll {
       min-height: 0;
       overflow: auto;
@@ -784,7 +800,7 @@ export function ensureDebuggerStyles() {
       background-image:
         linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
         linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
-      background-size: 24px 24px;
+      background-size: 28px 28px;
     }
     .debugger-graph-canvas__edges {
       position: absolute;
@@ -796,11 +812,35 @@ export function ensureDebuggerStyles() {
       stroke: rgba(96, 165, 250, 0.35);
       stroke-width: 2;
       stroke-linecap: round;
+      pointer-events: stroke;
+      cursor: pointer;
+    }
+    .debugger-graph-canvas__edges path.is-selected {
+      stroke: rgba(250, 204, 21, 0.92);
+      stroke-width: 4;
+    }
+    .debugger-graph-canvas__edges circle {
+      filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.45));
+    }
+    .debugger-graph-edge-label {
+      fill: #e0f2fe;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      paint-order: stroke;
+      stroke: rgba(8, 15, 32, 0.92);
+      stroke-width: 3px;
+      stroke-linejoin: round;
+      pointer-events: none;
+    }
+    .debugger-graph-edge-label--to {
+      fill: #d9f99d;
     }
     .debugger-graph-node {
       position: absolute;
-      width: 188px;
-      min-height: 112px;
+      width: 246px;
+      min-height: 176px;
       padding: 10px;
       border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 14px;
@@ -812,10 +852,26 @@ export function ensureDebuggerStyles() {
       border-color: rgba(96, 165, 250, 0.55);
       box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.18), 0 14px 30px rgba(0, 0, 0, 0.24);
     }
+    .debugger-graph-node.is-selected {
+      outline: 2px solid rgba(56, 189, 248, 0.3);
+      outline-offset: 1px;
+    }
+    .debugger-graph-node__title-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
     .debugger-graph-node__title {
       color: #f4f4f5;
       font-size: 12px;
       font-weight: 700;
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+    }
+    .debugger-graph-node__title:active {
+      cursor: grabbing;
     }
     .debugger-graph-node__type {
       margin-top: 2px;
@@ -823,6 +879,144 @@ export function ensureDebuggerStyles() {
       font-size: 10px;
       text-transform: uppercase;
       letter-spacing: 0.06em;
+    }
+    .debugger-graph-node__delete {
+      display: grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      border: 1px solid rgba(248, 113, 113, 0.2);
+      border-radius: 8px;
+      background: rgba(127, 29, 29, 0.25);
+      color: #fecaca;
+      cursor: pointer;
+      flex: 0 0 auto;
+    }
+    .debugger-graph-node__delete:hover {
+      background: rgba(153, 27, 27, 0.45);
+      border-color: rgba(248, 113, 113, 0.35);
+      color: #fff1f2;
+    }
+    .debugger-graph-node__ports {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .debugger-graph-node__ports-col {
+      display: grid;
+      gap: 6px;
+      align-content: start;
+    }
+    .debugger-graph-node__ports-col--right {
+      justify-items: end;
+    }
+    .debugger-graph-port {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+    .debugger-graph-port::before {
+      display: none;
+    }
+    .debugger-graph-port--input {
+      background: rgba(15, 23, 42, 0.88);
+      color: #bfdbfe;
+    }
+    .debugger-graph-port--output {
+      background: rgba(20, 83, 45, 0.42);
+      color: #bbf7d0;
+    }
+    .debugger-graph-port__anchor {
+      width: 11px;
+      height: 11px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      background: currentColor;
+      color: #0f172a;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18) inset;
+    }
+    .debugger-graph-port__icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 8px;
+      height: 8px;
+      color: #f8fafc;
+    }
+    .debugger-graph-port__icon svg {
+      display: block;
+    }
+    .debugger-graph-port__label {
+      display: inline-flex;
+      align-items: center;
+    }
+    .debugger-graph-connection-list {
+      display: grid;
+      gap: 8px;
+      max-height: 340px;
+      overflow: auto;
+      padding-right: 2px;
+    }
+    .debugger-graph-connection {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      background: rgba(24, 24, 27, 0.72);
+      color: #e4e4e7;
+      cursor: pointer;
+      text-align: left;
+    }
+    .debugger-graph-connection.is-selected {
+      border-color: rgba(250, 204, 21, 0.4);
+      background: rgba(161, 98, 7, 0.22);
+    }
+    .debugger-graph-connection__flow {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      color: #cbd5e1;
+      font-size: 11px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .debugger-graph-connection__flow strong {
+      color: #f8fafc;
+    }
+    .debugger-graph-connection__actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+    }
+    .debugger-graph-connection__delete {
+      display: grid;
+      place-items: center;
+      width: 20px;
+      height: 20px;
+      border-radius: 7px;
+      color: #fecaca;
+      background: rgba(127, 29, 29, 0.22);
+      border: 1px solid rgba(248, 113, 113, 0.16);
+    }
+    .debugger-graph-connection__delete:hover {
+      background: rgba(153, 27, 27, 0.42);
+      color: #fff1f2;
     }
     .debugger-graph-node__data {
       display: grid;

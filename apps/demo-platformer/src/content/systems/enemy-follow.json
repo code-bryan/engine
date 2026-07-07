@@ -1,27 +1,208 @@
 {
-  "version": 1,
+  "version": 3,
   "name": "enemy-follow",
-  "entrypoint": "onUpdate",
+  "entrypoint": "34716805-18f1-487b-84ba-7fe45e1a6b56",
+  "variables": [],
   "nodes": [
-    { "id": "onUpdate", "type": "OnUpdate", "position": { "x": 120, "y": 80 } },
-    { "id": "findPlayer", "type": "FindFirstTag", "position": { "x": 280, "y": 80 }, "data": { "tag": "player", "as": "playerEntity" } },
-    { "id": "readPlayerTransform", "type": "ReadTransform", "position": { "x": 460, "y": 80 }, "data": { "entityFrom": "playerEntity", "as": "playerTransform" } },
-    { "id": "forEachEnemy", "type": "ForEachTag", "position": { "x": 640, "y": 80 }, "data": { "tag": "enemy" } },
-    { "id": "readSpeed", "type": "ReadComponent", "position": { "x": 820, "y": 80 }, "data": { "component": "enemy", "field": "speed", "as": "speed" } },
-    { "id": "direction", "type": "BuildDirectionToTarget", "position": { "x": 1000, "y": 80 }, "data": { "targetFrom": "playerTransform", "as": "direction" } },
-    { "id": "velocity", "type": "MultiplyVector", "position": { "x": 1180, "y": 80 }, "data": { "vectorFrom": "direction", "scalarFrom": "speed", "as": "velocity" } },
-    { "id": "storeVelocity", "type": "SetComponent", "position": { "x": 1360, "y": 80 }, "data": { "component": "velocity", "from": "velocity" } },
-    { "id": "applyVelocity", "type": "SetPhysicsVelocity", "position": { "x": 1540, "y": 80 }, "data": { "from": "velocity" } }
+    {
+      "id": "34716805-18f1-487b-84ba-7fe45e1a6b56",
+      "type": "OnUpdate",
+      "position": {
+        "x": 120,
+        "y": 80
+      }
+    },
+    {
+      "id": "58bb5825-3223-4336-a10c-bb37384def70",
+      "type": "FindFirstEntityWithTag",
+      "position": {
+        "x": 507,
+        "y": 95
+      },
+      "data": {
+        "tag": "player"
+      }
+    },
+    {
+      "id": "12da074d-184f-4837-841c-6fe160ae8b34",
+      "type": "ReadTransform",
+      "position": {
+        "x": 881,
+        "y": 114
+      }
+    },
+    {
+      "id": "8ebe74aa-1752-4ed2-bdac-344de0a448da",
+      "type": "ForEachEntityWithTag",
+      "position": {
+        "x": 1236,
+        "y": 249
+      },
+      "data": {
+        "tag": "enemy"
+      }
+    },
+    {
+      "id": "f8e2130c-1df6-467b-a5e9-45a23baff2eb",
+      "type": "GetComponent",
+      "position": {
+        "x": 1647,
+        "y": 242
+      },
+      "data": {
+        "component": "enemy",
+        "field": "speed"
+      }
+    },
+    {
+      "id": "d2899fa5-5475-48d4-b69e-4fa50b7e8061",
+      "type": "DirectionToTarget",
+      "position": {
+        "x": 2000,
+        "y": -42
+      }
+    },
+    {
+      "id": "adc9dba3-edf1-4252-bdbc-e08a9329d70f",
+      "type": "ScaleVector",
+      "position": {
+        "x": 2404,
+        "y": 82
+      }
+    },
+    {
+      "id": "5670eaee-1420-46fa-81a9-61fbe48bb531",
+      "type": "SetComponent",
+      "position": {
+        "x": 2808,
+        "y": 77
+      },
+      "data": {
+        "component": "velocity"
+      }
+    }
   ],
   "edges": [
-    { "from": { "node": "onUpdate", "port": "flow" }, "to": { "node": "findPlayer", "port": "flow" } },
-    { "from": { "node": "findPlayer", "port": "flow" }, "to": { "node": "readPlayerTransform", "port": "flow" } },
-    { "from": { "node": "readPlayerTransform", "port": "flow" }, "to": { "node": "forEachEnemy", "port": "flow" } },
-    { "from": { "node": "forEachEnemy", "port": "flow" }, "to": { "node": "readSpeed", "port": "flow" } },
-    { "from": { "node": "readSpeed", "port": "flow" }, "to": { "node": "direction", "port": "flow" } },
-    { "from": { "node": "direction", "port": "flow" }, "to": { "node": "velocity", "port": "flow" } },
-    { "from": { "node": "velocity", "port": "flow" }, "to": { "node": "storeVelocity", "port": "flow" } },
-    { "from": { "node": "storeVelocity", "port": "flow" }, "to": { "node": "applyVelocity", "port": "flow" } }
+    {
+      "from": {
+        "node": "34716805-18f1-487b-84ba-7fe45e1a6b56",
+        "port": "flow"
+      },
+      "to": {
+        "node": "58bb5825-3223-4336-a10c-bb37384def70",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "58bb5825-3223-4336-a10c-bb37384def70",
+        "port": "entity"
+      },
+      "to": {
+        "node": "12da074d-184f-4837-841c-6fe160ae8b34",
+        "port": "entity"
+      }
+    },
+    {
+      "from": {
+        "node": "58bb5825-3223-4336-a10c-bb37384def70",
+        "port": "flow"
+      },
+      "to": {
+        "node": "12da074d-184f-4837-841c-6fe160ae8b34",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "12da074d-184f-4837-841c-6fe160ae8b34",
+        "port": "transform"
+      },
+      "to": {
+        "node": "d2899fa5-5475-48d4-b69e-4fa50b7e8061",
+        "port": "target"
+      }
+    },
+    {
+      "from": {
+        "node": "12da074d-184f-4837-841c-6fe160ae8b34",
+        "port": "flow"
+      },
+      "to": {
+        "node": "8ebe74aa-1752-4ed2-bdac-344de0a448da",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "8ebe74aa-1752-4ed2-bdac-344de0a448da",
+        "port": "flow"
+      },
+      "to": {
+        "node": "f8e2130c-1df6-467b-a5e9-45a23baff2eb",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "f8e2130c-1df6-467b-a5e9-45a23baff2eb",
+        "port": "value"
+      },
+      "to": {
+        "node": "adc9dba3-edf1-4252-bdbc-e08a9329d70f",
+        "port": "scale"
+      }
+    },
+    {
+      "from": {
+        "node": "d2899fa5-5475-48d4-b69e-4fa50b7e8061",
+        "port": "direction"
+      },
+      "to": {
+        "node": "adc9dba3-edf1-4252-bdbc-e08a9329d70f",
+        "port": "vector"
+      }
+    },
+    {
+      "from": {
+        "node": "f8e2130c-1df6-467b-a5e9-45a23baff2eb",
+        "port": "flow"
+      },
+      "to": {
+        "node": "d2899fa5-5475-48d4-b69e-4fa50b7e8061",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "d2899fa5-5475-48d4-b69e-4fa50b7e8061",
+        "port": "flow"
+      },
+      "to": {
+        "node": "adc9dba3-edf1-4252-bdbc-e08a9329d70f",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "adc9dba3-edf1-4252-bdbc-e08a9329d70f",
+        "port": "flow"
+      },
+      "to": {
+        "node": "5670eaee-1420-46fa-81a9-61fbe48bb531",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "adc9dba3-edf1-4252-bdbc-e08a9329d70f",
+        "port": "vector"
+      },
+      "to": {
+        "node": "5670eaee-1420-46fa-81a9-61fbe48bb531",
+        "port": "value"
+      }
+    }
   ],
   "metadata": {
     "order": 20,
