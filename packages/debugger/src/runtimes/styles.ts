@@ -903,6 +903,24 @@ export function ensureDebuggerStyles() {
       gap: 8px;
       margin-top: 10px;
     }
+    .debugger-graph-node__flow-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 8px;
+      align-items: center;
+    }
+    .debugger-graph-node__flow-slot {
+      display: flex;
+      min-height: 18px;
+      align-items: center;
+    }
+    .debugger-graph-node__flow-slot--input {
+      justify-content: flex-start;
+    }
+    .debugger-graph-node__flow-slot--output {
+      justify-content: flex-end;
+    }
     .debugger-graph-node__ports-col {
       display: grid;
       gap: 6px;
@@ -943,6 +961,10 @@ export function ensureDebuggerStyles() {
       background: currentColor;
       color: #0f172a;
       box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18) inset;
+    }
+    .debugger-graph-port--flow {
+      padding-top: 1px;
+      padding-bottom: 1px;
     }
     .debugger-graph-port__icon {
       display: inline-flex;

@@ -27,16 +27,16 @@
       "id": "12da074d-184f-4837-841c-6fe160ae8b34",
       "type": "ReadTransform",
       "position": {
-        "x": 881,
-        "y": 114
+        "x": 907,
+        "y": 85
       }
     },
     {
       "id": "8ebe74aa-1752-4ed2-bdac-344de0a448da",
       "type": "ForEachEntityWithTag",
       "position": {
-        "x": 1236,
-        "y": 249
+        "x": 1283,
+        "y": -79
       },
       "data": {
         "tag": "enemy"
@@ -46,8 +46,8 @@
       "id": "f8e2130c-1df6-467b-a5e9-45a23baff2eb",
       "type": "GetComponent",
       "position": {
-        "x": 1647,
-        "y": 242
+        "x": 1659,
+        "y": -81
       },
       "data": {
         "component": "enemy",
@@ -58,24 +58,24 @@
       "id": "d2899fa5-5475-48d4-b69e-4fa50b7e8061",
       "type": "DirectionToTarget",
       "position": {
-        "x": 2000,
-        "y": -42
+        "x": 2088,
+        "y": 242
       }
     },
     {
       "id": "adc9dba3-edf1-4252-bdbc-e08a9329d70f",
       "type": "ScaleVector",
       "position": {
-        "x": 2404,
-        "y": 82
+        "x": 2413,
+        "y": 72
       }
     },
     {
       "id": "5670eaee-1420-46fa-81a9-61fbe48bb531",
       "type": "SetComponent",
       "position": {
-        "x": 2808,
-        "y": 77
+        "x": 2799,
+        "y": 58
       },
       "data": {
         "component": "velocity"

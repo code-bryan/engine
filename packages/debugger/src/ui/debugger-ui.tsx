@@ -1184,9 +1184,55 @@ function GraphDialog(props: {
                             <Trash2 size={11} strokeWidth={2.5} />
                           </button>
                         </div>
+                        <div className="debugger-graph-node__flow-row">
+                          <div className="debugger-graph-node__flow-slot debugger-graph-node__flow-slot--input">
+                            {spec?.inputs.filter((port) => port.kind === "flow").map((port) => (
+                              <span
+                                key={`${node.id}-in-${port.name}`}
+                                className="debugger-graph-port debugger-graph-port--input debugger-graph-port--flow"
+                                data-port-direction="in"
+                                data-port-kind={port.kind}
+                              >
+                                <span
+                                  className="debugger-graph-port__anchor"
+                                  ref={(element) => {
+                                    const key = `${node.id}:input:${port.name}`;
+                                    if (element) portRefs.current.set(key, element);
+                                    else portRefs.current.delete(key);
+                                  }}
+                                >
+                                  <ChevronRight size={10} strokeWidth={2.6} className="debugger-graph-port__icon" />
+                                </span>
+                                <span className="debugger-graph-port__label">{port.label ?? port.name}</span>
+                              </span>
+                            ))}
+                          </div>
+                          <div className="debugger-graph-node__flow-slot debugger-graph-node__flow-slot--output">
+                            {spec?.outputs.filter((port) => port.kind === "flow").map((port) => (
+                              <span
+                                key={`${node.id}-out-${port.name}`}
+                                className="debugger-graph-port debugger-graph-port--output debugger-graph-port--flow"
+                                data-port-direction="out"
+                                data-port-kind={port.kind}
+                              >
+                                <span className="debugger-graph-port__label">{port.label ?? port.name}</span>
+                                <span
+                                  className="debugger-graph-port__anchor"
+                                  ref={(element) => {
+                                    const key = `${node.id}:output:${port.name}`;
+                                    if (element) portRefs.current.set(key, element);
+                                    else portRefs.current.delete(key);
+                                  }}
+                                >
+                                  <ChevronRight size={10} strokeWidth={2.6} className="debugger-graph-port__icon" />
+                                </span>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
                         <div className="debugger-graph-node__ports">
                           <div className="debugger-graph-node__ports-col">
-                            {spec?.inputs.map((port) => (
+                            {spec?.inputs.filter((port) => port.kind !== "flow").map((port) => (
                               <span
                                 key={`${node.id}-in-${port.name}`}
                                 className="debugger-graph-port debugger-graph-port--input"
@@ -1200,17 +1246,13 @@ function GraphDialog(props: {
                                     if (element) portRefs.current.set(key, element);
                                     else portRefs.current.delete(key);
                                   }}
-                                >
-                                  {port.kind === "flow"
-                                    ? <ChevronRight size={10} strokeWidth={2.6} className="debugger-graph-port__icon" />
-                                    : null}
-                                </span>
+                                />
                                 <span className="debugger-graph-port__label">{port.label ?? port.name}</span>
                               </span>
                             ))}
                           </div>
                           <div className="debugger-graph-node__ports-col debugger-graph-node__ports-col--right">
-                            {spec?.outputs.map((port) => (
+                            {spec?.outputs.filter((port) => port.kind !== "flow").map((port) => (
                               <span
                                 key={`${node.id}-out-${port.name}`}
                                 className="debugger-graph-port debugger-graph-port--output"
@@ -1225,11 +1267,7 @@ function GraphDialog(props: {
                                     if (element) portRefs.current.set(key, element);
                                     else portRefs.current.delete(key);
                                   }}
-                                >
-                                  {port.kind === "flow"
-                                    ? <ChevronRight size={10} strokeWidth={2.6} className="debugger-graph-port__icon" />
-                                    : null}
-                                </span>
+                                />
                               </span>
                             ))}
                           </div>

@@ -171,7 +171,10 @@ export const GRAPH_NODE_LIBRARY: GraphNodeSpec[] = [
   {
     type: "ReadTransform",
     label: "Read Transform",
-    inputs: [{ name: "flow", kind: "flow", direction: "input" }],
+    inputs: [
+      { name: "entity", kind: "data", direction: "input", label: "entity" },
+      { name: "flow", kind: "flow", direction: "input" },
+    ],
     outputs: [
       { name: "transform", kind: "data", direction: "output", label: "transform" },
       { name: "flow", kind: "flow", direction: "output" },
@@ -665,7 +668,11 @@ function executeNode(
       }];
     }
     case "ReadTransform": {
-      const entity = resolveEntityRef(context, node.data?.entityFrom ?? context.values.entity, context.entity);
+      const entity = resolveEntityRef(
+        context,
+        context.values.entity ?? context.values.entityFrom ?? node.data?.entityFrom,
+        context.entity,
+      );
       if (entity === undefined) return [];
       const transform = transforms.get(entity);
       if (!transform) return [];
