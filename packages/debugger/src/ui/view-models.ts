@@ -42,6 +42,7 @@ export type DebuggerUiActions = {
   saveSnapshot: () => void;
   restoreSnapshot: (index: number) => void;
   toggleSystem: (index: number) => void;
+  toggleWorldSystem: (name: string) => void;
   toggleLogFilter: (cat: string) => void;
   toggleLogPause: () => void;
   openLevel: () => void;
@@ -105,6 +106,7 @@ export function renderDebuggerUi<TWorld extends DebuggerWorld>(
     contentTree: options.contentTree ?? [],
     activeWorld: options.activeWorld,
     activeSystems: options.activeSystems ?? [],
+    onToggleWorldSystem: actions.toggleWorldSystem,
     onLoadWorld: actions.loadWorld,
     onToggleContentDrawer: actions.toggleContentDrawer,
     onCreateFolder: options.onCreateFolder,

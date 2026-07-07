@@ -116,6 +116,7 @@ export type DebuggerUiProps = {
   onSaveSnapshot: () => void;
   onRestoreSnapshot: (index: number) => void;
   onToggleSystem: (index: number) => void;
+  onToggleWorldSystem?: (name: string) => void;
   onToggleLogFilter: (cat: string) => void;
   onToggleLogPause: () => void;
   onOpenLevel?: () => void;
@@ -355,6 +356,7 @@ function ContentBrowser(props: {
   tree: ContentTreeNode[];
   activeWorld?: string;
   activeSystems?: string[];
+  onToggleWorldSystem?: (name: string) => void;
   onLoadWorld: (name: string) => void;
   onCreateFolder?: (path: string) => void;
   onCreateWorld: (path: string) => void;
@@ -365,6 +367,10 @@ function ContentBrowser(props: {
   const [search, setSearch] = useState("");
   const [createKind, setCreateKind] = useState<"folder" | "world" | "component" | undefined>();
   const [createName, setCreateName] = useState("");
+  const [openGraphName, setOpenGraphName] = useState<string | undefined>();
+  const [openGraph, setOpenGraph] = useState<GraphAsset | null>(null);
+  const [openGraphLoading, setOpenGraphLoading] = useState(false);
+  const [openGraphError, setOpenGraphError] = useState<string | undefined>();
 
   useEffect(() => {
     const nextFolder = parentContentPath(props.activeWorld);
@@ -416,6 +422,40 @@ function ContentBrowser(props: {
     setCreateName("");
   };
 
+  useEffect(() => {
+    if (!openGraphName) {
+      setOpenGraph(null);
+      setOpenGraphError(undefined);
+      setOpenGraphLoading(false);
+      return;
+    }
+
+    let alive = true;
+    setOpenGraphLoading(true);
+    setOpenGraphError(undefined);
+    setOpenGraph(null);
+
+    fetchGraphAsset(openGraphName)
+      .then((graph) => {
+        if (!alive) return;
+        setOpenGraph(graph);
+        setOpenGraphError(graph ? undefined : "graph not found");
+      })
+      .catch(() => {
+        if (!alive) return;
+        setOpenGraph(null);
+        setOpenGraphError("failed to load graph");
+      })
+      .finally(() => {
+        if (!alive) return;
+        setOpenGraphLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [openGraphName]);
+
   return (
     <section className="debugger-section debugger-section--content">
       <div className="debugger-content-header">
@@ -460,6 +500,32 @@ function ContentBrowser(props: {
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
+      </div>
+      <div className="debugger-content-systems-header">
+        <div className="debugger-section__title" style={{ marginBottom: 0 }}>World Systems</div>
+        <span className="debugger-content-browser__hint">{props.activeSystems?.length ?? 0} loaded</span>
+      </div>
+      <div className="debugger-content-systems">
+        {(props.activeSystems ?? []).length === 0 ? (
+          <div className="debugger-content-empty">no systems loaded</div>
+        ) : (props.activeSystems ?? []).map((name) => (
+          <div className="debugger-content-system-row" key={name}>
+            <button className="debugger-content-system" onClick={() => setOpenGraphName(name)}>
+              <span className="debugger-content-system__name">{name}</span>
+              <span className="debugger-pill is-active">loaded</span>
+            </button>
+            {props.onToggleWorldSystem && (
+              <button
+                className="debugger-content-system__toggle"
+                onClick={() => props.onToggleWorldSystem?.(name)}
+                title="Remove from world"
+                aria-label={`Remove ${name} from world`}
+              >
+                <X size={12} strokeWidth={2.4} />
+              </button>
+            )}
+          </div>
+        ))}
       </div>
       {createKind && (
         <div className="debugger-content-create">
@@ -515,6 +581,22 @@ function ContentBrowser(props: {
                   : `${currentChildren.length} item${currentChildren.length === 1 ? "" : "s"}`}
             </span>
           </div>
+          {selectedFolderPath === "systems" && props.onToggleWorldSystem && (
+            <div className="debugger-content-systems">
+              {currentChildren.filter((node) => node.kind === "graph").map((node) => (
+                <button
+                  key={node.path}
+                  className={`debugger-content-system${activeSystems.has(node.name) ? " is-active" : ""}`}
+                  onClick={() => props.onToggleWorldSystem?.(node.name)}
+                >
+                  <span className="debugger-content-system__name">{node.name}</span>
+                  <span className={`debugger-pill${activeSystems.has(node.name) ? " is-active" : ""}`}>
+                    {activeSystems.has(node.name) ? "loaded" : "disabled"}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
           <div className="debugger-content-list">
             {filteredChildren.length === 0 ? (
               <div className="debugger-content-empty">{search.trim() ? "no matches" : "empty folder"}</div>
@@ -529,6 +611,7 @@ function ContentBrowser(props: {
                     return;
                   }
                   if (node.kind === "world") props.onLoadWorld(node.path);
+                  if (node.kind === "graph") setOpenGraphName(node.name);
                 }}
               >
                 <span className="debugger-content-item__icon">
@@ -537,15 +620,31 @@ function ContentBrowser(props: {
                 <span className="debugger-content-item__name">{node.name}</span>
                 <span className="debugger-content-item__path">{node.path || "root"}</span>
                 {node.kind === "graph" ? (
-                  <span className={`debugger-pill${activeSystems.has(node.name) ? " is-active" : ""}`}>
-                    {activeSystems.has(node.name) ? "active" : "available"}
-                  </span>
+                  <button
+                    className={`debugger-content-item__action${activeSystems.has(node.name) ? " is-active" : ""}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      props.onToggleWorldSystem?.(node.name);
+                    }}
+                    title={activeSystems.has(node.name) ? "Remove from world" : "Add to world"}
+                    aria-label={activeSystems.has(node.name) ? `Remove ${node.name}` : `Add ${node.name}`}
+                  >
+                    {activeSystems.has(node.name) ? "loaded" : "available"}
+                  </button>
                 ) : node.kind !== "folder" ? <span className="debugger-pill">{node.kind}</span> : null}
               </button>
             ))}
           </div>
         </section>
       </div>
+      {openGraphName && (
+        <GraphDialog
+          graph={openGraph}
+          loading={openGraphLoading}
+          error={openGraphError}
+          onClose={() => setOpenGraphName(undefined)}
+        />
+      )}
     </section>
   );
 }
@@ -704,4 +803,199 @@ function findContentFolder(nodes: ContentTreeNode[], targetPath: string): Conten
     if (found) return found;
   }
   return undefined;
+}
+
+type GraphAsset = {
+  version: 1;
+  name: string;
+  entrypoint: string;
+  nodes: Array<{
+    id: string;
+    type: string;
+    position: { x: number; y: number };
+    data?: Record<string, unknown>;
+  }>;
+  edges: Array<{
+    from: { node: string; port: string };
+    to: { node: string; port: string };
+  }>;
+  metadata?: {
+    order?: number;
+    description?: string;
+  };
+};
+
+async function fetchGraphAsset(name: string): Promise<GraphAsset | null> {
+  const response = await fetch(`/api/content/file?path=${encodeURIComponent(`systems/${name}`)}`);
+  if (!response.ok) return null;
+  const raw = await response.json();
+  return parseGraphAsset(raw);
+}
+
+function parseGraphAsset(value: unknown): GraphAsset | null {
+  if (!value || typeof value !== "object") return null;
+  const parsed = value as Partial<GraphAsset>;
+  if (parsed.version !== 1 || typeof parsed.name !== "string" || typeof parsed.entrypoint !== "string" || !Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
+    return null;
+  }
+  const nodes = parsed.nodes.filter(isGraphNode);
+  const edges = parsed.edges.filter(isGraphEdge);
+  return {
+    version: 1,
+    name: parsed.name,
+    entrypoint: parsed.entrypoint,
+    nodes,
+    edges,
+    metadata: typeof parsed.metadata === "object" && parsed.metadata !== null ? parsed.metadata as GraphAsset["metadata"] : undefined,
+  };
+}
+
+function isGraphNode(value: unknown): value is GraphAsset["nodes"][number] {
+  if (!value || typeof value !== "object") return false;
+  const node = value as Partial<GraphAsset["nodes"][number]>;
+  return typeof node.id === "string"
+    && typeof node.type === "string"
+    && typeof node.position === "object"
+    && node.position !== null
+    && typeof (node.position as { x?: unknown }).x === "number"
+    && typeof (node.position as { y?: unknown }).y === "number";
+}
+
+function isGraphEdge(value: unknown): value is GraphAsset["edges"][number] {
+  if (!value || typeof value !== "object") return false;
+  const edge = value as Partial<GraphAsset["edges"][number]>;
+  return typeof edge.from === "object"
+    && edge.from !== null
+    && typeof edge.to === "object"
+    && edge.to !== null
+    && typeof edge.from.node === "string"
+    && typeof edge.from.port === "string"
+    && typeof edge.to.node === "string"
+    && typeof edge.to.port === "string";
+}
+
+function GraphDialog(props: {
+  graph: GraphAsset | null;
+  loading: boolean;
+  error?: string;
+  onClose: () => void;
+}) {
+  const graph = props.graph;
+  const bounds = graph ? computeGraphBounds(graph) : { x: 0, y: 0, width: 960, height: 540 };
+  const nodeMap = new Map(graph?.nodes.map((node) => [node.id, node]) ?? []);
+
+  return (
+    <div className="debugger-graph-dialog" role="dialog" aria-modal="true" onClick={props.onClose}>
+      <div className="debugger-graph-dialog__panel" onClick={(event) => event.stopPropagation()}>
+        <div className="debugger-graph-dialog__header">
+          <div>
+            <div className="debugger-section__title" style={{ marginBottom: 4 }}>System Graph</div>
+            <div className="debugger-graph-dialog__subtitle">
+              {graph ? graph.name : "loading..."}
+            </div>
+          </div>
+          <button className="debugger-content-action" onClick={props.onClose} aria-label="Close graph dialog">
+            <X size={13} strokeWidth={2.5} />
+          </button>
+        </div>
+        {props.loading && <div className="debugger-content-empty">loading graph…</div>}
+        {props.error && <div className="debugger-content-empty">{props.error}</div>}
+        {graph && !props.loading && !props.error && (
+          <>
+            <div className="debugger-graph-meta">
+              <span>entrypoint: <strong>{graph.entrypoint}</strong></span>
+              <span>nodes: <strong>{graph.nodes.length}</strong></span>
+              <span>edges: <strong>{graph.edges.length}</strong></span>
+              <span>order: <strong>{graph.metadata?.order ?? "n/a"}</strong></span>
+            </div>
+            {graph.metadata?.description && <div className="debugger-graph-description">{graph.metadata.description}</div>}
+            <div className="debugger-graph-canvas__scroll">
+              <div className="debugger-graph-canvas" style={{ width: `${bounds.width}px`, height: `${bounds.height}px` }}>
+                <svg className="debugger-graph-canvas__edges" width={bounds.width} height={bounds.height} viewBox={`0 0 ${bounds.width} ${bounds.height}`}>
+                  {graph.edges.map((edge, index) => {
+                    const from = nodeMap.get(edge.from.node);
+                    const to = nodeMap.get(edge.to.node);
+                    if (!from || !to) return null;
+                    const fromPoint = getGraphNodeCenter(from, bounds);
+                    const toPoint = getGraphNodeCenter(to, bounds);
+                    const mid = (fromPoint.x + toPoint.x) / 2;
+                    const path = `M ${fromPoint.x} ${fromPoint.y} C ${mid} ${fromPoint.y}, ${mid} ${toPoint.y}, ${toPoint.x} ${toPoint.y}`;
+                    return <path key={`${edge.from.node}-${edge.to.node}-${index}`} d={path} />;
+                  })}
+                </svg>
+                {graph.nodes.map((node) => (
+                  <div
+                    key={node.id}
+                    className={`debugger-graph-node${node.id === graph.entrypoint ? " is-entrypoint" : ""}`}
+                    style={{
+                      left: `${node.position.x - bounds.x}px`,
+                      top: `${node.position.y - bounds.y}px`,
+                    }}
+                  >
+                    <div className="debugger-graph-node__title">{node.id}</div>
+                    <div className="debugger-graph-node__type">{node.type}</div>
+                    {node.data && Object.keys(node.data).length > 0 && (
+                      <div className="debugger-graph-node__data">
+                        {Object.entries(node.data).map(([key, value]) => (
+                          <div key={key} className="debugger-graph-node__row">
+                            <span>{key}</span>
+                            <strong>{formatGraphValue(value)}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function computeGraphBounds(graph: GraphAsset) {
+  const padX = 72;
+  const padY = 60;
+  const cardWidth = 188;
+  const cardHeight = 112;
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+
+  for (const node of graph.nodes) {
+    minX = Math.min(minX, node.position.x);
+    minY = Math.min(minY, node.position.y);
+    maxX = Math.max(maxX, node.position.x + cardWidth);
+    maxY = Math.max(maxY, node.position.y + cardHeight);
+  }
+
+  if (!Number.isFinite(minX) || !Number.isFinite(minY)) {
+    return { x: 0, y: 0, width: 960, height: 540 };
+  }
+
+  return {
+    x: minX - padX,
+    y: minY - padY,
+    width: Math.max(960, maxX - minX + padX * 2),
+    height: Math.max(540, maxY - minY + padY * 2),
+  };
+}
+
+function getGraphNodeCenter(node: GraphAsset["nodes"][number], bounds: { x: number; y: number }) {
+  return {
+    x: node.position.x - bounds.x + 94,
+    y: node.position.y - bounds.y + 56,
+  };
+}
+
+function formatGraphValue(value: unknown): string {
+  if (value === null) return "null";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return `[${value.map((entry) => formatGraphValue(entry)).join(", ")}]`;
+  if (value && typeof value === "object") return "{…}";
+  return String(value);
 }

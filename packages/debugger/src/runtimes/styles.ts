@@ -483,6 +483,70 @@ export function ensureDebuggerStyles() {
       background: transparent;
       outline: none;
     }
+    .debugger-content-systems-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .debugger-content-systems {
+      display: grid;
+      gap: 6px;
+      align-content: start;
+      min-height: 0;
+      max-height: 180px;
+      overflow: auto;
+    }
+    .debugger-content-system-row {
+      display: flex;
+      gap: 6px;
+      align-items: stretch;
+    }
+    .debugger-content-system {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 10px;
+      border: 1px solid rgba(96, 165, 250, 0.16);
+      border-radius: 10px;
+      background: rgba(9, 9, 11, 0.95);
+      color: #d4d4d8;
+      cursor: pointer;
+      text-align: left;
+      font: inherit;
+    }
+    .debugger-content-system:hover {
+      background: #18181b;
+    }
+    .debugger-content-system.is-active {
+      border-color: rgba(96, 165, 250, 0.4);
+      background: rgba(37, 99, 235, 0.18);
+      color: #bfdbfe;
+    }
+    .debugger-content-system__name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .debugger-content-system__toggle {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      background: #18181b;
+      color: #a1a1aa;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+    }
+    .debugger-content-system__toggle:hover {
+      background: #27272a;
+      color: #e4e4e7;
+    }
     .debugger-content-create {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -585,6 +649,23 @@ export function ensureDebuggerStyles() {
       background: rgba(37, 99, 235, 0.18);
       color: #bfdbfe;
     }
+    .debugger-content-item__action {
+      height: 22px;
+      padding: 0 6px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+      color: #d4d4d8;
+      cursor: pointer;
+      font: 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .debugger-content-item__action:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+    .debugger-content-item__action.is-active {
+      border-color: rgba(74, 222, 128, 0.3);
+      color: #4ade80;
+    }
     .debugger-content-item__icon {
       color: #93c5fd;
     }
@@ -640,6 +721,124 @@ export function ensureDebuggerStyles() {
       color: #93c5fd;
     }
     .debugger-content-tree__name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .debugger-graph-dialog {
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: rgba(9, 9, 11, 0.72);
+      backdrop-filter: blur(10px);
+    }
+    .debugger-graph-dialog__panel {
+      width: min(1200px, 100%);
+      max-height: min(900px, 100%);
+      display: grid;
+      grid-template-rows: auto auto auto minmax(0, 1fr);
+      gap: 10px;
+      padding: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 16px;
+      background: #09090b;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+    }
+    .debugger-graph-dialog__header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .debugger-graph-dialog__subtitle {
+      color: #a1a1aa;
+      font-size: 11px;
+    }
+    .debugger-graph-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      color: #a1a1aa;
+      font-size: 11px;
+    }
+    .debugger-graph-meta strong {
+      color: #f4f4f5;
+    }
+    .debugger-graph-description {
+      color: #d4d4d8;
+      font-size: 12px;
+    }
+    .debugger-graph-canvas__scroll {
+      min-height: 0;
+      overflow: auto;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      background: linear-gradient(180deg, rgba(24, 24, 27, 0.92), rgba(9, 9, 11, 0.98));
+    }
+    .debugger-graph-canvas {
+      position: relative;
+      overflow: hidden;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+    .debugger-graph-canvas__edges {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+    .debugger-graph-canvas__edges path {
+      fill: none;
+      stroke: rgba(96, 165, 250, 0.35);
+      stroke-width: 2;
+      stroke-linecap: round;
+    }
+    .debugger-graph-node {
+      position: absolute;
+      width: 188px;
+      min-height: 112px;
+      padding: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      background: rgba(17, 17, 20, 0.96);
+      color: #d4d4d8;
+      box-shadow: 0 14px 30px rgba(0, 0, 0, 0.24);
+    }
+    .debugger-graph-node.is-entrypoint {
+      border-color: rgba(96, 165, 250, 0.55);
+      box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.18), 0 14px 30px rgba(0, 0, 0, 0.24);
+    }
+    .debugger-graph-node__title {
+      color: #f4f4f5;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .debugger-graph-node__type {
+      margin-top: 2px;
+      color: #93c5fd;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .debugger-graph-node__data {
+      display: grid;
+      gap: 4px;
+      margin-top: 8px;
+      font-size: 11px;
+    }
+    .debugger-graph-node__row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      color: #a1a1aa;
+    }
+    .debugger-graph-node__row strong {
+      color: #fafafa;
+      text-align: right;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
