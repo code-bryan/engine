@@ -22,6 +22,7 @@ import type {
   RuntimeDebuggerOptions,
 } from "./shared/types";
 import { ALL_LOG_CATEGORIES } from "./shared/types";
+import type { ContentTreeNode } from "./shared/types";
 import { renderDebuggerUi, type DebuggerUiActions } from "./ui/view-models";
 
 export type {
@@ -656,6 +657,19 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     world,
     setActiveSystems(names: string[]) {
       options.activeSystems = names;
+      refresh();
+    },
+    setActiveWorld(name: string, opts?: { activeSystems?: string[]; contentTree?: ContentTreeNode[] }) {
+      options.activeWorld = name;
+      if (opts?.activeSystems) options.activeSystems = opts.activeSystems;
+      if (opts?.contentTree) options.contentTree = opts.contentTree;
+      state.selectedEntity = undefined;
+      state.sceneSelected = false;
+      state.lockTarget = undefined;
+      for (const label of labels.values()) label.destroy();
+      labels.clear();
+      setNearestFiltering();
+      centerCamera();
       refresh();
     },
     destroy() {

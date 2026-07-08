@@ -83,6 +83,18 @@ export class Physics {
     return () => this.debugListeners.delete(listener);
   }
 
+  // Remove every body from the Matter world and clear collision state, so the same
+  // Physics instance can be reused for a freshly materialized world (keeps listeners).
+  clearBodies() {
+    for (const rigidBody of this.rigidBodies.values()) {
+      Matter.Composite.remove(this.engine.world, rigidBody.body);
+    }
+    this.rigidBodies.clear();
+    this.collisions.clear();
+    this.collisionHistory.clear();
+    this.collisionSeq = 0;
+  }
+
   setBody(entity: Entity, props: RigidBodyBoxProps & { kind?: RigidBodyKind }) {
     const kind = props.kind ?? "dynamic";
     const body = Matter.Bodies.rectangle(

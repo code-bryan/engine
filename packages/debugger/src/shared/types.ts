@@ -101,6 +101,7 @@ export type RuntimeDebuggerOptions<TWorld extends DebuggerWorld = DebuggerWorld>
 export type DebugEditor<TWorld extends DebuggerWorld = DebuggerWorld> = {
   world: TWorld;
   setActiveSystems: (names: string[]) => void;
+  setActiveWorld: (name: string, opts?: { activeSystems?: string[]; contentTree?: ContentTreeNode[] }) => void;
   destroy: () => void;
 };
 

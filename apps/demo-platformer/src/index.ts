@@ -40,40 +40,69 @@ let playbackState: "playing" | "paused" | "stopped" = "playing";
 let contentDrawerOpen = false;
 let openWorldPaths: string[] = [];
 
-async function mountGame(startPlaying: boolean, worldName = "worlds/world-01", worldOverride?: DemoWorldData) {
-  debuggerEditor?.destroy();
-  engine?.destroy();
-  viewport.replaceChildren();
+// One persistent world/physics/engine/debugger for the whole session — worlds load in place.
+const gameWorld = new GameWorld(createPhysics({ gravity: { x: 0, y: 0 } }));
+let worldName = "worlds/world-01";
+let activeWorldSystems: string[] = [];
+let authoredSnapshot: ReturnType<typeof captureWorldSnapshot> | undefined;
 
-  const gameWorld = new GameWorld(createPhysics({ gravity: { x: 0, y: 0 } }));
+// Reset the shared world/physics and re-materialize `name` into it (no teardown). Returns the fresh content tree.
+async function materializeInto(name: string, override?: DemoWorldData) {
+  worldName = name;
   const [worldData, contentTree] = await Promise.all([
-    worldOverride ?? loadWorldDefinition(worldName),
+    override ?? loadWorldDefinition(name),
     fetchContentTree(),
     initializeDemoRuntime(),
   ]);
-  let activeWorldSystems = resolveWorldSystems(worldData.systems);
-  if (!openWorldPaths.includes(worldName)) openWorldPaths = [...openWorldPaths, worldName];
-  if (worldOverride) saveWorldDefinition(worldName, worldOverride);
+  activeWorldSystems = resolveWorldSystems(worldData.systems);
+  if (!openWorldPaths.includes(name)) openWorldPaths = [...openWorldPaths, name];
+  if (override) saveWorldDefinition(name, override);
+
+  gameWorld.reset();
+  gameWorld.physics.clearBodies();
   await materializeWorld(gameWorld, worldData);
+  gameWorld.clearSystems();
   await bootstrapDemoSystems(gameWorld, activeWorldSystems);
-  let authoredSnapshot = captureWorldSnapshot(gameWorld);
+  return contentTree;
+}
+
+// Rebuild only the world's systems in place (correct order), keeping entities/engine.
+async function reloadSystems(next: string[]) {
+  activeWorldSystems = next;
+  saveWorldDefinition(worldName, serializeWorld(gameWorld, next));
+  gameWorld.clearSystems();
+  await bootstrapDemoSystems(gameWorld, next);
+  engine?.installSystems();
+  debuggerEditor?.setActiveSystems(next);
+  engine?.tick(0);
+}
+
+// Load a world in place (no engine/debugger/Pixi teardown → no flash).
+async function loadWorld(name: string, override?: DemoWorldData) {
+  const contentTree = await materializeInto(name, override);
+  engine?.installSystems();
+  authoredSnapshot = captureWorldSnapshot(gameWorld);
+  debuggerEditor?.setActiveWorld(name, { activeSystems: activeWorldSystems, contentTree });
+  playbackState = "stopped";
+  engine?.stop();
+  engine?.tick(0);
+}
+
+// Re-materialize the current world + refresh the content tree (for content create/import/delete).
+async function refreshContent() {
+  await loadWorld(worldName);
+}
+
+async function boot(startPlaying: boolean) {
+  const contentTree = await materializeInto("worlds/world-01");
 
   engine = await createEngineApplication({
     world: gameWorld,
     mount: viewport,
     pixi: { width: 320, height: 180, background: 0x141414, roundPixels: true },
   });
-
-  // Rebuild the world's systems in place (correct order) without tearing down the engine/Pixi/debugger.
-  const reloadSystems = async (next: string[]) => {
-    activeWorldSystems = next;
-    saveWorldDefinition(worldName, serializeWorld(gameWorld, next));
-    gameWorld.clearSystems();
-    await bootstrapDemoSystems(gameWorld, next);
-    engine?.installSystems();
-    debuggerEditor?.setActiveSystems(next);
-    engine?.tick(0);
-  };
+  // createEngineApplication already installs its render systems; do not double-install here.
+  authoredSnapshot = captureWorldSnapshot(gameWorld);
 
   debuggerEditor = attachDebugEditor(gameWorld, engine, {
     onPlay() {
@@ -96,7 +125,7 @@ async function mountGame(startPlaying: boolean, worldName = "worlds/world-01", w
       if (!engine) return;
       playbackState = "stopped";
       engine.stop();
-      restoreWorldSnapshot(gameWorld, authoredSnapshot);
+      if (authoredSnapshot) restoreWorldSnapshot(gameWorld, authoredSnapshot);
       engine.tick(0);
     },
     getState() {
@@ -109,19 +138,15 @@ async function mountGame(startPlaying: boolean, worldName = "worlds/world-01", w
     onOpenLevel(data) {
       const level = parseDemoWorldData(data);
       if (!level) return;
-      mountGame(false, worldName, level);
+      void loadWorld(worldName, level);
     },
     onLoadWorld(name) {
       if (name === worldName) return;
-      mountGame(false, name);
+      void loadWorld(name);
     },
     async onCreateWorld(name) {
-      await saveWorldDefinition(name, {
-        version: 1,
-        systems: [],
-        entities: [],
-      });
-      await mountGame(false, name);
+      await saveWorldDefinition(name, { version: 1, systems: [], entities: [] });
+      await loadWorld(name);
     },
     onAddSystem(name) {
       void reloadSystems(Array.from(new Set([...activeWorldSystems, name])));
@@ -131,7 +156,7 @@ async function mountGame(startPlaying: boolean, worldName = "worlds/world-01", w
     },
     async onCreateFolder(path) {
       await fetch(`/api/content/folder?path=${encodeURIComponent(path)}`, { method: "POST" });
-      await mountGame(false, worldName);
+      await refreshContent();
     },
     async onCreateComponent(path) {
       const componentName = path.split("/").filter(Boolean).at(-1) ?? "component";
@@ -143,22 +168,17 @@ async function mountGame(startPlaying: boolean, worldName = "worlds/world-01", w
       };
       await saveContentJson(path, definition);
       registerComponentDefinition(definition);
-      await mountGame(false, worldName);
+      await refreshContent();
     },
     async onCreatePrefab(path) {
       const prefabName = path.split("/").filter(Boolean).at(-1) ?? "prefab";
       const definition: PrefabDefinition = {
         version: 1,
         name: prefabName,
-        components: [
-          {
-            component: "transform",
-            value: { x: 0, y: 0, rotation: 0, scale: 1 },
-          },
-        ],
+        components: [{ component: "transform", value: { x: 0, y: 0, rotation: 0, scale: 1 } }],
       };
       await saveContentJson(path, definition);
-      await mountGame(false, worldName);
+      await refreshContent();
     },
     async onCreateGraph(path) {
       const graphName = path.split("/").filter(Boolean).at(-1) ?? "system";
@@ -167,25 +187,19 @@ async function mountGame(startPlaying: boolean, worldName = "worlds/world-01", w
         name: graphName,
         entrypoint: crypto.randomUUID(),
         variables: [],
-        nodes: [
-          {
-            id: crypto.randomUUID(),
-            type: "OnUpdate",
-            position: { x: 80, y: 80 },
-          },
-        ],
+        nodes: [{ id: crypto.randomUUID(), type: "OnUpdate", position: { x: 80, y: 80 } }],
         edges: [],
       });
-      await mountGame(false, worldName);
+      await refreshContent();
     },
     async onImportContent(path, value) {
       await saveContentJson(path, value);
-      await mountGame(false, worldName);
+      await refreshContent();
     },
     async onDeleteContent(path, kind) {
       const endpoint = kind === "folder" ? "/api/content/folder" : "/api/content/file";
       await fetch(`${endpoint}?path=${encodeURIComponent(path)}`, { method: "DELETE" });
-      await mountGame(false, worldName);
+      await refreshContent();
     },
     initialContentDrawerOpen: contentDrawerOpen,
     onContentDrawerToggled(open) {
@@ -210,7 +224,7 @@ async function mountGame(startPlaying: boolean, worldName = "worlds/world-01", w
   }
 }
 
-await mountGame(true);
+await boot(true);
 
 async function saveContentJson(path: string, data: unknown) {
   await fetch(`/api/content/file?path=${encodeURIComponent(path)}`, {

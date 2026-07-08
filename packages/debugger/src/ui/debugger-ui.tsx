@@ -970,14 +970,10 @@ function ContentBrowser(props: {
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    const nextFolder = parentContentPath(props.activeWorld);
-    setSelectedFolderPath(nextFolder);
+    // Default the browser to the Content root rather than the active world's folder.
+    setSelectedFolderPath("");
     setSelectedItemPath(undefined);
-    setExpandedFolders((prev) => {
-      const next = new Set(prev);
-      for (const crumb of breadcrumbPaths(nextFolder)) next.add(crumb.path);
-      return next;
-    });
+    setExpandedFolders((prev) => new Set(prev).add(""));
   }, [props.activeWorld]);
 
   const currentFolder = findContentFolder(props.tree, selectedFolderPath);

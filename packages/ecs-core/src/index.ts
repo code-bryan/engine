@@ -77,6 +77,10 @@ export class Tags<TTag extends string = string> {
     }
     return tags;
   }
+
+  clear() {
+    this.stores.clear();
+  }
 }
 
 export class World {
@@ -104,6 +108,15 @@ export class World {
   clearSystems() {
     this.systemEntries = [];
     this.systems = [];
+  }
+
+  // Clear all entities/tags and reset counters, keeping debug listeners (and systems)
+  // so the same World instance can be re-materialized in place for a different world.
+  reset() {
+    this.entities.clear();
+    this.tags.clear();
+    this.next = 0;
+    this.frame = 0;
   }
 
   onDebugEvent(listener: WorldDebugListener) {

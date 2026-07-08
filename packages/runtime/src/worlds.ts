@@ -57,7 +57,9 @@ export async function fetchContentTree(): Promise<DemoContentNode[]> {
 export async function materializeWorld(world: DemoGameWorld, data: DemoWorldData) {
   // Shared component/render stores are module-level singletons; clear them so a
   // remounted world starts from a clean slate instead of inheriting the previous
-  // world's (now destroyed) sprites/entities.
+  // world's sprites/entities. Destroy the old sprite display objects first so they
+  // are removed from the Pixi stage (an in-place world swap keeps the same engine).
+  for (const [, ref] of sprites) ref.sprite.destroy({ children: true });
   transforms.clear();
   sprites.clear();
   spriteAnimations.clear();
