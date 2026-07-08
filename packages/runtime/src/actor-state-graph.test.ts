@@ -27,7 +27,7 @@ function makePlayer(world: DemoGameWorld) {
 }
 
 const graph = JSON.parse(
-  fs.readFileSync(new URL("../../../apps/demo-platformer/src/content/systems/actor-state.json", import.meta.url), "utf8"),
+  fs.readFileSync(new URL("../../../examples/platformer/content/systems/actor-state.json", import.meta.url), "utf8"),
 ) as GraphDefinition;
 
 test("actor-state graph switches sprite animation to walk when moving", async () => {
@@ -40,6 +40,8 @@ test("actor-state graph switches sprite animation to walk when moving", async ()
   run(1 / 60);
 
   expect(spriteAnimations.get(player)?.state).toBe("walk");
+  // SetComponent must write its own literal, not the upstream GetComponent(velocity) value.
+  expect(getComponentStore<string>("actor-state").get(player)).toBe("walk");
 });
 
 test("actor-state graph switches sprite animation to idle when still", async () => {
@@ -54,4 +56,5 @@ test("actor-state graph switches sprite animation to idle when still", async () 
   run(1 / 60);
 
   expect(spriteAnimations.get(player)?.state).toBe("idle");
+  expect(getComponentStore<string>("actor-state").get(player)).toBe("idle");
 });

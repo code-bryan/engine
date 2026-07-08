@@ -19,10 +19,7 @@
         }
       },
       "components": {
-        "actor-state": {
-          "x": 0,
-          "y": 0
-        },
+        "actor-state": "idle",
         "facing": "right",
         "player": {
           "speed": 96,

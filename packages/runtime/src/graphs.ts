@@ -780,7 +780,9 @@ function executeNode(
     case "SetVar": {
       const name = String(node.data?.variable ?? node.data?.name ?? "");
       if (!name) return [context];
-      const value = context.values.value ?? resolveNodeValue(node.data, context);
+      // A node's own configured literal/ref wins over the ambient `value` slot, which
+      // upstream nodes (e.g. GetComponent) may have populated with unrelated data.
+      const value = resolveNodeValue(node.data, context) ?? context.values.value;
       runtimeState.variables[name] = cloneValue(value);
       return [{
         ...context,
@@ -858,7 +860,10 @@ function executeNode(
       if (context.entity === undefined) return [];
       const componentId = String(node.data?.component ?? "");
       if (!componentId) return [];
-      const value = context.values.value ?? context.values.payload ?? resolveNodeValue(node.data, context) ?? context.values[String(node.data?.from ?? componentId)];
+      // Prefer the node's own configured value; only fall back to ambient slots when the
+      // node doesn't specify one. Otherwise a prior GetComponent's `value` (e.g. velocity)
+      // would clobber the intended literal (e.g. actor-state "walk").
+      const value = resolveNodeValue(node.data, context) ?? context.values.value ?? context.values.payload ?? context.values[String(node.data?.from ?? componentId)];
       if (value === undefined) return [context];
       const store = getComponentStore<unknown>(componentId);
       const field = typeof node.data?.field === "string" ? node.data.field : undefined;
@@ -886,7 +891,7 @@ function executeNode(
     case "SetSpriteState":
     case "SetAnimationState": {
       if (context.entity === undefined) return [];
-      const nextState = context.values.state ?? resolveNodeValue(node.data, context) ?? context.values[String(node.data?.from ?? "state")];
+      const nextState = resolveNodeValue(node.data, context) ?? context.values.state ?? context.values[String(node.data?.from ?? "state")];
       if (typeof nextState !== "string") return [context];
       sprite.animation.state.set(context.entity, nextState);
       return [context];

@@ -260,7 +260,7 @@ test("enemy follow graph from content moves the enemy", async () => {
   world.tags.add(enemy, "enemy");
 
   const graph = JSON.parse(
-    fs.readFileSync(new URL("../../../apps/demo-platformer/src/content/systems/enemy-follow.json", import.meta.url), "utf8"),
+    fs.readFileSync(new URL("../../../examples/platformer/content/systems/enemy-follow.json", import.meta.url), "utf8"),
   ) as GraphDefinition;
   const run = await createGraphSystem(world, graph);
 
@@ -331,7 +331,7 @@ test("player control graph from content reads input and moves the player", async
   });
 
   const graph = JSON.parse(
-    fs.readFileSync(new URL("../../../apps/demo-platformer/src/content/systems/player-control.json", import.meta.url), "utf8"),
+    fs.readFileSync(new URL("../../../examples/platformer/content/systems/player-control.json", import.meta.url), "utf8"),
   ) as GraphDefinition;
   const run = await createGraphSystem(world, graph);
 
