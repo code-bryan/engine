@@ -180,21 +180,166 @@ export function DebuggerUi(props: DebuggerUiProps) {
         </div>
       </div>
       <div className={`debugger-layout${isPlaying ? " debugger-layout--playing" : ""}`} onClickCapture={props.onCloseMenus}>
-        <header className="debugger-toolbar">
-          <div className="debugger-toolbar__brand">
-            <span className="debugger-toolbar__eyebrow">Engine Editor</span>
-            <strong className="debugger-toolbar__title">{isPlaying ? "Play Mode" : "Edit Mode"}</strong>
-            <div className="debugger-toolbar__status">
-              <span>{props.zoomLabel}</span>
-              <span>{props.cameraLocked ? "camera locked" : "camera free"}</span>
+        <main className="debugger-stage">
+          <div className="debugger-viewport-overlay" aria-label="Viewport controls">
+            <div className="debugger-viewport-group debugger-viewport-group--left" aria-label="Selection tools">
+              <button className={`debugger-viewport-button${props.toolMode === "select" ? " is-active" : ""}`} onClick={() => props.onSetToolMode("select")} title="Select Tool" aria-label="Select Tool">
+                <MousePointer2 size={14} strokeWidth={2} />
+              </button>
+              <button className={`debugger-viewport-button${props.toolMode === "move" ? " is-active" : ""}`} onClick={() => props.onSetToolMode("move")} title="Move Tool" aria-label="Move Tool">
+                <Crosshair size={14} strokeWidth={2} />
+              </button>
+              <button className={`debugger-viewport-button${props.toolMode === "scale" ? " is-active" : ""}`} onClick={() => props.onSetToolMode("scale")} title="Scale Tool" aria-label="Scale Tool">
+                <Expand size={14} strokeWidth={2} />
+              </button>
+              <button className={`debugger-viewport-button${props.toolMode === "rotate" ? " is-active" : ""}`} onClick={() => props.onSetToolMode("rotate")} title="Rotate Tool" aria-label="Rotate Tool">
+                <RotateCw size={14} strokeWidth={2} />
+              </button>
+            </div>
+            <div className="debugger-viewport-group debugger-viewport-group--center" aria-label="Playback controls">
+              <button className={`debugger-viewport-button${props.playbackState === "playing" ? " is-active" : ""}`} onClick={() => props.onPlaybackAction("play")} title="Play" aria-label="Play">
+                <Play size={14} fill="currentColor" strokeWidth={2} />
+              </button>
+              <button className={`debugger-viewport-button${props.playbackState === "paused" ? " is-active" : ""}`} onClick={() => props.onPlaybackAction("pause")} title="Pause" aria-label="Pause">
+                <Pause size={14} fill="currentColor" strokeWidth={2} />
+              </button>
+              <button className="debugger-viewport-button" onClick={() => props.onPlaybackAction("step")} title="Step Frame" aria-label="Step Frame">
+                <StepForward size={14} strokeWidth={2} />
+              </button>
+              <button className={`debugger-viewport-button${props.playbackState === "stopped" ? " is-active" : ""}`} onClick={() => props.onPlaybackAction("stop")} title="Restart" aria-label="Restart">
+                <Redo2 size={14} strokeWidth={2} />
+              </button>
+            </div>
+            <div className="debugger-viewport-group debugger-viewport-group--right" aria-label="Camera tools">
+              <span className="debugger-viewport-group__title">Camera</span>
+              <div className="debugger-zoom-tuning-wrap debugger-viewport-group__stack" data-camera-tuning-root onClick={(event) => event.stopPropagation()}>
+                <button
+                  className={`debugger-viewport-button debugger-viewport-button--wide${props.cameraLocked ? " is-active" : ""}`}
+                  onClick={props.onToggleCameraLock}
+                  title="Lock Camera to Entity"
+                  aria-label="Lock Camera to Entity"
+                >
+                  <Camera size={14} strokeWidth={2} />
+                  <span>Lock</span>
+                </button>
+                <button className="debugger-viewport-button debugger-viewport-button--wide" onClick={() => props.onZoomAction("camera-reset")} title="Reset Camera" aria-label="Reset Camera">
+                  <LocateFixed size={14} strokeWidth={2} />
+                  <span>Reset</span>
+                </button>
+                <button className="debugger-viewport-button debugger-viewport-button--wide" onClick={() => props.onZoomAction("zoom-out")} title="Zoom Out" aria-label="Zoom Out">
+                  <Minus size={14} strokeWidth={2} />
+                  <span>Out</span>
+                </button>
+                <button className="debugger-viewport-button debugger-viewport-button--wide" onClick={() => props.onZoomAction("zoom-in")} title="Zoom In" aria-label="Zoom In">
+                  <Plus size={14} strokeWidth={2} />
+                  <span>In</span>
+                </button>
+                <button className="debugger-viewport-button debugger-viewport-button--wide" onClick={() => props.onZoomAction("zoom-fit")} title="Fit game in viewport" aria-label="Fit game in viewport">
+                  <ScanSearch size={14} strokeWidth={2} />
+                  <span>Fit</span>
+                </button>
+                <button
+                  className={`debugger-viewport-button debugger-viewport-button--wide debugger-zoom-tuning-toggle${cameraTuningOpen ? " is-active" : ""}`}
+                  onClick={() => setCameraTuningOpen((open) => !open)}
+                  title="Camera speed"
+                  aria-label="Camera speed"
+                  aria-expanded={cameraTuningOpen}
+                  aria-haspopup="true"
+                >
+                  <Camera size={14} strokeWidth={2} />
+                  <span>Speed</span>
+                </button>
+                {cameraTuningOpen && (
+                  <div className="debugger-zoom-tuning" title="Camera speed">
+                    <span className="debugger-zoom-tuning__label">Speed</span>
+                    <input
+                      className="debugger-zoom-tuning__slider"
+                      type="range"
+                      min="1"
+                      max="8"
+                      step="0.1"
+                      value={props.cameraZoomSensitivity}
+                      onChange={(event) => props.onSetZoomSensitivity(Number(event.target.value))}
+                      aria-label="Camera speed"
+                    />
+                    <span className="debugger-zoom-tuning__value">{props.cameraZoomSensitivity.toFixed(1)}x</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-          <div className="debugger-toolbar__left">
+          <section className={`debugger-drawer${props.contentDrawerOpen ? " is-open" : ""}`}>
+            <div className="debugger-drawer__chrome">
+              <button className="debugger-drawer__toggle" onClick={props.onToggleContentDrawer}>
+                {props.contentDrawerOpen ? "Collapse" : "Drawer"}
+              </button>
+              {props.onOpenLevel && (
+                <button className="debugger-drawer__action" onClick={props.onOpenLevel} title="Open Level" aria-label="Open Level">
+                  <FileJson size={13} strokeWidth={2} />
+                </button>
+              )}
+              <div className="debugger-drawer__tabs" role="tablist" aria-label="Bottom drawer tabs">
+                {[
+                  { id: "content" as const, label: "Content" },
+                  { id: "systems" as const, label: "Systems" },
+                  { id: "snapshots" as const, label: "Snapshots" },
+                  { id: "logs" as const, label: "Logs" },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    className={`debugger-drawer__tab${drawerTab === tab.id ? " is-active" : ""}`}
+                    onClick={() => setDrawerTab(tab.id)}
+                    role="tab"
+                    aria-selected={drawerTab === tab.id}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="debugger-drawer__body">
+              {drawerTab === "content" ? (
+                <ContentBrowser
+                  tree={props.contentTree}
+                  activeWorld={props.activeWorld}
+                  activeSystems={props.activeSystems}
+                  onLoadWorld={props.onLoadWorld}
+                  onCreateFolder={props.onCreateFolder}
+                  onCreateWorld={props.onCreateWorld}
+                  onCreateComponent={props.onCreateComponent}
+                  keyboardLocked={isPlaying}
+                />
+              ) : drawerTab === "systems" ? (
+                <SystemsDrawer
+                  statusCards={props.statusCards}
+                  systems={props.systems}
+                  onToggleSystem={props.onToggleSystem}
+                />
+              ) : drawerTab === "snapshots" ? (
+                <SnapshotsDrawer
+                  snapshots={props.snapshots}
+                  onSaveSnapshot={props.onSaveSnapshot}
+                  onRestoreSnapshot={props.onRestoreSnapshot}
+                />
+              ) : (
+                <EventLogDrawer
+                  logs={props.logs}
+                  logFilters={props.logFilters}
+                  logPaused={props.logPaused}
+                  onToggleLogFilter={props.onToggleLogFilter}
+                  onToggleLogPause={props.onToggleLogPause}
+                />
+              )}
+            </div>
+          </section>
+        </main>
+        <aside className="debugger-panel debugger-panel--right">
+          <div className="debugger-panel__toolbar">
             <div className={`debugger-dropdown${props.debugMenuOpen ? " is-open" : ""}`} data-dropdown-root onClick={(event) => event.stopPropagation()}>
               <button className="debugger-dropdown__trigger" onClick={props.onToggleDebugMenu}>
                 Debug <span aria-hidden="true">▾</span>
               </button>
-              <div className="debugger-dropdown__panel">
+              <div className="debugger-dropdown__panel debugger-dropdown__panel--compact">
                 <button className={`debugger-dropdown__item${props.showGrid ? " is-active" : ""}`} onClick={props.onToggleGrid}>
                   <span className="debugger-dropdown__item-icon">#</span>Grid
                 </button>
@@ -209,79 +354,7 @@ export function DebuggerUi(props: DebuggerUiProps) {
                 </button>
               </div>
             </div>
-            <div className="debugger-tool-group">
-              <button className={props.contentDrawerOpen ? "is-active" : ""} onClick={props.onToggleContentDrawer} title="Content" aria-label="Content Drawer">
-                <FolderOpen size={14} strokeWidth={2} />
-              </button>
-            </div>
-            <div className="debugger-tool-group" aria-label="Editor tools">
-              <button className={props.toolMode === "select" ? "is-active" : ""} onClick={() => props.onSetToolMode("select")} title="Select Tool" aria-label="Select Tool">
-                <MousePointer2 size={14} strokeWidth={2} />
-              </button>
-              <button className={props.toolMode === "move" ? "is-active" : ""} onClick={() => props.onSetToolMode("move")} title="Move Tool" aria-label="Move Tool">
-                <Crosshair size={14} strokeWidth={2} />
-              </button>
-              <button className={props.toolMode === "scale" ? "is-active" : ""} onClick={() => props.onSetToolMode("scale")} title="Scale Tool" aria-label="Scale Tool">
-                <Expand size={14} strokeWidth={2} />
-              </button>
-              <button className={props.toolMode === "rotate" ? "is-active" : ""} onClick={() => props.onSetToolMode("rotate")} title="Rotate Tool" aria-label="Rotate Tool">
-                <RotateCw size={14} strokeWidth={2} />
-              </button>
-            </div>
-          {props.onOpenLevel && (
-            <button onClick={props.onOpenLevel} title="Open Level" aria-label="Open Level">
-              <FolderOpen size={14} strokeWidth={2} />
-            </button>
-          )}
           </div>
-          <div className="debugger-toolbar__playback">
-            <button className={props.playbackState === "playing" ? "is-active" : ""} onClick={() => props.onPlaybackAction("play")} title="Play" aria-label="Play"><Play size={14} fill="currentColor" strokeWidth={2} /></button>
-            <button className={props.playbackState === "paused" ? "is-active" : ""} onClick={() => props.onPlaybackAction("pause")} title="Pause" aria-label="Pause"><Pause size={14} fill="currentColor" strokeWidth={2} /></button>
-            <button onClick={() => props.onPlaybackAction("step")} title="Step Frame" aria-label="Step Frame"><StepForward size={14} strokeWidth={2} /></button>
-            <button className={props.playbackState === "stopped" ? "is-active" : ""} onClick={() => props.onPlaybackAction("stop")} title="Restart" aria-label="Restart"><Redo2 size={14} strokeWidth={2} /></button>
-          </div>
-          <div className="debugger-toolbar__actions">
-            <div className="debugger-zoom-group">
-              <button onClick={() => props.onZoomAction("zoom-out")} title="Zoom Out" aria-label="Zoom Out"><Minus size={14} strokeWidth={2} /></button>
-              <button className="debugger-zoom-value" onClick={() => props.onZoomAction("zoom-100")} title="Reset to 100%">{props.zoomLabel}</button>
-              <button onClick={() => props.onZoomAction("zoom-in")} title="Zoom In" aria-label="Zoom In"><Plus size={14} strokeWidth={2} /></button>
-              <button onClick={() => props.onZoomAction("zoom-fit")} title="Fit game in viewport" aria-label="Fit game in viewport"><ScanSearch size={14} strokeWidth={2} /></button>
-              <div className="debugger-zoom-sep"></div>
-              <button onClick={() => props.onZoomAction("camera-reset")} title="Reset Camera" aria-label="Reset Camera"><LocateFixed size={14} strokeWidth={2} /></button>
-              <button className={props.cameraLocked ? "is-active" : ""} onClick={props.onToggleCameraLock} title="Lock Camera to Entity" aria-label="Lock Camera to Entity"><Camera size={14} strokeWidth={2} /></button>
-            </div>
-            <div className="debugger-zoom-tuning-wrap" data-camera-tuning-root onClick={(event) => event.stopPropagation()}>
-              <button
-                className={`debugger-zoom-tuning-toggle${cameraTuningOpen ? " is-active" : ""}`}
-                onClick={() => setCameraTuningOpen((open) => !open)}
-                title="Camera speed"
-                aria-label="Camera speed"
-                aria-expanded={cameraTuningOpen}
-                aria-haspopup="true"
-              >
-                <Camera size={14} strokeWidth={2} />
-              </button>
-              {cameraTuningOpen && (
-                <div className="debugger-zoom-tuning" title="Camera speed">
-                  <span className="debugger-zoom-tuning__label">Speed</span>
-                  <input
-                    className="debugger-zoom-tuning__slider"
-                    type="range"
-                    min="1"
-                    max="8"
-                    step="0.1"
-                    value={props.cameraZoomSensitivity}
-                    onChange={(event) => props.onSetZoomSensitivity(Number(event.target.value))}
-                    aria-label="Camera speed"
-                  />
-                  <span className="debugger-zoom-tuning__value">{props.cameraZoomSensitivity.toFixed(1)}x</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </header>
-        <main className="debugger-stage" aria-hidden="true" />
-        <aside className="debugger-panel debugger-panel--right">
           {isPlaying ? (
             <section className="debugger-section debugger-section--debug">
               <div className="debugger-section__title">Debug System</div>
@@ -373,65 +446,6 @@ export function DebuggerUi(props: DebuggerUiProps) {
             </>
           )}
         </aside>
-        <section className={`debugger-drawer${props.contentDrawerOpen ? " is-open" : ""}`}>
-          <div className="debugger-drawer__chrome">
-            <button className="debugger-drawer__toggle" onClick={props.onToggleContentDrawer}>
-              {props.contentDrawerOpen ? "Collapse Drawer" : "Open Drawer"}
-            </button>
-            <div className="debugger-drawer__tabs" role="tablist" aria-label="Bottom drawer tabs">
-              {[
-                { id: "content" as const, label: "Content" },
-                { id: "systems" as const, label: "Systems" },
-                { id: "snapshots" as const, label: "Snapshots" },
-                { id: "logs" as const, label: "Logs" },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  className={`debugger-drawer__tab${drawerTab === tab.id ? " is-active" : ""}`}
-                  onClick={() => setDrawerTab(tab.id)}
-                  role="tab"
-                  aria-selected={drawerTab === tab.id}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="debugger-drawer__body">
-            {drawerTab === "content" ? (
-              <ContentBrowser
-                tree={props.contentTree}
-                activeWorld={props.activeWorld}
-                activeSystems={props.activeSystems}
-                onLoadWorld={props.onLoadWorld}
-                onCreateFolder={props.onCreateFolder}
-                onCreateWorld={props.onCreateWorld}
-                onCreateComponent={props.onCreateComponent}
-                keyboardLocked={isPlaying}
-              />
-            ) : drawerTab === "systems" ? (
-              <SystemsDrawer
-                statusCards={props.statusCards}
-                systems={props.systems}
-                onToggleSystem={props.onToggleSystem}
-              />
-            ) : drawerTab === "snapshots" ? (
-              <SnapshotsDrawer
-                snapshots={props.snapshots}
-                onSaveSnapshot={props.onSaveSnapshot}
-                onRestoreSnapshot={props.onRestoreSnapshot}
-              />
-            ) : (
-              <EventLogDrawer
-                logs={props.logs}
-                logFilters={props.logFilters}
-                logPaused={props.logPaused}
-                onToggleLogFilter={props.onToggleLogFilter}
-                onToggleLogPause={props.onToggleLogPause}
-              />
-            )}
-          </div>
-        </section>
       </div>
     </>
   );
