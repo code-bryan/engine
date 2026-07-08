@@ -483,6 +483,12 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   };
 
   const handleCanvasPointerDown = (event: PointerEvent) => {
+    if (state.contentDrawerOpen) {
+      state.contentDrawerOpen = false;
+      options.onContentDrawerToggled?.(false);
+      refresh();
+    }
+
     if (isCameraPanGesture(event)) {
       event.preventDefault();
       drag = { startX: event.clientX, startY: event.clientY, camX: state.camera.x, camY: state.camera.y };
@@ -657,6 +663,10 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     world,
     setActiveSystems(names: string[]) {
       options.activeSystems = names;
+      refresh();
+    },
+    setContentTree(tree: ContentTreeNode[]) {
+      options.contentTree = tree;
       refresh();
     },
     setActiveWorld(name: string, opts?: { activeSystems?: string[]; contentTree?: ContentTreeNode[] }) {

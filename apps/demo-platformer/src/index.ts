@@ -88,9 +88,11 @@ async function loadWorld(name: string, override?: DemoWorldData) {
   engine?.tick(0);
 }
 
-// Re-materialize the current world + refresh the content tree (for content create/import/delete).
+// Refresh only the content-drawer tree (for content create/import/delete).
+// Does NOT reload the world — that would reset the editor selection/camera/playback.
 async function refreshContent() {
-  await loadWorld(worldName);
+  const contentTree = await fetchContentTree();
+  debuggerEditor?.setContentTree(contentTree);
 }
 
 async function boot(startPlaying: boolean) {
@@ -146,7 +148,7 @@ async function boot(startPlaying: boolean) {
     },
     async onCreateWorld(name) {
       await saveWorldDefinition(name, { version: 1, systems: [], entities: [] });
-      await loadWorld(name);
+      await refreshContent();
     },
     onAddSystem(name) {
       void reloadSystems(Array.from(new Set([...activeWorldSystems, name])));

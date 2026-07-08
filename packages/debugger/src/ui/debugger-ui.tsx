@@ -448,8 +448,8 @@ export function DebuggerUi(props: DebuggerUiProps) {
                 </div>
               </div>
 
-              {/* Left floating tool rail */}
-              <div className="pointer-events-auto absolute top-1/2 left-3 -translate-y-1/2 flex flex-col bg-black/60 backdrop-blur border border-white/10 rounded overflow-hidden z-10 shadow-lg">
+              {/* Selection tool rail — below the Show row (like camera sits below the snap tools) */}
+              <div className="pointer-events-auto absolute top-14 left-3 flex flex-col bg-black/60 backdrop-blur border border-white/10 rounded overflow-hidden shadow-lg z-10">
                 {([
                   { mode: "select", icon: "ph-cursor", title: "Select" },
                   { mode: "move", icon: "ph-arrows-out-cardinal", title: "Move" },
@@ -1402,7 +1402,7 @@ function renderFolderTree(
   depth = 0,
 ) {
   return nodes
-    .filter((node) => node.kind === "folder" || node.kind === "world")
+    .filter((node) => node.kind === "folder")
     .map((node) => {
       const isFolder = node.kind === "folder";
       const isExpanded = expandedFolders.has(node.path);
