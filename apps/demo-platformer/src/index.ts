@@ -59,7 +59,7 @@ async function mountGame(startPlaying: boolean, worldName = "worlds/world-01", w
   engine = await createEngineApplication({
     world: gameWorld,
     mount: viewport,
-    pixi: { width: 320, height: 180, background: 0x2c2c38, roundPixels: true },
+    pixi: { width: 320, height: 180, background: 0x141414, roundPixels: true },
   });
 
   debuggerEditor = attachDebugEditor(gameWorld, engine, {

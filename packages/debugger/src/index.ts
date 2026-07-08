@@ -86,6 +86,12 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     inspectorQuery: "",
     openDropdown: undefined,
     contentDrawerOpen: options.initialContentDrawerOpen ?? false,
+    openBlueprints: [],
+    activeBlueprint: null,
+    snapGrid: true,
+    snapGridSize: 16,
+    snapRotate: true,
+    snapRotateDeg: 15,
   };
 
   const registry = getComponentRegistry();
@@ -123,6 +129,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   for (const s of options.trackedStores ?? []) trackedStoreMap.set(s.label, s);
   const trackedStores = Array.from(trackedStoreMap.values());
   const gridOptions = resolveGridOptions(options.grid);
+  state.snapGridSize = gridOptions.snapSize;
   const storeSnapshots = new Map<string, string>();
   const labels = new Map<number, Text>();
 
@@ -139,7 +146,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   const gameW = engine.app.renderer.width;
   const gameH = engine.app.renderer.height;
   const origBg = engine.app.renderer.background.color;
-  engine.app.renderer.background.color = 0x09090b;
+  engine.app.renderer.background.color = 0x141414;
 
   // pixel-perfect filtering for zoom — collect unique texture sources and set nearest
   const origScaleModes = new Map<TextureSource, SCALE_MODE>();
@@ -164,7 +171,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     const rect = getEditorViewportRect();
     const w = Math.max(1, rect.width);
     const h = Math.max(1, rect.height);
-    state.camera.zoom = Math.min(w / gameW, h / gameH) * 0.72;
+    state.camera.zoom = Math.min(w / gameW, h / gameH) * 0.92;
     state.camera.x = rect.left + (w - gameW * state.camera.zoom) / 2;
     state.camera.y = rect.top + (h - gameH * state.camera.zoom) / 2;
   };
@@ -319,6 +326,53 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
           state.logPaused = !state.logPaused;
           refresh();
         },
+        toggleGridSnap() {
+          state.snapGrid = !state.snapGrid;
+          refresh();
+        },
+        setGridSnapSize(value) {
+          if (Number.isFinite(value)) state.snapGridSize = clamp(Math.round(value), 1, 512);
+          refresh();
+        },
+        calcGridSnapSize() {
+          if (state.selectedEntity === undefined) return;
+          const bounds = getEntityEditorBounds(world, state.selectedEntity);
+          if (bounds) state.snapGridSize = clamp(Math.round(Math.max(bounds.width, bounds.height)), 1, 512);
+          refresh();
+        },
+        toggleRotationSnap() {
+          state.snapRotate = !state.snapRotate;
+          refresh();
+        },
+        setRotationSnapDeg(value) {
+          if (Number.isFinite(value)) state.snapRotateDeg = clamp(Math.round(value), 1, 180);
+          refresh();
+        },
+        openBlueprint(path) {
+          if (!state.openBlueprints.includes(path)) state.openBlueprints = [...state.openBlueprints, path];
+          state.activeBlueprint = path;
+          refresh();
+        },
+        closeBlueprint(path) {
+          const index = state.openBlueprints.indexOf(path);
+          state.openBlueprints = state.openBlueprints.filter((entry) => entry !== path);
+          if (state.activeBlueprint === path) {
+            const fallback = state.openBlueprints[index] ?? state.openBlueprints[index - 1] ?? null;
+            state.activeBlueprint = fallback;
+          }
+          refresh();
+        },
+        selectViewportTab() {
+          state.activeBlueprint = null;
+          refresh();
+        },
+        selectBlueprintTab(path) {
+          state.activeBlueprint = path;
+          refresh();
+        },
+        compile() {
+          if (options.activeWorld) options.onLoadWorld?.(options.activeWorld);
+        },
       }, ALL_LOG_CATEGORIES);
   };
 
@@ -443,7 +497,12 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   const handleCanvasPointerMove = (event: PointerEvent) => {
     if (gizmoDrag) {
       const worldPt = toWorldPoint(engine.app.canvas, engine.app.stage, event.clientX, event.clientY);
-      applyGizmoDrag(world, gizmoDrag, worldPt, gridOptions.snapSize);
+      applyGizmoDrag(world, gizmoDrag, worldPt, {
+        grid: state.snapGrid,
+        gridSize: state.snapGridSize,
+        rotate: state.snapRotate,
+        rotateDeg: state.snapRotateDeg,
+      });
       engine.tick(0);
       options.onWorldEdited?.(world);
       didDrag = true;
@@ -454,8 +513,8 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
 
     if (entityDrag) {
       const worldPt = toWorldPoint(engine.app.canvas, engine.app.stage, event.clientX, event.clientY);
-      const nextX = snapToGrid(worldPt.x - entityDrag.offsetX, gridOptions.snapSize);
-      const nextY = snapToGrid(worldPt.y - entityDrag.offsetY, gridOptions.snapSize);
+      const nextX = state.snapGrid ? snapToGrid(worldPt.x - entityDrag.offsetX, state.snapGridSize) : worldPt.x - entityDrag.offsetX;
+      const nextY = state.snapGrid ? snapToGrid(worldPt.y - entityDrag.offsetY, state.snapGridSize) : worldPt.y - entityDrag.offsetY;
       const transform = transforms.get(entityDrag.entity);
       if (transform) {
         transform.x = nextX;
@@ -776,14 +835,16 @@ function applyGizmoDrag<TWorld extends DebuggerWorld>(
     startScale: { x: number; y: number };
   },
   worldPt: { x: number; y: number },
-  snapSize: number,
+  snap: { grid: boolean; gridSize: number; rotate: boolean; rotateDeg: number },
 ) {
   const transform = transforms.get(drag.hit.entity);
   if (!transform) return;
 
   if (drag.hit.kind === "move") {
-    const nextX = snapToGrid(drag.startPosition.x + (worldPt.x - drag.startWorld.x), snapSize);
-    const nextY = snapToGrid(drag.startPosition.y + (worldPt.y - drag.startWorld.y), snapSize);
+    const rawX = drag.startPosition.x + (worldPt.x - drag.startWorld.x);
+    const rawY = drag.startPosition.y + (worldPt.y - drag.startWorld.y);
+    const nextX = snap.grid ? snapToGrid(rawX, snap.gridSize) : rawX;
+    const nextY = snap.grid ? snapToGrid(rawY, snap.gridSize) : rawY;
     transform.x = nextX;
     transform.y = nextY;
     world.physics.reset(drag.hit.entity, { x: nextX, y: nextY }, { x: 0, y: 0 });
@@ -795,29 +856,36 @@ function applyGizmoDrag<TWorld extends DebuggerWorld>(
     if (!bounds) return;
     const startAngle = Math.atan2(drag.startWorld.y - bounds.pivotY, drag.startWorld.x - bounds.pivotX);
     const nextAngle = Math.atan2(worldPt.y - bounds.pivotY, worldPt.x - bounds.pivotX);
-    const rotation = snapRotation(drag.startRotation + (nextAngle - startAngle));
+    const rawRotation = drag.startRotation + (nextAngle - startAngle);
+    const rotation = snap.rotate ? snapRotation(rawRotation, snap.rotateDeg) : rawRotation;
     transform.rotation = rotation;
     world.physics.setAngle(drag.hit.entity, rotation);
     return;
   }
 
   const { bounds, handle } = drag.hit;
-  const anchorX = handle === "ne" || handle === "se" ? bounds.x : bounds.x + bounds.width;
-  const anchorY = handle === "sw" || handle === "se" ? bounds.y : bounds.y + bounds.height;
-  const startDx = drag.startWorld.x - anchorX;
-  const startDy = drag.startWorld.y - anchorY;
-  const nextDx = worldPt.x - anchorX;
-  const nextDy = worldPt.y - anchorY;
+  const px = bounds.pivotX;
+  const py = bounds.pivotY;
+  const startDx = drag.startWorld.x - px;
+  const startDy = drag.startWorld.y - py;
+  const nextDx = worldPt.x - px;
+  const nextDy = worldPt.y - py;
   const minScale = 0.1;
 
-  const nextScaleX = Math.max(
-    minScale,
-    Math.abs(startDx) < 0.001 ? drag.startScale.x : drag.startScale.x * (nextDx / startDx),
-  );
-  const nextScaleY = Math.max(
-    minScale,
-    Math.abs(startDy) < 0.001 ? drag.startScale.y : drag.startScale.y * (nextDy / startDy),
-  );
+  let nextScaleX = drag.startScale.x;
+  let nextScaleY = drag.startScale.y;
+
+  if (handle === "uniform") {
+    const startDist = Math.hypot(startDx, startDy);
+    const nextDist = Math.hypot(nextDx, nextDy);
+    const factor = startDist < 0.001 ? 1 : nextDist / startDist;
+    nextScaleX = Math.max(minScale, drag.startScale.x * factor);
+    nextScaleY = Math.max(minScale, drag.startScale.y * factor);
+  } else if (handle === "x") {
+    if (Math.abs(startDx) >= 0.001) nextScaleX = Math.max(minScale, drag.startScale.x * (nextDx / startDx));
+  } else {
+    if (Math.abs(startDy) >= 0.001) nextScaleY = Math.max(minScale, drag.startScale.y * (nextDy / startDy));
+  }
 
   transform.scale = {
     x: snapScale(nextScaleX),
@@ -829,8 +897,8 @@ function snapScale(value: number) {
   return Math.round(value * 20) / 20;
 }
 
-function snapRotation(angle: number) {
-  const step = Math.PI / 12;
+function snapRotation(angle: number, degrees: number) {
+  const step = (Math.max(1, degrees) * Math.PI) / 180;
   return Math.round(angle / step) * step;
 }
 

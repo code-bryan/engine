@@ -45,6 +45,16 @@ export type DebuggerUiActions = {
   toggleSystem: (index: number) => void;
   toggleLogFilter: (cat: string) => void;
   toggleLogPause: () => void;
+  toggleGridSnap: () => void;
+  setGridSnapSize: (value: number) => void;
+  calcGridSnapSize: () => void;
+  toggleRotationSnap: () => void;
+  setRotationSnapDeg: (value: number) => void;
+  openBlueprint: (path: string) => void;
+  closeBlueprint: (path: string) => void;
+  selectViewportTab: () => void;
+  selectBlueprintTab: (path: string) => void;
+  compile: () => void;
   openLevel: () => void;
   toggleContentDrawer: () => void;
   loadWorld: (name: string) => void;
@@ -72,6 +82,10 @@ export function renderDebuggerUi<TWorld extends DebuggerWorld>(
     cameraLocked: state.lockTarget !== undefined,
     debugMenuOpen: state.openDropdown === "debug",
     toolMode: state.toolMode,
+    snapGrid: state.snapGrid,
+    snapGridSize: state.snapGridSize,
+    snapRotate: state.snapRotate,
+    snapRotateDeg: state.snapRotateDeg,
     entityQuery: state.entityQuery,
     inspectorQuery: state.inspectorQuery,
     statusCards: buildStatusCards(world, options.statusPanels ?? []),
@@ -103,6 +117,19 @@ export function renderDebuggerUi<TWorld extends DebuggerWorld>(
     onToggleSystem: actions.toggleSystem,
     onToggleLogFilter: actions.toggleLogFilter,
     onToggleLogPause: actions.toggleLogPause,
+    onToggleGridSnap: actions.toggleGridSnap,
+    onSetGridSnapSize: actions.setGridSnapSize,
+    onCalcGridSnapSize: actions.calcGridSnapSize,
+    onToggleRotationSnap: actions.toggleRotationSnap,
+    onSetRotationSnapDeg: actions.setRotationSnapDeg,
+    activeWorldName: options.activeWorld ? (options.activeWorld.split("/").filter(Boolean).at(-1) ?? options.activeWorld) : "Scene",
+    openBlueprints: state.openBlueprints.map((path) => ({ path, name: path.split("/").filter(Boolean).at(-1) ?? path })),
+    activeBlueprint: state.activeBlueprint,
+    onOpenBlueprint: actions.openBlueprint,
+    onCloseBlueprint: actions.closeBlueprint,
+    onSelectViewportTab: actions.selectViewportTab,
+    onSelectBlueprintTab: actions.selectBlueprintTab,
+    onCompile: actions.compile,
     onOpenLevel: actions.openLevel,
     contentDrawerOpen: state.contentDrawerOpen,
     contentTree: options.contentTree ?? [],

@@ -17,8 +17,21 @@ export type EditorBounds = {
 
 export type GizmoHit =
   | { kind: "move"; entity: Entity }
-  | { kind: "scale"; entity: Entity; handle: "nw" | "ne" | "se" | "sw"; bounds: EditorBounds }
+  | { kind: "scale"; entity: Entity; handle: "x" | "y" | "uniform"; bounds: EditorBounds }
   | { kind: "rotate"; entity: Entity; bounds: EditorBounds };
+
+const GIZMO_RED = 0xf87171;
+const GIZMO_GREEN = 0x4ade80;
+const GIZMO_BLUE = 0x60a5fa;
+const GIZMO_YELLOW = 0xfacc15;
+
+function gizmoAxisLength(_bounds: EditorBounds, z: number) {
+  return 90 / z;
+}
+
+function gizmoRotateRadius(_bounds: EditorBounds, z: number) {
+  return 70 / z;
+}
 
 export function renderSelectionOutline<TWorld extends DebuggerWorld>(
   world: TWorld,
@@ -55,70 +68,78 @@ export function renderEditorGizmo<TWorld extends DebuggerWorld>(
   const bounds = getEntityEditorBounds(world, selectedEntity);
   if (!bounds) return;
 
-  const handleRadius = 6 / Math.max(zoom, 0.1);
-  const outlineWidth = 1.5 / Math.max(zoom, 0.1);
+  const z = Math.max(zoom, 0.1);
+  const handleRadius = 6 / z;
+  const outlineWidth = 3 / z;
+  const px = bounds.pivotX;
+  const py = bounds.pivotY;
 
   renderSelectionOutline(world, overlay, selectedEntity, zoom);
 
   if (toolMode === "move") {
-    const axis = Math.max(bounds.width, bounds.height) * 0.5 + 24 / Math.max(zoom, 0.1);
-    const head = 7 / Math.max(zoom, 0.1);
-    overlay.moveTo(bounds.pivotX, bounds.pivotY).lineTo(bounds.pivotX + axis, bounds.pivotY).stroke({
-      color: 0xef4444,
-      width: outlineWidth,
-      alpha: 0.95,
-    });
-    overlay.moveTo(bounds.pivotX + axis, bounds.pivotY)
-      .lineTo(bounds.pivotX + axis - head, bounds.pivotY - head * 0.65)
-      .stroke({ color: 0xef4444, width: outlineWidth, alpha: 0.95 });
-    overlay.moveTo(bounds.pivotX + axis, bounds.pivotY)
-      .lineTo(bounds.pivotX + axis - head, bounds.pivotY + head * 0.65)
-      .stroke({ color: 0xef4444, width: outlineWidth, alpha: 0.95 });
+    const axis = gizmoAxisLength(bounds, z);
+    const head = 8 / z;
+    const boxHalf = 5 / z;
 
-    overlay.moveTo(bounds.pivotX, bounds.pivotY).lineTo(bounds.pivotX, bounds.pivotY - axis).stroke({
-      color: 0x22c55e,
-      width: outlineWidth,
-      alpha: 0.95,
-    });
-    overlay.moveTo(bounds.pivotX, bounds.pivotY - axis)
-      .lineTo(bounds.pivotX - head * 0.65, bounds.pivotY - axis + head)
-      .stroke({ color: 0x22c55e, width: outlineWidth, alpha: 0.95 });
-    overlay.moveTo(bounds.pivotX, bounds.pivotY - axis)
-      .lineTo(bounds.pivotX + head * 0.65, bounds.pivotY - axis + head)
-      .stroke({ color: 0x22c55e, width: outlineWidth, alpha: 0.95 });
+    // X axis (right, red) + filled arrowhead
+    overlay.moveTo(px, py).lineTo(px + axis, py).stroke({ color: GIZMO_RED, width: outlineWidth, alpha: 0.95 });
+    overlay.poly([px + axis, py, px + axis - head, py - head * 0.6, px + axis - head, py + head * 0.6]).fill({ color: GIZMO_RED, alpha: 0.95 });
 
-    overlay.rect(
-      bounds.pivotX - handleRadius,
-      bounds.pivotY - handleRadius,
-      handleRadius * 2,
-      handleRadius * 2,
-    ).fill({ color: 0x60a5fa, alpha: 0.95 });
+    // Y axis (up, green) + filled arrowhead
+    overlay.moveTo(px, py).lineTo(px, py - axis).stroke({ color: GIZMO_GREEN, width: outlineWidth, alpha: 0.95 });
+    overlay.poly([px, py - axis, px - head * 0.6, py - axis + head, px + head * 0.6, py - axis + head]).fill({ color: GIZMO_GREEN, alpha: 0.95 });
+
+    // XY plane right-angle highlight (green, up-right of pivot)
+    const off = 8 / z;
+    const leg = 9 / z;
+    overlay.moveTo(px + off, py - off - leg).lineTo(px + off, py - off).lineTo(px + off + leg, py - off)
+      .stroke({ color: GIZMO_GREEN, width: outlineWidth * 0.9, alpha: 0.5 });
+
+    // center box (white)
+    overlay.rect(px - boxHalf, py - boxHalf, boxHalf * 2, boxHalf * 2)
+      .fill({ color: 0xffffff, alpha: 0.95 })
+      .stroke({ color: 0x000000, width: outlineWidth * 0.8, alpha: 0.5 });
     return;
   }
 
   if (toolMode === "scale") {
-    for (const corner of getScaleHandlePoints(bounds)) {
-      overlay.rect(corner.x - handleRadius, corner.y - handleRadius, handleRadius * 2, handleRadius * 2).fill({
-        color: 0x38bdf8,
-        alpha: 0.95,
-      });
-    }
+    const axis = gizmoAxisLength(bounds, z);
+    const tip = 6 / z;
+    const boxHalf = 6 / z;
+
+    // X axis (right, red) + square tip
+    overlay.moveTo(px, py).lineTo(px + axis, py).stroke({ color: GIZMO_RED, width: outlineWidth, alpha: 0.95 });
+    overlay.rect(px + axis - tip, py - tip, tip * 2, tip * 2).fill({ color: GIZMO_RED, alpha: 0.95 });
+
+    // Y axis (up, green) + square tip
+    overlay.moveTo(px, py).lineTo(px, py - axis).stroke({ color: GIZMO_GREEN, width: outlineWidth, alpha: 0.95 });
+    overlay.rect(px - tip, py - axis - tip, tip * 2, tip * 2).fill({ color: GIZMO_GREEN, alpha: 0.95 });
+
+    // uniform-scale right-angle highlight (yellow)
+    const off = 8 / z;
+    const leg = 9 / z;
+    overlay.moveTo(px + off, py - off - leg).lineTo(px + off, py - off).lineTo(px + off + leg, py - off)
+      .stroke({ color: GIZMO_YELLOW, width: outlineWidth * 0.9, alpha: 0.5 });
+
+    // center box (uniform, yellow)
+    overlay.rect(px - boxHalf, py - boxHalf, boxHalf * 2, boxHalf * 2)
+      .fill({ color: GIZMO_YELLOW, alpha: 0.95 })
+      .stroke({ color: 0x000000, width: outlineWidth * 0.8, alpha: 0.5 });
     return;
   }
 
-  const rotateRadius = Math.max(bounds.width, bounds.height) * 0.5 + 18 / Math.max(zoom, 0.1);
-  const handleY = bounds.y - 22 / Math.max(zoom, 0.1);
-  overlay.circle(bounds.pivotX, bounds.pivotY, rotateRadius).stroke({
-    color: 0xf59e0b,
-    width: outlineWidth,
-    alpha: 0.9,
-  });
-  overlay.moveTo(bounds.pivotX, bounds.y).lineTo(bounds.pivotX, handleY).stroke({
-    color: 0xf59e0b,
-    width: outlineWidth,
-    alpha: 0.9,
-  });
-  overlay.circle(bounds.pivotX, handleY, handleRadius).fill({ color: 0xf59e0b, alpha: 0.95 });
+  // rotate: blue ring + white handle that orbits with the entity's rotation
+  const rotateRadius = gizmoRotateRadius(bounds, z);
+  const rotation = transforms.get(selectedEntity)?.rotation ?? 0;
+  const handleAngle = -Math.PI / 2 + rotation;
+  const hx = px + Math.cos(handleAngle) * rotateRadius;
+  const hy = py + Math.sin(handleAngle) * rotateRadius;
+  overlay.circle(px, py, rotateRadius).stroke({ color: GIZMO_BLUE, width: 4 / z, alpha: 0.9 });
+  // spoke from center to handle so the current angle reads clearly
+  overlay.moveTo(px, py).lineTo(hx, hy).stroke({ color: GIZMO_BLUE, width: outlineWidth, alpha: 0.5 });
+  overlay.circle(hx, hy, handleRadius)
+    .fill({ color: 0xffffff, alpha: 0.95 })
+    .stroke({ color: GIZMO_BLUE, width: outlineWidth, alpha: 0.95 });
 }
 
 export function hitEditorGizmo<TWorld extends DebuggerWorld>(
@@ -140,15 +161,23 @@ export function hitEditorGizmo<TWorld extends DebuggerWorld>(
   }
 
   if (toolMode === "scale") {
-    for (const corner of getScaleHandlePoints(bounds)) {
-      if (Math.abs(point.x - corner.x) <= handleRadius && Math.abs(point.y - corner.y) <= handleRadius) {
-        return { kind: "scale", entity, handle: corner.handle, bounds };
-      }
+    const z = Math.max(zoom, 0.1);
+    const axis = gizmoAxisLength(bounds, z);
+    const px = bounds.pivotX;
+    const py = bounds.pivotY;
+    if (Math.abs(point.x - px) <= handleRadius && Math.abs(point.y - py) <= handleRadius) {
+      return { kind: "scale", entity, handle: "uniform", bounds };
+    }
+    if (Math.abs(point.x - (px + axis)) <= handleRadius && Math.abs(point.y - py) <= handleRadius) {
+      return { kind: "scale", entity, handle: "x", bounds };
+    }
+    if (Math.abs(point.x - px) <= handleRadius && Math.abs(point.y - (py - axis)) <= handleRadius) {
+      return { kind: "scale", entity, handle: "y", bounds };
     }
     return null;
   }
 
-  const rotateRadius = Math.max(bounds.width, bounds.height) * 0.5 + 18 / Math.max(zoom, 0.1);
+  const rotateRadius = gizmoRotateRadius(bounds, Math.max(zoom, 0.1));
   const distance = Math.hypot(point.x - bounds.pivotX, point.y - bounds.pivotY);
   if (Math.abs(distance - rotateRadius) <= handleRadius * 1.2) return { kind: "rotate", entity, bounds };
 
@@ -197,15 +226,6 @@ function toBounds(entity: Entity, x: number, y: number, width: number, height: n
 function normalizeScale(scale?: TransformScale) {
   if (scale === undefined) return { x: 1, y: 1 };
   return typeof scale === "number" ? { x: scale, y: scale } : scale;
-}
-
-function getScaleHandlePoints(bounds: EditorBounds) {
-  return [
-    { handle: "nw" as const, x: bounds.x, y: bounds.y },
-    { handle: "ne" as const, x: bounds.x + bounds.width, y: bounds.y },
-    { handle: "se" as const, x: bounds.x + bounds.width, y: bounds.y + bounds.height },
-    { handle: "sw" as const, x: bounds.x, y: bounds.y + bounds.height },
-  ];
 }
 
 function pointInBounds(point: { x: number; y: number }, bounds: EditorBounds) {

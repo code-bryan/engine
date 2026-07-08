@@ -1682,14 +1682,10 @@ export function ensureDebuggerStyles() {
       color: #f87171;
     }
     .app-shell--debug {
-      background:
-        radial-gradient(circle at top, rgba(59, 130, 246, 0.10), transparent 32%),
-        linear-gradient(180deg, #0a0d12 0%, #090b10 100%);
+      background: #141414;
     }
     .debugger-root {
-      background:
-        linear-gradient(180deg, rgba(15, 23, 42, 0.16), rgba(15, 23, 42, 0.04)),
-        radial-gradient(circle at 20% 0%, rgba(96, 165, 250, 0.08), transparent 30%);
+      background: transparent;
     }
     .debugger-viewport-hud {
       top: 14px;
@@ -1742,31 +1738,13 @@ export function ensureDebuggerStyles() {
       grid-template-rows: minmax(0, 1fr);
     }
     .debugger-stage {
-      grid-area: stage;
       min-width: 0;
       min-height: 0;
       position: relative;
-      border: 1px solid rgba(148, 163, 184, 0.12);
-      border-radius: 22px;
-      background:
-        linear-gradient(180deg, rgba(15, 23, 42, 0.18), rgba(2, 6, 23, 0.04)),
-        radial-gradient(circle at top left, rgba(96, 165, 250, 0.06), transparent 26%);
-      box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.05),
-        0 30px 60px rgba(0, 0, 0, 0.35);
+      background: transparent;
+      border: none;
+      box-shadow: none;
       overflow: hidden;
-    }
-    .debugger-stage::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background:
-        linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-      background-size: 40px 40px;
-      opacity: 0.16;
-      pointer-events: none;
-      mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.5), transparent 92%);
     }
     .debugger-panel--right {
       grid-area: right;

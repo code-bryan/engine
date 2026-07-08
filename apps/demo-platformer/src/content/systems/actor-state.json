@@ -8,16 +8,16 @@
       "id": "6f8946e6-bd1b-4d12-a112-b0d3178ffd69",
       "type": "OnUpdate",
       "position": {
-        "x": -366,
-        "y": 119
+        "x": -311,
+        "y": 121
       }
     },
     {
       "id": "dcb57f41-644f-483b-8213-e513dff48ea4",
       "type": "ForEachEntityWithTag",
       "position": {
-        "x": 56,
-        "y": 137
+        "x": 16,
+        "y": 129
       },
       "data": {
         "tag": "player"
@@ -54,8 +54,8 @@
       "id": "3a1a9b44-c430-4612-9d94-861146341175",
       "type": "SetComponent",
       "position": {
-        "x": 1534,
-        "y": 37
+        "x": 1512,
+        "y": 31
       },
       "data": {
         "component": "actor-state",
@@ -66,8 +66,8 @@
       "id": "8fc624ca-3b60-4341-935b-e25608b202c5",
       "type": "SetComponent",
       "position": {
-        "x": 1524,
-        "y": 274
+        "x": 1510,
+        "y": 282
       },
       "data": {
         "component": "actor-state",

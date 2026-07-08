@@ -20,8 +20,8 @@ export function renderPhysicsOverlay<TWorld extends DebuggerWorld>(
 ) {
   overlay.clear();
 
-  if (state?.showGrid && gridOptions) {
-    renderWorldGrid(overlay, state.camera, gridOptions, viewportW, viewportH);
+  if (state?.showGrid) {
+    renderWorldGrid(overlay, state.camera, state.snapGridSize, viewportW, viewportH);
   }
 
   if (gameW && gameH) {

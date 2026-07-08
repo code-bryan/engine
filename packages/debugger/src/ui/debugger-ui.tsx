@@ -32,6 +32,11 @@ import type { ContentTreeNode, EditorToolMode } from "../shared/types";
 
 const GRAPH_ZOOM_SENSITIVITY = 2.5;
 
+const CONTENT_MENU_ITEM = "w-full text-left px-3 py-1.5 text-[#ccc] hover:bg-[#2d2d2d] hover:text-white transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#ccc]";
+const DIALOG_BTN = "px-3 py-1.5 bg-[#2d2d2d] hover:bg-[#3a3a3a] border border-[#303030] rounded text-white transition-colors disabled:opacity-40";
+const DIALOG_BTN_PRIMARY = "px-3 py-1.5 bg-[#0070e0] hover:bg-[#005bb5] border border-[#0070e0] rounded text-white transition-colors disabled:opacity-40";
+const DIALOG_BTN_DANGER = "px-3 py-1.5 bg-[#b91c1c] hover:bg-[#dc2626] border border-[#b91c1c] rounded text-white transition-colors disabled:opacity-40";
+
 export type DebuggerStatusCardView = {
   title: string;
   fields: Array<{ label: string; value: string }>;
@@ -96,6 +101,10 @@ export type DebuggerUiProps = {
   cameraLocked: boolean;
   debugMenuOpen: boolean;
   toolMode: EditorToolMode;
+  snapGrid: boolean;
+  snapGridSize: number;
+  snapRotate: boolean;
+  snapRotateDeg: number;
   entityQuery: string;
   inspectorQuery: string;
   statusCards: DebuggerStatusCardView[];
@@ -127,6 +136,19 @@ export type DebuggerUiProps = {
   onToggleSystem: (index: number) => void;
   onToggleLogFilter: (cat: string) => void;
   onToggleLogPause: () => void;
+  onToggleGridSnap: () => void;
+  onSetGridSnapSize: (value: number) => void;
+  onCalcGridSnapSize: () => void;
+  onToggleRotationSnap: () => void;
+  onSetRotationSnapDeg: (value: number) => void;
+  activeWorldName: string;
+  openBlueprints: Array<{ path: string; name: string }>;
+  activeBlueprint: string | null;
+  onOpenBlueprint: (path: string) => void;
+  onCloseBlueprint: (path: string) => void;
+  onSelectViewportTab: () => void;
+  onSelectBlueprintTab: (path: string) => void;
+  onCompile: () => void;
   onOpenLevel?: () => void;
   contentDrawerOpen: boolean;
   contentTree: ContentTreeNode[];
@@ -147,7 +169,9 @@ export function DebuggerUi(props: DebuggerUiProps) {
   const selectedEntityRef = useRef<HTMLButtonElement | null>(null);
   const [stagePortal, setStagePortal] = useState<HTMLElement | null>(null);
   const [cameraTuningOpen, setCameraTuningOpen] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<BottomDrawerTab>("content");
+  const [windowPanel, setWindowPanel] = useState<BottomDrawerTab | null>(null);
+  const [windowMenuOpen, setWindowMenuOpen] = useState(false);
+  const [snapMenu, setSnapMenu] = useState<"grid" | "rot" | null>(null);
   const [zoomToastOpen, setZoomToastOpen] = useState(false);
   const zoomToastTimerRef = useRef<number | undefined>(undefined);
   const didMountRef = useRef(false);
@@ -174,6 +198,50 @@ export function DebuggerUi(props: DebuggerUiProps) {
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [cameraTuningOpen]);
+
+  useEffect(() => {
+    if (!windowMenuOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!(event.target instanceof Element)) return;
+      if (event.target.closest("[data-window-menu-root]")) return;
+      setWindowMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [windowMenuOpen]);
+
+  useEffect(() => {
+    if (!snapMenu) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!(event.target instanceof Element)) return;
+      if (event.target.closest("[data-snap-menu-root]")) return;
+      setSnapMenu(null);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [snapMenu]);
+
+  useEffect(() => {
+    if (!windowPanel) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setWindowPanel(null);
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [windowPanel]);
+
+  const onToggleContentDrawer = props.onToggleContentDrawer;
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== "Space" || !event.ctrlKey) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      event.preventDefault();
+      onToggleContentDrawer();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onToggleContentDrawer]);
 
   useEffect(() => {
     if (!didMountRef.current) {
@@ -204,281 +272,443 @@ export function DebuggerUi(props: DebuggerUiProps) {
   return (
     <>
       {zoomToast}
-      <div className="debugger-viewport-hud">
-        <div className="debugger-viewport-hud__item">
-          <span className="debugger-viewport-hud__label">FPS:</span>
-          <strong className="debugger-viewport-hud__value debugger-viewport-hud__value--fps">{props.fps}</strong>
-        </div>
-        <div className="debugger-viewport-hud__item">
-          <span className="debugger-viewport-hud__label">MS:</span>
-          <strong className="debugger-viewport-hud__value debugger-viewport-hud__value--ms">{props.frameMs}</strong>
-        </div>
-      </div>
-      <div className={`debugger-layout${isPlaying ? " debugger-layout--playing" : ""}`} onClickCapture={props.onCloseMenus}>
-        <main className="debugger-stage" ref={setStagePortal}>
-          <div className="debugger-viewport-overlay" aria-label="Viewport controls">
-            <div className="debugger-viewport-group debugger-viewport-group--left" aria-label="Selection tools">
-              <button className={`debugger-viewport-button${props.toolMode === "select" ? " is-active" : ""}`} onClick={() => props.onSetToolMode("select")} title="Select Tool" aria-label="Select Tool">
-                <MousePointer2 size={14} strokeWidth={2} />
-              </button>
-              <button className={`debugger-viewport-button${props.toolMode === "move" ? " is-active" : ""}`} onClick={() => props.onSetToolMode("move")} title="Move Tool" aria-label="Move Tool">
-                <Crosshair size={14} strokeWidth={2} />
-              </button>
-              <button className={`debugger-viewport-button${props.toolMode === "scale" ? " is-active" : ""}`} onClick={() => props.onSetToolMode("scale")} title="Scale Tool" aria-label="Scale Tool">
-                <Expand size={14} strokeWidth={2} />
-              </button>
-              <button className={`debugger-viewport-button${props.toolMode === "rotate" ? " is-active" : ""}`} onClick={() => props.onSetToolMode("rotate")} title="Rotate Tool" aria-label="Rotate Tool">
-                <RotateCw size={14} strokeWidth={2} />
-              </button>
+      <div className="absolute inset-0 flex flex-col text-xs pointer-events-none">
+        {/* TOP HEADER BAR */}
+        <header className="pointer-events-auto relative h-12 bg-[#181818] border-b border-[#303030] flex items-center justify-between px-3 select-none flex-shrink-0 z-30">
+          <div className="flex items-center space-x-4">
+            <div className="text-white font-bold text-sm tracking-wide flex items-center gap-2">
+              <i className="ph-fill ph-hexagon text-[#0070e0] text-lg" />
+              NEXUS
             </div>
-            <div className="debugger-viewport-group debugger-viewport-group--center" aria-label="Playback controls">
-              <button className={`debugger-viewport-button${props.playbackState === "playing" ? " is-active" : ""}`} onClick={() => props.onPlaybackAction("play")} title="Play" aria-label="Play">
-                <Play size={14} fill="currentColor" strokeWidth={2} />
-              </button>
-              <button className={`debugger-viewport-button${props.playbackState === "paused" ? " is-active" : ""}`} onClick={() => props.onPlaybackAction("pause")} title="Pause" aria-label="Pause">
-                <Pause size={14} fill="currentColor" strokeWidth={2} />
-              </button>
-              <button className="debugger-viewport-button" onClick={() => props.onPlaybackAction("step")} title="Step Frame" aria-label="Step Frame">
-                <StepForward size={14} strokeWidth={2} />
-              </button>
-              <button className={`debugger-viewport-button${props.playbackState === "stopped" ? " is-active" : ""}`} onClick={() => props.onPlaybackAction("stop")} title="Restart" aria-label="Restart">
-                <Redo2 size={14} strokeWidth={2} />
-              </button>
-            </div>
-            <div className="debugger-viewport-group debugger-viewport-group--right" aria-label="Camera tools">
-              <div className="debugger-zoom-tuning-wrap debugger-viewport-group__stack" data-camera-tuning-root onClick={(event) => event.stopPropagation()}>
-                <button
-                  className={`debugger-viewport-button${props.cameraLocked ? " is-active" : ""}`}
-                  onClick={props.onToggleCameraLock}
-                  title="Lock Camera to Entity"
-                  aria-label="Lock Camera to Entity"
+            <nav className="flex space-x-1 text-[#cccccc]" data-window-menu-root onClick={(event) => event.stopPropagation()}>
+              <div className="px-2 py-1 hover:bg-[#2d2d2d] rounded cursor-pointer transition-colors">File</div>
+              <div className="px-2 py-1 hover:bg-[#2d2d2d] rounded cursor-pointer transition-colors">Edit</div>
+              <div className="relative">
+                <div
+                  className={`px-2 py-1 rounded cursor-pointer transition-colors${windowMenuOpen ? " bg-[#2d2d2d] text-white" : " hover:bg-[#2d2d2d]"}`}
+                  onClick={() => setWindowMenuOpen((open) => !open)}
                 >
-                  <Camera size={14} strokeWidth={2} />
-                </button>
-                <button className="debugger-viewport-button" onClick={() => props.onZoomAction("camera-reset")} title="Reset Camera" aria-label="Reset Camera">
-                  <LocateFixed size={14} strokeWidth={2} />
-                </button>
-                <button className="debugger-viewport-button" onClick={() => props.onZoomAction("zoom-out")} title="Zoom Out" aria-label="Zoom Out">
-                  <Minus size={14} strokeWidth={2} />
-                </button>
-                <button className="debugger-viewport-button" onClick={() => props.onZoomAction("zoom-in")} title="Zoom In" aria-label="Zoom In">
-                  <Plus size={14} strokeWidth={2} />
-                </button>
-                <button className="debugger-viewport-button" onClick={() => props.onZoomAction("zoom-fit")} title="Fit game in viewport" aria-label="Fit game in viewport">
-                  <ScanSearch size={14} strokeWidth={2} />
-                </button>
-                <button
-                  className={`debugger-viewport-button debugger-zoom-tuning-toggle${cameraTuningOpen ? " is-active" : ""}`}
-                  onClick={() => setCameraTuningOpen((open) => !open)}
-                  title="Camera speed"
-                  aria-label="Camera speed"
-                  aria-expanded={cameraTuningOpen}
-                  aria-haspopup="true"
+                  Window
+                </div>
+                {windowMenuOpen && (
+                  <div className="absolute left-0 top-full mt-1 w-40 bg-[#1e1e1e] border border-[#303030] rounded shadow-xl py-1 z-40">
+                    {([
+                      { id: "systems", label: "Systems" },
+                      { id: "snapshots", label: "Snapshots" },
+                      { id: "logs", label: "Logs" },
+                    ] as const).map((entry) => (
+                      <button
+                        key={entry.id}
+                        className="w-full text-left px-3 py-1.5 text-[#ccc] hover:bg-[#2d2d2d] hover:text-white transition-colors"
+                        onClick={() => {
+                          setWindowPanel(entry.id);
+                          setWindowMenuOpen(false);
+                        }}
+                      >
+                        {entry.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="px-2 py-1 hover:bg-[#2d2d2d] rounded cursor-pointer transition-colors">Help</div>
+            </nav>
+          </div>
+
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center space-x-1 bg-[#111111] border border-[#303030] p-1 rounded-md">
+            <button className={`p-1.5 hover:bg-[#2d2d2d] rounded transition-colors ${props.playbackState === "playing" ? "text-[#4ade80]" : "text-[#888] hover:text-[#4ade80]"}`} onClick={() => props.onPlaybackAction("play")} title="Play">
+              <i className="ph-fill ph-play text-sm" />
+            </button>
+            <button className={`p-1.5 hover:bg-[#2d2d2d] rounded transition-colors ${props.playbackState === "paused" ? "text-white" : "text-[#888] hover:text-white"}`} onClick={() => props.onPlaybackAction("pause")} title="Pause">
+              <i className="ph-fill ph-pause text-sm" />
+            </button>
+            <button className={`p-1.5 hover:bg-[#2d2d2d] rounded transition-colors ${props.playbackState === "stopped" ? "text-[#f87171]" : "text-[#888] hover:text-[#f87171]"}`} onClick={() => props.onPlaybackAction("stop")} title="Stop / Restart">
+              <i className="ph-fill ph-stop text-sm" />
+            </button>
+            <div className="w-px h-4 bg-[#303030] mx-1" />
+            <button className="p-1.5 hover:bg-[#2d2d2d] rounded text-[#888] hover:text-[#60a5fa] transition-colors" onClick={() => props.onPlaybackAction("step")} title="Step Frame">
+              <i className="ph-fill ph-skip-forward text-sm" />
+            </button>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <button className="px-3 py-1.5 bg-[#0070e0] hover:bg-[#005bb5] text-white rounded transition-colors flex items-center gap-2 font-medium" title="Build (coming soon)">
+              <i className="ph-bold ph-export" /> Build
+            </button>
+            <button className="p-1.5 hover:bg-[#2d2d2d] rounded text-[#888] transition-colors" title="Settings" onClick={() => setCameraTuningOpen((open) => !open)}>
+              <i className="ph ph-gear text-lg" />
+            </button>
+          </div>
+        </header>
+
+        {/* TAB BAR: viewport + open blueprints */}
+        <div className="pointer-events-auto h-8 bg-[#181818] border-b border-[#303030] flex items-center px-1 flex-shrink-0 select-none z-20 overflow-x-auto">
+          <button
+            className={`px-4 py-1.5 text-[11px] font-medium flex items-center gap-2 flex-shrink-0 border-t-2 transition-colors ${props.activeBlueprint === null ? "bg-[#1e1e1e] text-white border-[#0070e0]" : "text-[#888] hover:bg-[#1e1e1e] hover:text-[#ccc] border-transparent"}`}
+            onClick={props.onSelectViewportTab}
+          >
+            <i className={`ph-fill ph-globe-hemisphere-west ${props.activeBlueprint === null ? "text-[#0070e0]" : "text-[#888]"}`} /> {props.activeWorldName}
+          </button>
+          {props.openBlueprints.map((bp) => {
+            const active = props.activeBlueprint === bp.path;
+            return (
+              <button
+                key={bp.path}
+                className={`px-4 py-1.5 text-[11px] font-medium flex items-center gap-2 flex-shrink-0 border-t-2 transition-colors ${active ? "bg-[#1e1e1e] text-white border-[#0070e0]" : "text-[#888] hover:bg-[#1e1e1e] hover:text-[#ccc] border-transparent"}`}
+                onClick={() => props.onSelectBlueprintTab(bp.path)}
+              >
+                <i className={`ph-fill ph-file-code ${active ? "text-[#0070e0]" : "text-[#888]"}`} /> {bp.name}
+                <span
+                  className="ml-2 p-0.5 rounded-full hover:bg-[#333] hover:text-white"
+                  role="button"
+                  aria-label="Close tab"
+                  onClick={(event) => { event.stopPropagation(); props.onCloseBlueprint(bp.path); }}
                 >
-                  <Camera size={14} strokeWidth={2} />
+                  <i className="ph ph-x" />
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* MAIN WORKSPACE */}
+        <div className="flex-1 flex overflow-hidden min-h-0 relative">
+          {/* CENTER: viewport + content drawer */}
+          <div className="flex-1 flex flex-col relative min-w-0">
+            <main className="debugger-stage flex-1 relative overflow-hidden pointer-events-none" ref={setStagePortal}>
+              {/* Top-left: Show dropdown, with FPS/MS HUD to its right */}
+              <div className="absolute top-3 left-3 flex items-stretch gap-2 z-20">
+                <div className="pointer-events-auto relative" data-dropdown-root onClick={(event) => event.stopPropagation()}>
+                  <button
+                    className="px-2 py-1 bg-black/60 hover:bg-black/80 backdrop-blur text-[#ccc] hover:text-white rounded flex items-center gap-1 transition-all border border-white/10"
+                    onClick={props.onToggleDebugMenu}
+                  >
+                    Show <i className="ph ph-caret-down text-[10px]" />
+                  </button>
+                  {props.debugMenuOpen && (
+                    <div className="absolute left-0 top-full mt-2 w-40 bg-[#1e1e1e] border border-[#303030] rounded shadow-lg flex flex-col text-left z-50 overflow-hidden font-normal text-xs">
+                      <div className="px-3 py-2 text-[10px] uppercase text-[#888] font-bold tracking-wider">Engine</div>
+                      {([
+                        { label: "Grid", active: props.showGrid, toggle: props.onToggleGrid },
+                        { label: "Collision", active: props.showPhysics, toggle: props.onTogglePhysics },
+                        { label: "Bounds", active: props.showSprites, toggle: props.onToggleSprites },
+                      ]).map((item) => (
+                        <button
+                          key={item.label}
+                          className="px-3 py-1.5 hover:bg-[#2d2d2d] cursor-pointer text-[#ccc] flex items-center justify-between w-full"
+                          onClick={item.toggle}
+                        >
+                          {item.label}
+                          {item.active ? <i className="ph-bold ph-check text-[#0070e0]" /> : null}
+                        </button>
+                      ))}
+                      <div className="h-px bg-[#303030] my-1" />
+                      <div className="px-3 py-2 text-[10px] uppercase text-[#888] font-bold tracking-wider">Game</div>
+                      <button
+                        className="px-3 py-1.5 hover:bg-[#2d2d2d] cursor-pointer text-[#ccc] flex items-center justify-between w-full"
+                        onClick={props.onToggleLabels}
+                      >
+                        Labels
+                        {props.showLabels ? <i className="ph-bold ph-check text-[#0070e0]" /> : null}
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="pointer-events-none flex items-center gap-3 px-3 py-1 rounded bg-black/70 border border-white/10 backdrop-blur font-mono text-[10px]">
+                  <span><span className="text-[#71717a]">FPS </span><strong className="text-[#4ade80]">{props.fps}</strong></span>
+                  <span><span className="text-[#71717a]">MS </span><strong className="text-[#facc15]">{props.frameMs}</strong></span>
+                </div>
+              </div>
+
+              {/* Left floating tool rail */}
+              <div className="pointer-events-auto absolute top-1/2 left-3 -translate-y-1/2 flex flex-col bg-black/60 backdrop-blur border border-white/10 rounded overflow-hidden z-10 shadow-lg">
+                {([
+                  { mode: "select", icon: "ph-cursor", title: "Select" },
+                  { mode: "move", icon: "ph-arrows-out-cardinal", title: "Move" },
+                  { mode: "rotate", icon: "ph-arrows-clockwise", title: "Rotate" },
+                  { mode: "scale", icon: "ph-corners-out", title: "Scale" },
+                ] as const).map((tool, index, all) => (
+                  <button
+                    key={tool.mode}
+                    className={`w-8 h-8 flex items-center justify-center transition-all ${index < all.length - 1 ? "border-b border-white/10" : ""} ${props.toolMode === tool.mode ? "text-[#0070e0] bg-[#2d2d2d] shadow-inner" : "text-[#888] hover:text-white hover:bg-black/80"}`}
+                    onClick={() => props.onSetToolMode(tool.mode)}
+                    title={tool.title}
+                    aria-label={tool.title}
+                  >
+                    <i className={`ph ${tool.icon} text-lg`} />
+                  </button>
+                ))}
+              </div>
+
+              {/* Top-right snap tools */}
+              <div className="pointer-events-auto absolute top-3 right-3 flex items-stretch bg-black/60 backdrop-blur border border-white/10 rounded z-30" data-snap-menu-root onClick={(event) => event.stopPropagation()}>
+                <button
+                  className={`p-1.5 border-r border-white/10 rounded-l transition-all ${props.snapGrid ? "text-[#0070e0] bg-[#2d2d2d]" : "text-[#888] hover:text-white hover:bg-black/80"}`}
+                  onClick={props.onToggleGridSnap}
+                  title={props.snapGrid ? "Grid snap: on" : "Grid snap: off"}
+                >
+                  <i className="ph-fill ph-grid-four text-sm" />
                 </button>
+                <div className="relative">
+                  <button
+                    className={`px-2 py-1.5 h-full border-r border-white/10 text-[10px] font-bold transition-all hover:text-white hover:bg-black/80 ${props.snapGrid ? "text-[#ccc]" : "text-[#666]"}`}
+                    onClick={() => setSnapMenu((cur) => (cur === "grid" ? null : "grid"))}
+                    title="Grid snap size"
+                  >
+                    {props.snapGridSize}px
+                  </button>
+                  {snapMenu === "grid" && (
+                    <div className="absolute top-full mt-2 right-0 w-20 bg-[#1e1e1e] border border-[#303030] rounded shadow-lg flex flex-col text-left z-50 overflow-hidden font-normal text-xs">
+                      {[8, 16, 32, 64].map((size) => (
+                        <button
+                          key={size}
+                          className={`px-3 py-1.5 text-left transition-colors ${props.snapGridSize === size ? "bg-[#2d2d2d] text-[#0070e0]" : "text-[#ccc] hover:bg-[#2d2d2d]"}`}
+                          onClick={() => { props.onSetGridSnapSize(size); setSnapMenu(null); }}
+                        >
+                          {size}px
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button
+                  className={`p-1.5 border-r border-white/10 transition-all ${props.snapRotate ? "text-[#0070e0] bg-[#2d2d2d]" : "text-[#888] hover:text-white hover:bg-black/80"}`}
+                  onClick={props.onToggleRotationSnap}
+                  title={props.snapRotate ? "Rotation snap: on" : "Rotation snap: off"}
+                >
+                  <i className="ph ph-arrow-arc-right text-sm" />
+                </button>
+                <div className="relative">
+                  <button
+                    className={`px-2 py-1.5 h-full rounded-r text-[10px] font-bold transition-all hover:text-white hover:bg-black/80 ${props.snapRotate ? "text-[#ccc]" : "text-[#666]"}`}
+                    onClick={() => setSnapMenu((cur) => (cur === "rot" ? null : "rot"))}
+                    title="Rotation snap angle"
+                  >
+                    {props.snapRotateDeg}°
+                  </button>
+                  {snapMenu === "rot" && (
+                    <div className="absolute top-full mt-2 right-0 w-20 bg-[#1e1e1e] border border-[#303030] rounded shadow-lg flex flex-col text-left z-50 overflow-hidden font-normal text-xs">
+                      {[5, 10, 15, 45, 90].map((deg) => (
+                        <button
+                          key={deg}
+                          className={`px-3 py-1.5 text-left transition-colors ${props.snapRotateDeg === deg ? "bg-[#2d2d2d] text-[#0070e0]" : "text-[#ccc] hover:bg-[#2d2d2d]"}`}
+                          onClick={() => { props.onSetRotationSnapDeg(deg); setSnapMenu(null); }}
+                        >
+                          {deg}°
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Top-right camera controls (vertical, below snap) */}
+              <div className="pointer-events-auto absolute top-14 right-3 z-10" data-camera-tuning-root onClick={(event) => event.stopPropagation()}>
+                <div className="flex flex-col bg-black/60 backdrop-blur border border-white/10 rounded overflow-hidden shadow-lg">
+                  <button className={`w-8 h-8 flex items-center justify-center border-b border-white/10 transition-all ${props.cameraLocked ? "text-[#0070e0] bg-[#2d2d2d]" : "text-[#888] hover:text-white hover:bg-black/80"}`} onClick={props.onToggleCameraLock} title="Lock Camera to Entity">
+                    <i className="ph ph-crosshair-simple text-base" />
+                  </button>
+                  <button className="w-8 h-8 flex items-center justify-center border-b border-white/10 text-[#888] hover:text-white hover:bg-black/80 transition-all" onClick={() => props.onZoomAction("camera-reset")} title="Reset Camera">
+                    <i className="ph ph-arrow-counter-clockwise text-base" />
+                  </button>
+                  <button className="w-8 h-8 flex items-center justify-center border-b border-white/10 text-[#888] hover:text-white hover:bg-black/80 transition-all" onClick={() => props.onZoomAction("zoom-fit")} title="Fit game in viewport">
+                    <i className="ph ph-arrows-in text-base" />
+                  </button>
+                  <button
+                    className={`w-8 h-8 flex items-center justify-center transition-all ${cameraTuningOpen ? "text-[#0070e0] bg-[#2d2d2d]" : "text-[#888] hover:text-white hover:bg-black/80"}`}
+                    onClick={() => setCameraTuningOpen((open) => !open)}
+                    title={`Camera Speed (${props.cameraZoomSensitivity.toFixed(1)})`}
+                    aria-expanded={cameraTuningOpen}
+                  >
+                    <i className="ph-fill ph-video-camera text-base" />
+                  </button>
+                </div>
                 {cameraTuningOpen && (
-                  <div className="debugger-zoom-tuning" title="Camera speed">
-                    <span className="debugger-zoom-tuning__label">Speed</span>
+                  <div className="absolute right-full mr-2 top-0 w-48 bg-[#1e1e1e] border border-[#303030] rounded shadow-lg flex flex-col p-3 z-50 cursor-default">
+                    <div className="text-[#888] mb-2 font-medium flex justify-between items-center">
+                      Camera Speed
+                      <span className="text-white font-mono">{props.cameraZoomSensitivity.toFixed(1)}</span>
+                    </div>
                     <input
-                      className="debugger-zoom-tuning__slider"
                       type="range"
                       min="1"
                       max="8"
                       step="0.1"
                       value={props.cameraZoomSensitivity}
                       onChange={(event) => props.onSetZoomSensitivity(Number(event.target.value))}
+                      className="w-full accent-[#0070e0] cursor-pointer"
                       aria-label="Camera speed"
                     />
-                    <span className="debugger-zoom-tuning__value">{props.cameraZoomSensitivity.toFixed(1)}x</span>
+                    <div className="flex justify-between text-[#555] mt-1 text-[9px] font-bold">
+                      <span>1</span>
+                      <span>8</span>
+                    </div>
                   </div>
                 )}
               </div>
-            </div>
-          </div>
-          <section className={`debugger-drawer${props.contentDrawerOpen ? " is-open" : ""}`}>
-            <div className="debugger-drawer__chrome">
-              <button className="debugger-drawer__toggle" onClick={props.onToggleContentDrawer}>
-                {props.contentDrawerOpen ? "Collapse" : "Drawer"}
-              </button>
-              {props.onOpenLevel && (
-                <button className="debugger-drawer__action" onClick={props.onOpenLevel} title="Open Level" aria-label="Open Level">
-                  <FileJson size={13} strokeWidth={2} />
-                </button>
+            </main>
+
+            {/* CONTENT DRAWER (assets only) */}
+            <section
+              id="content-drawer"
+              className="pointer-events-auto absolute bottom-0 left-0 w-full bg-[#1e1e1e] flex flex-col z-30 border-t border-[#303030] shadow-[0_-4px_15px_rgba(0,0,0,0.5)] overflow-hidden"
+              style={{ height: props.contentDrawerOpen ? 350 : 36 }}
+            >
+              <div className="h-[36px] min-h-[36px] flex items-center px-4 bg-[#181818] cursor-pointer hover:bg-[#222] transition-colors group select-none" onClick={props.onToggleContentDrawer}>
+                <div className="flex items-center gap-2 text-[#ccc] group-hover:text-white transition-colors">
+                  <i className={`ph text-lg ${props.contentDrawerOpen ? "ph-caret-down" : "ph-folder-open"}`} />
+                  <span className="font-medium text-[13px]">Content Drawer</span>
+                </div>
+                <div className="ml-auto text-[#888] text-[10px]">Ctrl+Space</div>
+              </div>
+              {props.contentDrawerOpen && (
+                <div className="flex-1 flex overflow-hidden">
+                  <ContentBrowser
+                    tree={props.contentTree}
+                    activeWorld={props.activeWorld}
+                    activeSystems={props.activeSystems}
+                    onLoadWorld={props.onLoadWorld}
+                    onCreateFolder={props.onCreateFolder}
+                    onCreateWorld={props.onCreateWorld}
+                    onCreateComponent={props.onCreateComponent}
+                    onCreatePrefab={props.onCreatePrefab}
+                    onCreateGraph={props.onCreateGraph}
+                    onImportContent={props.onImportContent}
+                    onDeleteContent={props.onDeleteContent}
+                    onOpenGraph={props.onOpenBlueprint}
+                    keyboardLocked={isPlaying}
+                  />
+                </div>
               )}
-              <div className="debugger-drawer__tabs" role="tablist" aria-label="Bottom drawer tabs">
-                {[
-                  { id: "content" as const, label: "Content" },
-                  { id: "systems" as const, label: "Systems" },
-                  { id: "snapshots" as const, label: "Snapshots" },
-                  { id: "logs" as const, label: "Logs" },
-                ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    className={`debugger-drawer__tab${drawerTab === tab.id ? " is-active" : ""}`}
-                    onClick={() => setDrawerTab(tab.id)}
-                    role="tab"
-                    aria-selected={drawerTab === tab.id}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="debugger-drawer__body">
-              {drawerTab === "content" ? (
-                <ContentBrowser
-                  tree={props.contentTree}
-                  activeWorld={props.activeWorld}
-                  activeSystems={props.activeSystems}
-                  onLoadWorld={props.onLoadWorld}
-                  onCreateFolder={props.onCreateFolder}
-                  onCreateWorld={props.onCreateWorld}
-                  onCreateComponent={props.onCreateComponent}
-                  onCreatePrefab={props.onCreatePrefab}
-                  onCreateGraph={props.onCreateGraph}
-                  onImportContent={props.onImportContent}
-                  onDeleteContent={props.onDeleteContent}
-                  keyboardLocked={isPlaying}
-                />
-              ) : drawerTab === "systems" ? (
-                <SystemsDrawer
-                  statusCards={props.statusCards}
-                  systems={props.systems}
-                  onToggleSystem={props.onToggleSystem}
-                />
-              ) : drawerTab === "snapshots" ? (
-                <SnapshotsDrawer
-                  snapshots={props.snapshots}
-                  onSaveSnapshot={props.onSaveSnapshot}
-                  onRestoreSnapshot={props.onRestoreSnapshot}
-                />
-              ) : (
-                <EventLogDrawer
-                  logs={props.logs}
-                  logFilters={props.logFilters}
-                  logPaused={props.logPaused}
-                  onToggleLogFilter={props.onToggleLogFilter}
-                  onToggleLogPause={props.onToggleLogPause}
-                />
-              )}
-            </div>
-          </section>
-        </main>
-        <aside className="debugger-panel debugger-panel--right">
-          <div className="debugger-panel__toolbar">
-            <div className={`debugger-dropdown${props.debugMenuOpen ? " is-open" : ""}`} data-dropdown-root onClick={(event) => event.stopPropagation()}>
-              <button className="debugger-dropdown__trigger" onClick={props.onToggleDebugMenu}>
-                Debug <span aria-hidden="true">▾</span>
-              </button>
-              <div className="debugger-dropdown__panel debugger-dropdown__panel--compact">
-                <button className={`debugger-dropdown__item${props.showGrid ? " is-active" : ""}`} onClick={props.onToggleGrid}>
-                  <span className="debugger-dropdown__item-icon">#</span>Grid
-                </button>
-                <button className={`debugger-dropdown__item${props.showPhysics ? " is-active" : ""}`} onClick={props.onTogglePhysics}>
-                  <span className="debugger-dropdown__item-icon">□</span>Physics
-                </button>
-                <button className={`debugger-dropdown__item${props.showLabels ? " is-active" : ""}`} onClick={props.onToggleLabels}>
-                  <span className="debugger-dropdown__item-icon">T</span>Labels
-                </button>
-                <button className={`debugger-dropdown__item${props.showSprites ? " is-active" : ""}`} onClick={props.onToggleSprites}>
-                  <span className="debugger-dropdown__item-icon">⊡</span>Sprite Bounds
-                </button>
-              </div>
-            </div>
-          </div>
-          {isPlaying ? (
-            <section className="debugger-section debugger-section--debug">
-              <div className="debugger-section__title">Debug System</div>
-              <div className="debugger-sidepanels">
-                <RuntimeCard
-                  title="Runtime"
-                  fields={[
-                    { label: "FPS", value: props.fps },
-                    { label: "Frame", value: `${props.frameMs} ms` },
-                    { label: "Playback", value: props.playbackState },
-                    { label: "Camera", value: props.cameraLocked ? "locked" : "free" },
-                    { label: "Selection", value: selectedEntity ? `#${selectedEntity.entity} ${selectedEntity.title}` : "none" },
-                  ]}
-                />
-                {props.statusCards.map((card) => <RuntimeCard key={card.title} title={card.title} fields={card.fields} />)}
-                <section className="debugger-section debugger-section--grow">
-                  <div className="debugger-section__title">Systems</div>
-                  <div className="debugger-systems">
-                    {props.systems.length === 0 ? (
-                      <div className="debugger-card"><div className="debugger-field"><span>systems</span><strong>waiting for frame</strong></div></div>
-                    ) : props.systems.map((system) => (
-                      <div className={`debugger-card debugger-system${system.enabled ? "" : " debugger-system--disabled"}`} key={system.index}>
-                        <div className="debugger-field">
-                          <button className="debugger-system__toggle" onClick={() => props.onToggleSystem(system.index)} title={system.enabled ? "Disable system" : "Enable system"}>
-                            {system.enabled ? "●" : "○"}
-                          </button>
-                          <span className="debugger-system__label">{system.label}</span>
-                          <strong className="debugger-system__timing">{system.timing}</strong>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              </div>
             </section>
-          ) : (
-            <>
-              <section className="debugger-section debugger-section--entities">
-                <div className="debugger-section__title">Entities</div>
+          </div>
+
+          {/* RIGHT PANEL: Outliner + Details */}
+          <aside className="pointer-events-auto w-72 bg-[#1e1e1e] border-l border-[#303030] flex flex-col flex-shrink-0 z-10 shadow-xl">
+            {/* Outliner */}
+            <div className="flex-1 flex flex-col border-b border-[#303030] min-h-[30%]">
+              <div className="h-8 bg-[#252526] flex items-center px-3 border-b border-[#303030] justify-between text-white font-medium select-none">
+                Outliner
+                <i className="ph ph-magnifying-glass text-[#888]" />
+              </div>
+              <div className="px-2 py-1.5 border-b border-[#303030]">
                 <input
-                  className="debugger-input"
+                  className="engine-input w-full px-2 py-1 rounded text-[11px]"
                   placeholder="search entity or tag"
                   value={props.entityQuery}
                   onChange={(event) => props.onEntityQueryChange(event.target.value)}
                 />
-                <div className="debugger-entity-list">
-                  {props.entities.map((entity) => (
-                    <button
-                      key={entity.entity}
-                      ref={entity.selected ? selectedEntityRef : null}
-                      className={`debugger-entity${entity.selected ? " is-selected" : ""}`}
-                      onClick={() => props.onSelectEntity(entity.entity)}
-                    >
-                      <span>{entity.title}</span>
-                      <span className="debugger-pill">{entity.tag}</span>
-                    </button>
-                  ))}
+              </div>
+              <div className="flex-1 overflow-y-auto py-1 select-none">
+                <div className="flex items-center px-3 py-1 text-[#ccc]">
+                  <i className="ph ph-caret-down text-[10px] mr-1 text-[#888]" />
+                  <i className="ph ph-globe-hemisphere-west text-[#888] mr-2" />
+                  Scene
                 </div>
-              </section>
-              <section className="debugger-section debugger-section--inspector">
-                <div className="debugger-section__title">Inspector</div>
+                {props.entities.map((entity) => (
+                  <button
+                    key={entity.entity}
+                    ref={entity.selected ? selectedEntityRef : null}
+                    className={`w-full flex items-center pl-7 pr-3 py-1 cursor-pointer text-left ${entity.selected ? "bg-[#2d2d2d] border-l-2 border-[#0070e0] text-white" : "text-[#ccc] hover:bg-[#2d2d2d]"}`}
+                    onClick={() => props.onSelectEntity(entity.entity)}
+                  >
+                    <i className="ph-fill ph-cube text-[#888] mr-2" />
+                    <span className="truncate flex-1">{entity.title}</span>
+                    <span className="text-[10px] text-[#666] ml-2">{entity.tag}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Details */}
+            <div className="flex-1 flex flex-col min-h-[40%]">
+              <div className="h-8 bg-[#252526] flex items-center px-3 border-b border-[#303030] text-white font-medium select-none justify-between">
+                Details
+                <i className="ph ph-funnel text-[#888]" />
+              </div>
+              <div className="px-2 py-1.5 border-b border-[#303030]">
                 <input
-                  className="debugger-input"
+                  className="engine-input w-full px-2 py-1 rounded text-[11px]"
                   placeholder="filter fields…"
                   value={props.inspectorQuery}
                   onChange={(event) => props.onInspectorQueryChange(event.target.value)}
                 />
-                <div className="debugger-inspector">
-                  {props.inspectorCards.map((card) => (
-                    <div className={`debugger-card${card.collapsed ? " debugger-card--collapsed" : ""}`} key={card.id}>
-                      <div className="debugger-card__header">
-                        <span className="debugger-card__title">{card.title}</span>
-                        <button className="debugger-card__collapse" onClick={() => props.onToggleComponentCollapse(card.id)}>
-                          {card.collapsed ? "▸" : "▾"}
-                        </button>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                {selectedEntity ? (
+                  <div className="p-3 border-b border-[#303030] flex items-center gap-2">
+                    <i className="ph-fill ph-cube text-[#0070e0] text-lg" />
+                    <input type="text" value={selectedEntity.title} readOnly className="engine-input px-2 py-1 w-full rounded font-medium" />
+                  </div>
+                ) : (
+                  <div className="p-3 text-[#666]">No entity selected</div>
+                )}
+                {props.inspectorCards.map((card) => (
+                  <div className="border-b border-[#303030]" key={card.id}>
+                    <button
+                      className="w-full px-3 py-2 bg-[#252526] flex items-center cursor-pointer select-none text-white hover:bg-[#2a2a2b] text-left"
+                      onClick={() => props.onToggleComponentCollapse(card.id)}
+                    >
+                      <i className={`ph ${card.collapsed ? "ph-caret-right" : "ph-caret-down"} text-[10px] mr-2`} />
+                      {card.title}
+                    </button>
+                    {card.collapsed ? null : (
+                      <div className="p-3 space-y-2">
+                        {card.fields.map((field, index) => (
+                          <InspectorField
+                            key={`${card.id}-${field.label}-${index}`}
+                            field={field}
+                            onEdit={props.onInspectorEdit}
+                            onSelectEntity={props.onSelectEntity}
+                          />
+                        ))}
                       </div>
-                      {card.collapsed ? null : card.fields.map((field, index) => (
-                        <InspectorField
-                          key={`${card.id}-${field.label}-${index}`}
-                          field={field}
-                          onEdit={props.onInspectorEdit}
-                          onSelectEntity={props.onSelectEntity}
-                        />
-                      ))}
-                    </div>
-                  ))}
+                    )}
+                  </div>
+                ))}
+                <div className="p-3">
+                  <button className="w-full py-1.5 bg-[#2d2d2d] hover:bg-[#3a3a3a] border border-[#303030] rounded text-white transition-colors flex justify-center items-center gap-2 cursor-default" title="Add Component (coming soon)">
+                    <i className="ph ph-plus" /> Add Component
+                  </button>
                 </div>
-              </section>
-            </>
+              </div>
+            </div>
+          </aside>
+
+          {/* BLUEPRINT VIEW — overlays the whole workspace (canvas + its own right panel) */}
+          {props.activeBlueprint !== null && (
+            <BlueprintView
+              key={props.activeBlueprint}
+              path={props.activeBlueprint}
+              keyboardLocked={isPlaying}
+              onCompile={props.onCompile}
+            />
           )}
-        </aside>
+        </div>
       </div>
+
+      {/* Window overlay panels (Systems / Snapshots / Logs) */}
+      {windowPanel && (
+        <div className="pointer-events-auto fixed inset-0 z-40 flex items-center justify-center bg-black/50 backdrop-blur-sm" role="dialog" aria-modal="true" onClick={() => setWindowPanel(null)}>
+          <div className="w-[560px] max-w-[90vw] max-h-[80vh] flex flex-col bg-[#1e1e1e] border border-[#303030] rounded-lg shadow-2xl overflow-hidden" onClick={(event) => event.stopPropagation()}>
+            <div className="h-9 bg-[#252526] flex items-center justify-between px-3 border-b border-[#303030] text-white font-medium select-none">
+              <span className="capitalize">{windowPanel}</span>
+              <button className="text-[#888] hover:text-white transition-colors" onClick={() => setWindowPanel(null)} aria-label="Close">
+                <i className="ph ph-x" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3">
+              {windowPanel === "systems" ? (
+                <SystemsDrawer statusCards={props.statusCards} systems={props.systems} onToggleSystem={props.onToggleSystem} />
+              ) : windowPanel === "snapshots" ? (
+                <SnapshotsDrawer snapshots={props.snapshots} onSaveSnapshot={props.onSaveSnapshot} onRestoreSnapshot={props.onRestoreSnapshot} />
+              ) : (
+                <EventLogDrawer logs={props.logs} logFilters={props.logFilters} logPaused={props.logPaused} onToggleLogFilter={props.onToggleLogFilter} onToggleLogPause={props.onToggleLogPause} />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -489,31 +719,29 @@ function SystemsDrawer(props: {
   onToggleSystem: (index: number) => void;
 }) {
   return (
-    <section className="debugger-drawer-panel debugger-drawer-panel--systems">
-      <div className="debugger-drawer-panel__grid">
-        <div className="debugger-sidepanels">
+    <div className="space-y-3">
+      {props.statusCards.length > 0 && (
+        <div className="grid grid-cols-2 gap-2">
           {props.statusCards.map((card) => <RuntimeCard key={card.title} title={card.title} fields={card.fields} />)}
         </div>
-        <section className="debugger-section debugger-section--grow">
-          <div className="debugger-section__title">Systems</div>
-          <div className="debugger-systems">
-            {props.systems.length === 0 ? (
-              <div className="debugger-card"><div className="debugger-field"><span>systems</span><strong>waiting for frame</strong></div></div>
-            ) : props.systems.map((system) => (
-              <div className={`debugger-card debugger-system${system.enabled ? "" : " debugger-system--disabled"}`} key={system.index}>
-                <div className="debugger-field">
-                  <button className="debugger-system__toggle" onClick={() => props.onToggleSystem(system.index)} title={system.enabled ? "Disable system" : "Enable system"}>
-                    {system.enabled ? "●" : "○"}
-                  </button>
-                  <span className="debugger-system__label">{system.label}</span>
-                  <strong className="debugger-system__timing">{system.timing}</strong>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+      )}
+      <div>
+        <div className="text-white font-medium mb-2">Systems</div>
+        <div className="space-y-1">
+          {props.systems.length === 0 ? (
+            <div className="text-[#888] px-2 py-1">waiting for frame</div>
+          ) : props.systems.map((system) => (
+            <div className={`flex items-center gap-2 px-2 py-1 rounded border border-[#303030] bg-[#111111] ${system.enabled ? "" : "opacity-50"}`} key={system.index}>
+              <button className={`transition-colors ${system.enabled ? "text-[#4ade80]" : "text-[#666] hover:text-[#888]"}`} onClick={() => props.onToggleSystem(system.index)} title={system.enabled ? "Disable system" : "Enable system"}>
+                <i className={`ph-fill ${system.enabled ? "ph-circle" : "ph-circle"} text-xs`} />
+              </button>
+              <span className="flex-1 text-[#ccc] truncate">{system.label}</span>
+              <strong className="text-[#888] font-mono text-[11px]">{system.timing}</strong>
+            </div>
+          ))}
+        </div>
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -523,21 +751,21 @@ function SnapshotsDrawer(props: {
   onRestoreSnapshot: (index: number) => void;
 }) {
   return (
-    <section className="debugger-drawer-panel debugger-drawer-panel--snapshots">
-      <div className="debugger-snapshot-header">
-        <div className="debugger-section__title" style={{ marginBottom: 0 }}>Snapshots</div>
-        <button className="debugger-snapshot-save" onClick={props.onSaveSnapshot}>Save</button>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="text-white font-medium">Snapshots</div>
+        <button className="px-3 py-1 bg-[#2d2d2d] hover:bg-[#3a3a3a] border border-[#303030] rounded text-white transition-colors" onClick={props.onSaveSnapshot}>Save</button>
       </div>
-      <div className="debugger-snapshot-list">
-        {props.snapshots.length === 0 ? <span style={{ color: "#52525b", fontSize: 11 }}>none saved</span> : props.snapshots.map((snap) => (
-          <div className="debugger-snapshot-row" key={snap.index}>
-            <span className="debugger-snapshot-row__label">frame {snap.frame}</span>
-            <span>{snap.entityCount} entities</span>
-            <button className="debugger-snapshot-restore" onClick={() => props.onRestoreSnapshot(snap.index)}>Restore</button>
+      <div className="space-y-1">
+        {props.snapshots.length === 0 ? <span className="text-[#666] text-[11px]">none saved</span> : props.snapshots.map((snap) => (
+          <div className="flex items-center gap-2 px-2 py-1 bg-[#111111] border border-[#303030] rounded" key={snap.index}>
+            <span className="text-[#ccc]">frame {snap.frame}</span>
+            <span className="flex-1 text-[#888]">{snap.entityCount} entities</span>
+            <button className="text-[#0070e0] hover:underline" onClick={() => props.onRestoreSnapshot(snap.index)}>Restore</button>
           </div>
         ))}
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -549,35 +777,34 @@ function EventLogDrawer(props: {
   onToggleLogPause: () => void;
 }) {
   return (
-    <section className="debugger-drawer-panel debugger-drawer-panel--log">
-      <div className="debugger-log-header">
-        <div className="debugger-section__title">Event Log</div>
-        <div className="debugger-log-controls">
-          {props.logFilters.map((filter) => (
-            <button
-              key={filter.cat}
-              className={`debugger-log-chip${filter.active ? " is-active" : ""}`}
-              onClick={() => props.onToggleLogFilter(filter.cat)}
-            >
-              {filter.cat}
-            </button>
-          ))}
-          <button className={`debugger-log-chip debugger-log-chip--pause${props.logPaused ? " is-active" : ""}`} onClick={props.onToggleLogPause}>
-            {props.logPaused ? "resume" : "pause"}
+    <div className="space-y-3">
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="text-white font-medium mr-auto">Event Log</div>
+        {props.logFilters.map((filter) => (
+          <button
+            key={filter.cat}
+            className={`px-2 py-0.5 rounded text-[10px] border border-[#303030] transition-colors ${filter.active ? "bg-[#0070e0] text-white" : "text-[#888] hover:text-white"}`}
+            onClick={() => props.onToggleLogFilter(filter.cat)}
+          >
+            {filter.cat}
           </button>
-        </div>
+        ))}
+        <button className={`px-2 py-0.5 rounded text-[10px] border border-[#303030] transition-colors ${props.logPaused ? "bg-[#f87171] text-white" : "text-[#888] hover:text-white"}`} onClick={props.onToggleLogPause}>
+          {props.logPaused ? "resume" : "pause"}
+        </button>
       </div>
-      <div className="debugger-log">
+      <div className="font-mono text-[11px] space-y-0.5 max-h-[52vh] overflow-y-auto">
         {props.logs.length === 0
-          ? <span className="debugger-log__empty">{props.logPaused ? "paused" : "no events"}</span>
+          ? <span className="text-[#666]">{props.logPaused ? "paused" : "no events"}</span>
           : props.logs.map((entry, index) => (
-            <div className={`debugger-log__entry debugger-log__entry--${entry.cat}`} key={`${entry.cat}-${index}-${entry.text}`}>
-              {entry.text}
-              {entry.count > 1 ? <span className="debugger-log__count">×{entry.count}</span> : null}
+            <div className="text-[#ccc] flex gap-2" key={`${entry.cat}-${index}-${entry.text}`}>
+              <span className="text-[#666] shrink-0">[{entry.cat}]</span>
+              <span className="flex-1">{entry.text}</span>
+              {entry.count > 1 ? <span className="text-[#666]">×{entry.count}</span> : null}
             </div>
           ))}
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -593,6 +820,7 @@ function ContentBrowser(props: {
   onCreateGraph?: (path: string) => void;
   onImportContent?: (path: string, value: unknown) => void;
   onDeleteContent?: (path: string, kind: ContentTreeNode["kind"]) => void;
+  onOpenGraph: (path: string) => void;
   keyboardLocked: boolean;
 }) {
   const [selectedFolderPath, setSelectedFolderPath] = useState("");
@@ -617,10 +845,6 @@ function ContentBrowser(props: {
   const [previewValue, setPreviewValue] = useState<unknown>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | undefined>();
-  const [openGraphPath, setOpenGraphPath] = useState<string | undefined>();
-  const [openGraph, setOpenGraph] = useState<GraphAsset | null>(null);
-  const [openGraphLoading, setOpenGraphLoading] = useState(false);
-  const [openGraphError, setOpenGraphError] = useState<string | undefined>();
   const touchTapRef = useRef<{ path: string; time: number } | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -696,40 +920,6 @@ function ContentBrowser(props: {
     };
   }, [previewPath]);
 
-  useEffect(() => {
-    if (!openGraphPath) {
-      setOpenGraph(null);
-      setOpenGraphError(undefined);
-      setOpenGraphLoading(false);
-      return;
-    }
-
-    let alive = true;
-    setOpenGraphLoading(true);
-    setOpenGraphError(undefined);
-    setOpenGraph(null);
-
-    fetchGraphAsset(openGraphPath)
-      .then((graph) => {
-        if (!alive) return;
-        setOpenGraph(graph);
-        setOpenGraphError(graph ? undefined : "graph not found");
-      })
-      .catch(() => {
-        if (!alive) return;
-        setOpenGraph(null);
-        setOpenGraphError("failed to load graph");
-      })
-      .finally(() => {
-        if (!alive) return;
-        setOpenGraphLoading(false);
-      });
-
-    return () => {
-      alive = false;
-    };
-  }, [openGraphPath]);
-
   const triggerImport = (basePath = selectedFolderPath) => {
     setImportDialogBasePath(basePath);
     setImportFile(null);
@@ -783,10 +973,9 @@ function ContentBrowser(props: {
     }
     if (node.kind === "graph") {
       setPreviewPath(undefined);
-      setOpenGraphPath(node.path);
+      props.onOpenGraph(node.path);
       return;
     }
-    setOpenGraphPath(undefined);
     setPreviewPath(node.path);
   };
 
@@ -848,48 +1037,7 @@ function ContentBrowser(props: {
   const contextFolderPath = contextMenu?.folderPath ?? selectedFolderPath;
 
   return (
-    <section className="debugger-section debugger-section--content">
-      <div className="debugger-content-header">
-        <div className="debugger-content-header__titleblock">
-          <div className="debugger-section__title" style={{ marginBottom: 4 }}>Content</div>
-          <div className="debugger-content-breadcrumbs">
-            {currentBreadcrumbs.map((crumb, index) => (
-              <button
-                key={crumb.path || "root"}
-                className={`debugger-content-breadcrumb${index === currentBreadcrumbs.length - 1 ? " is-active" : ""}`}
-                onClick={() => setSelectedFolderPath(crumb.path)}
-              >
-                {crumb.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="debugger-content-actions">
-          <button
-            className="debugger-content-action"
-            onClick={openCreateMenu}
-            onContextMenu={openCreateMenu}
-            title="Create"
-            aria-label="Create"
-            disabled={props.keyboardLocked}
-          >
-            <Plus size={13} strokeWidth={2} />
-          </button>
-          <button className="debugger-content-action" onClick={() => setSearch("")} title="Clear search" aria-label="Clear search" disabled={props.keyboardLocked}>
-            <RefreshCw size={13} strokeWidth={2} />
-          </button>
-        </div>
-      </div>
-      <div className="debugger-content-search">
-        <Search size={13} strokeWidth={2} />
-        <input
-          className="debugger-input debugger-content-search__input"
-          placeholder="search content"
-          value={search}
-          disabled={props.keyboardLocked}
-          onChange={(event) => setSearch(event.target.value)}
-        />
-      </div>
+    <div className="flex-1 flex overflow-hidden min-h-0">
       <input
         ref={importInputRef}
         type="file"
@@ -897,64 +1045,84 @@ function ContentBrowser(props: {
         hidden
         onChange={handleImportChange}
       />
-      <div className="debugger-content-body debugger-content-body--browser">
-        <aside className="debugger-content-sidebar">
-          <div className="debugger-content-sidebar__header">Folders</div>
-          <div className="debugger-content-tree">
-            {renderFolderTree(props.tree, selectedFolderPath, expandedFolders, setExpandedFolders, setSelectedFolderPath, props.onLoadWorld)}
-          </div>
-        </aside>
-        <section className="debugger-content-browser">
-          <div className="debugger-content-browser__header">
-            <div>
-              <div className="debugger-section__title" style={{ marginBottom: 4 }}>Assets</div>
-              <div className="debugger-content-browser__hint">
-                {search.trim()
-                  ? "filtered"
-                  : selectedFolderPath === "systems"
-                    ? `${[...activeSystems].filter((name) => currentChildren.some((node) => node.kind === "graph" && node.name === name)).length} active / ${currentChildren.length} total`
-                    : `${currentChildren.length} item${currentChildren.length === 1 ? "" : "s"}`}
-              </div>
+      {/* Left: Folder Tree */}
+      <div className="w-48 border-r border-[#303030] bg-[#1a1a1a] p-2 overflow-y-auto flex-shrink-0">
+        {renderFolderTree(props.tree, selectedFolderPath, expandedFolders, setExpandedFolders, setSelectedFolderPath, props.onLoadWorld)}
+      </div>
+      {/* Right: Asset area */}
+      <div className="flex-1 bg-[#1e1e1e] flex flex-col min-w-0">
+        <div className="h-8 border-b border-[#303030] flex items-center px-3 gap-2 text-[#888] flex-shrink-0">
+          <i className="ph ph-house cursor-pointer hover:text-white" onClick={() => setSelectedFolderPath("")} />
+          {currentBreadcrumbs.map((crumb, index) => (
+            <span key={crumb.path || "root"} className="flex items-center gap-2">
+              <i className="ph ph-caret-right text-[10px]" />
+              <button
+                className={index === currentBreadcrumbs.length - 1 ? "text-[#ccc] font-medium" : "hover:text-white hover:underline"}
+                onClick={() => setSelectedFolderPath(crumb.path)}
+              >
+                {crumb.label}
+              </button>
+            </span>
+          ))}
+          <div className="ml-auto flex gap-2 items-center">
+            <div className="bg-[#111111] border border-[#303030] rounded flex items-center px-2 py-1">
+              <i className="ph ph-magnifying-glass mr-2 text-[#888]" />
+              <input
+                type="text"
+                placeholder="Search Assets"
+                className="bg-transparent border-none outline-none text-white w-32 placeholder-[#555]"
+                value={search}
+                disabled={props.keyboardLocked}
+                onChange={(event) => setSearch(event.target.value)}
+              />
             </div>
-            <div className="debugger-content-browser__path">{selectedFolderPath || "Content"}</div>
+            <button
+              className="px-3 py-1 bg-[#2d2d2d] hover:bg-[#3a3a3a] border border-[#303030] rounded text-white flex items-center gap-1 transition-colors disabled:opacity-40"
+              onClick={openCreateMenu}
+              onContextMenu={openCreateMenu}
+              disabled={props.keyboardLocked}
+              title="Create"
+            >
+              <i className="ph ph-plus" /> Add
+            </button>
           </div>
-          <div
-            className="debugger-content-grid"
-            onContextMenu={(event) => openContextMenu(event)}
-          >
-            {filteredChildren.length === 0 ? (
-              <div className="debugger-content-empty">{search.trim() ? "no matches" : "empty folder"}</div>
-            ) : filteredChildren.map((node) => {
-              const isSelected = selectedItemPath === node.path || (node.kind === "world" && node.path === props.activeWorld);
-              const icon = renderContentIcon(node.kind);
-              const kindLabel = node.kind === "graph" ? "system" : node.kind;
-              return (
-                <button
-                  key={node.path}
-                  className={`debugger-content-tile${isSelected ? " is-selected" : ""}${node.kind === "world" && node.path === props.activeWorld ? " is-active" : ""}`}
-                  disabled={props.keyboardLocked}
-                  onClick={() => selectNode(node)}
-                  onDoubleClick={() => activateNode(node)}
-                  onPointerUp={(event) => handlePointerUp(node, event)}
-                  onContextMenu={(event) => openContextMenu(event, node)}
-                >
-                  <span className="debugger-content-tile__icon">{icon}</span>
-                  <span className="debugger-content-tile__meta">
-                    <strong className="debugger-content-tile__name">{node.name}</strong>
-                    <span className="debugger-content-tile__path">{node.path || "root"}</span>
-                  </span>
-                  <span className={`debugger-pill${node.kind === "graph" && activeSystems.has(node.name) ? " is-active" : ""}`}>
-                    {node.kind === "graph" ? (activeSystems.has(node.name) ? "active" : "system") : kindLabel}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
+        </div>
+        <div
+          className="flex-1 p-4 grid grid-cols-[repeat(auto-fill,minmax(84px,1fr))] gap-4 overflow-y-auto content-start"
+          onContextMenu={(event) => openContextMenu(event)}
+        >
+          {filteredChildren.length === 0 ? (
+            <div className="col-span-full text-[#666] py-6 text-center">{search.trim() ? "no matches" : "empty folder"}</div>
+          ) : filteredChildren.map((node) => {
+            const isSelected = selectedItemPath === node.path || (node.kind === "world" && node.path === props.activeWorld);
+            const isActiveWorld = node.kind === "world" && node.path === props.activeWorld;
+            const barColor = contentTypeBarColor(node.kind);
+            return (
+              <button
+                key={node.path}
+                className="flex flex-col items-center group cursor-pointer w-20 disabled:opacity-40"
+                disabled={props.keyboardLocked}
+                onClick={() => selectNode(node)}
+                onDoubleClick={() => activateNode(node)}
+                onPointerUp={(event) => handlePointerUp(node, event)}
+                onContextMenu={(event) => openContextMenu(event, node)}
+                title={node.path || "root"}
+              >
+                <div className={`w-16 h-16 rounded flex items-center justify-center mb-1 relative overflow-hidden shadow-md transition-colors border ${isSelected ? "border-[#0070e0] bg-[#333]" : "bg-[#2a2a2a] border-[#444] group-hover:border-[#0070e0] group-hover:bg-[#333]"}`}>
+                  <span className={`text-3xl ${isSelected ? "text-[#0070e0]" : "text-[#aaa]"}`}>{renderContentIcon(node.kind)}</span>
+                  <div className={`absolute bottom-0 w-full h-1 ${barColor}`} />
+                </div>
+                <span className={`text-center truncate w-full text-[11px] px-1 rounded ${isActiveWorld ? "bg-[#0070e0] text-white" : isSelected ? "text-white" : "text-[#ccc] group-hover:text-white"}`}>
+                  {node.name}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
       {contextMenu && createPortal(
         <div
-          className="debugger-content-menu"
+          className="fixed z-[60] w-52 bg-[#1e1e1e] border border-[#303030] rounded shadow-2xl py-1 text-xs"
           data-content-context-menu
           style={{
             left: `${Math.max(8, Math.min(contextMenu.x, window.innerWidth - 232))}px`,
@@ -963,33 +1131,33 @@ function ContentBrowser(props: {
           onClick={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.preventDefault()}
         >
-          <button className="debugger-content-menu__item" onClick={() => triggerImport(contextFolderPath)} disabled={!props.onImportContent || props.keyboardLocked}>
+          <button className={CONTENT_MENU_ITEM} onClick={() => triggerImport(contextFolderPath)} disabled={!props.onImportContent || props.keyboardLocked}>
             Import
           </button>
           {contextMenu.item && (
-            <button className="debugger-content-menu__item" onClick={() => activateNode(contextMenu.item!)}>
+            <button className={CONTENT_MENU_ITEM} onClick={() => activateNode(contextMenu.item!)}>
               {contextMenu.item.kind === "folder" ? "Enter folder" : contextMenu.item.kind === "world" ? "Load world" : contextMenu.item.kind === "graph" ? "Open system" : "Open file"}
             </button>
           )}
-          <div className="debugger-content-menu__separator" />
-          <button className="debugger-content-menu__item" onClick={() => beginCreate("folder", contextFolderPath)} disabled={!props.onCreateFolder || props.keyboardLocked}>
+          <div className="h-px my-1 bg-[#303030]" />
+          <button className={CONTENT_MENU_ITEM} onClick={() => beginCreate("folder", contextFolderPath)} disabled={!props.onCreateFolder || props.keyboardLocked}>
             New Folder
           </button>
-          <button className="debugger-content-menu__item" onClick={() => beginCreate("world", contextFolderPath)} disabled={props.keyboardLocked}>
+          <button className={CONTENT_MENU_ITEM} onClick={() => beginCreate("world", contextFolderPath)} disabled={props.keyboardLocked}>
             New World
           </button>
-          <button className="debugger-content-menu__item" onClick={() => beginCreate("component", contextFolderPath)} disabled={!props.onCreateComponent || props.keyboardLocked}>
+          <button className={CONTENT_MENU_ITEM} onClick={() => beginCreate("component", contextFolderPath)} disabled={!props.onCreateComponent || props.keyboardLocked}>
             New Component
           </button>
-          <button className="debugger-content-menu__item" onClick={() => beginCreate("prefab", contextFolderPath)} disabled={!props.onCreatePrefab || props.keyboardLocked}>
+          <button className={CONTENT_MENU_ITEM} onClick={() => beginCreate("prefab", contextFolderPath)} disabled={!props.onCreatePrefab || props.keyboardLocked}>
             New Prefab
           </button>
-          <button className="debugger-content-menu__item" onClick={() => beginCreate("graph", contextFolderPath)} disabled={!props.onCreateGraph || props.keyboardLocked}>
+          <button className={CONTENT_MENU_ITEM} onClick={() => beginCreate("graph", contextFolderPath)} disabled={!props.onCreateGraph || props.keyboardLocked}>
             New System
           </button>
-          <div className="debugger-content-menu__separator" />
+          <div className="h-px my-1 bg-[#303030]" />
           <button
-            className="debugger-content-menu__item"
+            className={CONTENT_MENU_ITEM}
             onClick={() => {
               if (contextMenu.item) deleteNode(contextMenu.item);
               else setContextMenu(null);
@@ -1062,7 +1230,6 @@ function ContentBrowser(props: {
             if (!props.onDeleteContent) return;
             if (selectedItemPath === deleteTarget.path) setSelectedItemPath(undefined);
             if (previewPath === deleteTarget.path) setPreviewPath(undefined);
-            if (openGraphPath === deleteTarget.path) setOpenGraphPath(undefined);
             props.onDeleteContent(deleteTarget.path, deleteTarget.kind);
             setDeleteTarget(null);
           }}
@@ -1079,33 +1246,18 @@ function ContentBrowser(props: {
         />,
         document.body,
       )}
-      {openGraphPath && createPortal(
-        <GraphDialog
-          graph={openGraph}
-          loading={openGraphLoading}
-          error={openGraphError}
-          keyboardLocked={props.keyboardLocked}
-          onClose={() => setOpenGraphPath(undefined)}
-          onChange={(nextGraph) => setOpenGraph(nextGraph)}
-          onSave={(nextGraph) => {
-            setOpenGraph(nextGraph);
-            void saveGraphAsset(openGraphPath, nextGraph);
-          }}
-        />,
-        document.body,
-      )}
-    </section>
+    </div>
   );
 }
 
 function RuntimeCard(props: { title: string; fields: Array<{ label: string; value: string }> }) {
   return (
-    <div className="debugger-card">
-      <div className="debugger-card__title">{props.title}</div>
+    <div className="bg-[#111111] border border-[#303030] rounded p-2 space-y-1">
+      <div className="text-white font-medium mb-1">{props.title}</div>
       {props.fields.map((field, index) => (
-        <div className="debugger-field" key={`${field.label}-${index}`}>
-          <span>{field.label}</span>
-          <strong>{field.value}</strong>
+        <div className="flex items-center justify-between gap-2" key={`${field.label}-${index}`}>
+          <span className="text-[#888]">{field.label}</span>
+          <strong className="text-[#ccc] font-mono text-[11px] truncate">{field.value}</strong>
         </div>
       ))}
     </div>
@@ -1130,9 +1282,9 @@ function renderFolderTree(
       const hasChildren = isFolder && (node.children?.length ?? 0) > 0;
 
       return (
-        <div key={node.path} className="debugger-content-tree__node">
+        <div key={node.path}>
           <button
-            className={`debugger-content-tree__row${isSelected ? " is-selected" : ""}${node.kind === "world" ? " debugger-content-tree__row--world" : ""}`}
+            className={`w-full flex items-center pr-2 py-1 rounded cursor-pointer text-left transition-colors ${isSelected ? "bg-[#2d2d2d] text-white" : "text-[#ccc] hover:bg-[#2d2d2d]"}`}
             style={{ paddingLeft: `${depth * 14 + 8}px` }}
             onClick={() => {
               if (isFolder) {
@@ -1155,11 +1307,13 @@ function renderFolderTree(
               setExpandedFolders(next);
             }}
           >
-            <span className="debugger-content-tree__toggle">
-              {isFolder ? (hasChildren ? (isExpanded ? <ChevronRight size={12} strokeWidth={2.2} style={{ transform: "rotate(90deg)" }} /> : <ChevronRight size={12} strokeWidth={2.2} />) : <span className="debugger-content-tree__spacer" />) : <span className="debugger-content-tree__spacer" />}
+            <span className="w-3 flex justify-center text-[#888]">
+              {isFolder && hasChildren ? <i className={`ph ph-caret-${isExpanded ? "down" : "right"} text-[10px]`} /> : null}
             </span>
-            <span className="debugger-content-tree__icon">{isFolder ? <Folder size={12} strokeWidth={2} /> : <Globe size={12} strokeWidth={2} />}</span>
-            <span className="debugger-content-tree__name">{node.name}</span>
+            <span className={`mr-2 ${isFolder ? "text-[#888]" : "text-[#0070e0]"}`}>
+              {isFolder ? <i className={`ph-fill ph-${isExpanded ? "folder-open" : "folder"}`} /> : <i className="ph-fill ph-globe-hemisphere-west" />}
+            </span>
+            <span className="truncate">{node.name}</span>
           </button>
           {isFolder && isExpanded && node.children?.length
             ? renderFolderTree(node.children, selectedFolderPath, expandedFolders, setExpandedFolders, setSelectedFolderPath, onLoadWorld, depth + 1)
@@ -1180,10 +1334,10 @@ function InspectorField(
 
   if (field.editable && field.entity !== undefined && field.componentId && field.editKey) {
     return (
-      <label className="debugger-field debugger-field--editable">
-        <span>{field.label}</span>
+      <label className="flex items-center gap-2">
+        <span className="w-20 shrink-0 text-[#888]">{field.label}</span>
         <input
-          className="debugger-field__input"
+          className="engine-input flex-1 px-2 py-1 rounded text-right"
           value={field.value}
           onChange={(event) => props.onEdit(field.entity!, field.componentId!, field.editKey!, event.target.value)}
         />
@@ -1193,11 +1347,11 @@ function InspectorField(
 
   if (field.selectEntities && field.selectEntities.length > 0) {
     return (
-      <div className="debugger-field">
-        <span>{field.label}</span>
-        <div className="debugger-field__links">
+      <div className="flex items-center gap-2">
+        <span className="w-20 shrink-0 text-[#888]">{field.label}</span>
+        <div className="flex flex-wrap gap-1">
           {field.selectEntities.map((entity) => (
-            <button className="debugger-field__link" key={entity} onClick={() => props.onSelectEntity(entity)}>#{entity}</button>
+            <button className="text-[#0070e0] hover:underline" key={entity} onClick={() => props.onSelectEntity(entity)}>#{entity}</button>
           ))}
         </div>
       </div>
@@ -1206,19 +1360,17 @@ function InspectorField(
 
   if (field.selectEntity !== undefined) {
     return (
-      <div className="debugger-field">
-        <span>{field.label}</span>
-        <div className="debugger-field__links">
-          <button className="debugger-field__link" onClick={() => props.onSelectEntity(field.selectEntity!)}>#{field.selectEntity}</button>
-        </div>
+      <div className="flex items-center gap-2">
+        <span className="w-20 shrink-0 text-[#888]">{field.label}</span>
+        <button className="text-[#0070e0] hover:underline" onClick={() => props.onSelectEntity(field.selectEntity!)}>#{field.selectEntity}</button>
       </div>
     );
   }
 
   return (
-    <div className="debugger-field">
-      <span>{field.label}</span>
-      <strong>{field.value}</strong>
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-[#888]">{field.label}</span>
+      <strong className="text-[#ccc] font-mono text-[11px] truncate">{field.value}</strong>
     </div>
   );
 }
@@ -1360,70 +1512,95 @@ function isGraphEdge(value: unknown): value is GraphAsset["edges"][number] {
     && typeof edge.to.port === "string";
 }
 
-function GraphDialog(props: {
-  graph: GraphAsset | null;
-  loading: boolean;
-  error?: string;
-  keyboardLocked: boolean;
-  onClose: () => void;
-  onChange: (graph: GraphAsset) => void;
-  onSave: (graph: GraphAsset) => void;
-}) {
-  const [graph, setGraph] = useState<GraphAsset | null>(props.graph);
-  const graphRef = useRef<GraphAsset | null>(props.graph);
-  const [bounds, setBounds] = useState(() => props.graph ? computeGraphBounds(props.graph) : { x: 0, y: 0, width: 960, height: 540 });
+function blueprintNodeAccent(type: string): { grad: string; icon: string; text: string } {
+  if (/^On[A-Z]/.test(type) || /Event|Update|Start|Tick/i.test(type)) {
+    return { grad: "from-red-800 to-red-700", icon: "ph-fill ph-lightning", text: "text-red-500" };
+  }
+  if (/Filter|Has|Check|Query|If|Branch|Compare|Is[A-Z]/i.test(type)) {
+    return { grad: "from-blue-800 to-blue-700", icon: "ph-fill ph-funnel", text: "text-blue-400" };
+  }
+  if (/Set|Add|Apply|Move|Spawn|Destroy|Write|Emit|Play|Change|Update/i.test(type)) {
+    return { grad: "from-emerald-700 to-emerald-600", icon: "ph-fill ph-arrow-circle-right", text: "text-emerald-500" };
+  }
+  return { grad: "from-slate-700 to-slate-600", icon: "ph-fill ph-circle", text: "text-slate-400" };
+}
+
+function portDotClass(kind: string): string {
+  if (kind === "flow") return "w-3 h-3 bg-white border border-black rotate-45 rounded-[2px]";
+  if (kind === "signal") return "w-3 h-3 rounded-full bg-amber-500 border border-black";
+  return "w-3 h-3 rounded-full bg-cyan-500 border border-black";
+}
+
+function wireColor(kind: string): string {
+  if (kind === "flow") return "#ffffff";
+  if (kind === "signal") return "#f59e0b";
+  return "#06b6d4";
+}
+
+function variableDotColor(type: string): string {
+  const t = type.toLowerCase();
+  if (t.includes("float") || t.includes("number") || t.includes("int")) return "bg-green-500";
+  if (t.includes("bool")) return "bg-red-500";
+  if (t.includes("vector") || t.includes("vec")) return "bg-yellow-500";
+  return "bg-slate-500";
+}
+
+function BlueprintView(props: { path: string; keyboardLocked: boolean; onCompile: () => void }) {
+  const [graph, setGraphState] = useState<GraphAsset | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | undefined>();
+  const [bounds, setBounds] = useState({ x: 0, y: 0, width: 960, height: 540 });
+  const graphRef = useRef<GraphAsset | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const portRefs = useRef(new Map<string, HTMLSpanElement>());
   const [portPoints, setPortPoints] = useState<Record<string, { x: number; y: number }>>({});
-  const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>(props.graph?.entrypoint);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>();
   const [selectedEdgeKey, setSelectedEdgeKey] = useState<string | undefined>();
-  const [graphView, setGraphView] = useState(() => ({ x: 0, y: 0, zoom: 1 }));
+  const [graphView, setGraphView] = useState({ x: 0, y: 0, zoom: 1 });
   const graphViewRef = useRef(graphView);
-  const nodeMap = new Map(graph?.nodes.map((node) => [node.id, node]) ?? []);
-  const selectedNode = selectedNodeId ? graph?.nodes.find((node) => node.id === selectedNodeId) : undefined;
-  const selectedEdge = selectedEdgeKey && graph ? graph.edges.find((edge) => edgeKey(edge) === selectedEdgeKey) : undefined;
-  const panState = useRef<{
-    pointerId: number;
-    startX: number;
-    startY: number;
-    viewX: number;
-    viewY: number;
-  } | null>(null);
-  const dragState = useRef<{
-    nodeId: string;
-    pointerId: number;
-    sourceGraph: GraphAsset;
-    startPoint: { x: number; y: number };
-  } | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [paletteQuery, setPaletteQuery] = useState("");
+  const panState = useRef<{ pointerId: number; startX: number; startY: number; viewX: number; viewY: number } | null>(null);
+  const dragState = useRef<{ nodeId: string; pointerId: number; sourceGraph: GraphAsset; startPoint: { x: number; y: number } } | null>(null);
+
+  const setGraph = (next: GraphAsset | null) => { graphRef.current = next; setGraphState(next); };
+  const updateGraph = (next: GraphAsset) => { setGraph(next); void saveGraphAsset(props.path, next); };
 
   useEffect(() => {
-    setGraph(props.graph);
-    graphRef.current = props.graph;
-    setBounds(props.graph ? computeGraphBounds(props.graph) : { x: 0, y: 0, width: 960, height: 540 });
-    setSelectedNodeId(props.graph?.entrypoint);
-    setSelectedEdgeKey(undefined);
-  }, [props.graph]);
+    let alive = true;
+    setLoading(true);
+    setError(undefined);
+    setGraph(null);
+    fetchGraphAsset(props.path)
+      .then((g) => {
+        if (!alive) return;
+        setGraph(g);
+        setError(g ? undefined : "graph not found");
+        if (g) {
+          setBounds(computeGraphBounds(g));
+          setSelectedNodeId(g.entrypoint);
+        }
+      })
+      .catch(() => { if (alive) { setGraph(null); setError("failed to load graph"); } })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [props.path]);
+
+  useEffect(() => { graphViewRef.current = graphView; }, [graphView]);
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
-    const currentGraph = graphRef.current;
-    if (!viewport || !currentGraph) return;
+    if (!viewport || !graphRef.current) return;
     const rect = viewport.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
     setGraphView(fitGraphView(rect.width, rect.height, bounds));
   }, [bounds]);
 
-  useEffect(() => {
-    graphViewRef.current = graphView;
-  }, [graphView]);
-
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     const viewport = viewportRef.current;
-    const currentGraph = graphRef.current;
-    if (!canvas || !currentGraph || !viewport) return;
-
+    if (!canvas || !graphRef.current || !viewport) return;
     const measure = () => {
       const viewportRect = viewport.getBoundingClientRect();
       const { x: viewX, y: viewY, zoom } = graphViewRef.current;
@@ -1437,60 +1614,38 @@ function GraphDialog(props: {
       }
       setPortPoints(next);
     };
-
     measure();
     const raf = requestAnimationFrame(measure);
     const resizeObserver = new ResizeObserver(measure);
     resizeObserver.observe(canvas);
     for (const element of portRefs.current.values()) resizeObserver.observe(element);
-    return () => {
-      cancelAnimationFrame(raf);
-      resizeObserver.disconnect();
-    };
+    return () => { cancelAnimationFrame(raf); resizeObserver.disconnect(); };
   }, [graph, bounds, graphView]);
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
       const pan = panState.current;
       if (pan && event.pointerId === pan.pointerId) {
-        const deltaX = event.clientX - pan.startX;
-        const deltaY = event.clientY - pan.startY;
-        setGraphView({
-          x: pan.viewX + deltaX,
-          y: pan.viewY + deltaY,
-          zoom: graphViewRef.current.zoom,
-        });
+        setGraphView({ x: pan.viewX + (event.clientX - pan.startX), y: pan.viewY + (event.clientY - pan.startY), zoom: graphViewRef.current.zoom });
         return;
       }
-
       const drag = dragState.current;
       const currentGraph = graphRef.current;
       if (!drag || !currentGraph || event.pointerId !== drag.pointerId) return;
-
       const currentPoint = toGraphPoint(viewportRef.current, graphViewRef.current, event.clientX, event.clientY);
       if (!currentPoint) return;
-      const deltaX = currentPoint.x - drag.startPoint.x;
-      const deltaY = currentPoint.y - drag.startPoint.y;
-      const nextGraph = moveGraphNode(drag.sourceGraph, drag.nodeId, deltaX, deltaY);
-      graphRef.current = nextGraph;
+      const nextGraph = moveGraphNode(drag.sourceGraph, drag.nodeId, currentPoint.x - drag.startPoint.x, currentPoint.y - drag.startPoint.y);
       setGraph(nextGraph);
-      props.onChange(nextGraph);
     };
-
     const finishDrag = (event: PointerEvent) => {
       const pan = panState.current;
-      if (pan && event.pointerId === pan.pointerId) {
-        panState.current = null;
-        return;
-      }
-
+      if (pan && event.pointerId === pan.pointerId) { panState.current = null; return; }
       const drag = dragState.current;
       if (!drag || event.pointerId !== drag.pointerId) return;
       dragState.current = null;
-      const currentGraph = graphRef.current;
-      if (currentGraph) props.onSave(currentGraph);
+      const g = graphRef.current;
+      if (g) void saveGraphAsset(props.path, g);
     };
-
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", finishDrag);
     window.addEventListener("pointercancel", finishDrag);
@@ -1499,23 +1654,32 @@ function GraphDialog(props: {
       window.removeEventListener("pointerup", finishDrag);
       window.removeEventListener("pointercancel", finishDrag);
     };
-  }, [props.onChange, props.onSave]);
+  }, [props.path]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Delete" && event.key !== "Backspace") return;
+      const t = event.target;
+      if (t instanceof HTMLElement && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (selectedEdgeKey) { deleteEdge(selectedEdgeKey); return; }
+      if (selectedNodeId) deleteNode(selectedNodeId);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedEdgeKey, selectedNodeId]);
+
+  const nodeMap = new Map(graph?.nodes.map((node) => [node.id, node]) ?? []);
+  const selectedNode = selectedNodeId ? graph?.nodes.find((node) => node.id === selectedNodeId) : undefined;
+  const selectedSpec = selectedNode ? GRAPH_NODE_LIBRARY.find((s) => s.type === selectedNode.type) : undefined;
 
   const handleGraphPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const currentGraph = graphRef.current;
     const target = event.target;
-    if (!currentGraph || !(target instanceof Element)) return;
-    if (target.closest(".debugger-graph-node, .debugger-graph-node *")) return;
+    if (!graphRef.current || !(target instanceof Element)) return;
+    if (target.closest(".blueprint-node")) return;
     if (!(event.button === 1 || (event.button === 0 && (event.altKey || event.metaKey)))) return;
-
     event.preventDefault();
-    panState.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      viewX: graphViewRef.current.x,
-      viewY: graphViewRef.current.y,
-    };
+    panState.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, viewX: graphViewRef.current.x, viewY: graphViewRef.current.y };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
@@ -1524,38 +1688,32 @@ function GraphDialog(props: {
     event.preventDefault();
     const viewport = viewportRef.current;
     if (!viewport) return;
-
     const rect = viewport.getBoundingClientRect();
     const cx = event.clientX - rect.left;
     const cy = event.clientY - rect.top;
     const wx = (cx - graphViewRef.current.x) / graphViewRef.current.zoom;
     const wy = (cy - graphViewRef.current.y) / graphViewRef.current.zoom;
     const delta = event.deltaY * (event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? 240 : 1);
-    const speed = Math.pow(GRAPH_ZOOM_SENSITIVITY, 1.2);
-    const factor = Math.exp(-delta * 0.0015 * speed);
+    const factor = Math.exp(-delta * 0.0015 * Math.pow(GRAPH_ZOOM_SENSITIVITY, 1.2));
     const nextZoom = clamp(graphViewRef.current.zoom * factor, 0.2, 3);
-
-    setGraphView({
-      x: cx - wx * nextZoom,
-      y: cy - wy * nextZoom,
-      zoom: nextZoom,
-    });
+    setGraphView({ x: cx - wx * nextZoom, y: cy - wy * nextZoom, zoom: nextZoom });
   };
 
-  const zoomGraph = (factor: number, focus?: { x: number; y: number }) => {
+  const zoomGraph = (factor: number) => {
     const viewport = viewportRef.current;
     if (!viewport) return;
     const rect = viewport.getBoundingClientRect();
-    const cx = focus?.x ?? rect.width / 2;
-    const cy = focus?.y ?? rect.height / 2;
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
     const wx = (cx - graphViewRef.current.x) / graphViewRef.current.zoom;
     const wy = (cy - graphViewRef.current.y) / graphViewRef.current.zoom;
     const nextZoom = clamp(graphViewRef.current.zoom * factor, 0.2, 3);
-    setGraphView({
-      x: cx - wx * nextZoom,
-      y: cy - wy * nextZoom,
-      zoom: nextZoom,
-    });
+    setGraphView({ x: cx - wx * nextZoom, y: cy - wy * nextZoom, zoom: nextZoom });
+  };
+
+  const fitView = () => {
+    const viewport = viewportRef.current;
+    setGraphView(fitGraphView(viewport?.clientWidth ?? 1400, viewport?.clientHeight ?? 900, bounds));
   };
 
   const beginDrag = (event: ReactPointerEvent<HTMLDivElement>, nodeId: string) => {
@@ -1564,451 +1722,266 @@ function GraphDialog(props: {
     const startPoint = toGraphPoint(viewportRef.current, graphViewRef.current, event.clientX, event.clientY);
     if (!startPoint) return;
     setSelectedNodeId(nodeId);
-    dragState.current = {
-      nodeId,
-      pointerId: event.pointerId,
-      sourceGraph: currentGraph,
-      startPoint,
-    };
+    setSelectedEdgeKey(undefined);
+    dragState.current = { nodeId, pointerId: event.pointerId, sourceGraph: currentGraph, startPoint };
     event.currentTarget.setPointerCapture(event.pointerId);
     event.preventDefault();
   };
 
-  const updateGraph = (nextGraph: GraphAsset) => {
-    graphRef.current = nextGraph;
-    setGraph(nextGraph);
-    props.onChange(nextGraph);
-  };
-
-  const deleteNode = (nodeId: string) => {
+  function deleteNode(nodeId: string) {
     const currentGraph = graphRef.current;
     if (!currentGraph) return;
     const nextNodes = currentGraph.nodes.filter((node) => node.id !== nodeId);
-    const nextEdges = currentGraph.edges.filter((edge) => edge.from.node !== nodeId && edge.to.node !== nodeId);
     const nextGraph = {
       ...currentGraph,
       nodes: nextNodes,
-      edges: nextEdges,
+      edges: currentGraph.edges.filter((edge) => edge.from.node !== nodeId && edge.to.node !== nodeId),
       entrypoint: currentGraph.entrypoint === nodeId ? (nextNodes[0]?.id ?? currentGraph.entrypoint) : currentGraph.entrypoint,
     };
     updateGraph(nextGraph);
-    setSelectedNodeId((current) => {
-      if (current !== nodeId) return current;
-      return nextGraph.nodes.some((node) => node.id === nextGraph.entrypoint)
-        ? nextGraph.entrypoint
-        : nextGraph.nodes[0]?.id;
-    });
-    setSelectedEdgeKey(undefined);
-  };
+    setSelectedNodeId((current) => (current === nodeId ? nextGraph.nodes[0]?.id : current));
+  }
 
-  const deleteEdge = (edgeId: string) => {
+  function deleteEdge(edgeId: string) {
     const currentGraph = graphRef.current;
     if (!currentGraph) return;
-    const nextGraph = {
-      ...currentGraph,
-      edges: currentGraph.edges.filter((edge) => edgeKey(edge) !== edgeId),
-    };
-    updateGraph(nextGraph);
+    updateGraph({ ...currentGraph, edges: currentGraph.edges.filter((edge) => edgeKey(edge) !== edgeId) });
     setSelectedEdgeKey((current) => (current === edgeId ? undefined : current));
-  };
+  }
 
   const addNode = (spec: GraphNodeSpec) => {
     const currentGraph = graphRef.current;
     if (!currentGraph) return;
-    const node = createGraphNode(spec, {
-      x: bounds.x + 180 + currentGraph.nodes.length * 18,
-      y: bounds.y + 160 + currentGraph.nodes.length * 12,
-    });
-    const nextGraph = {
-      ...currentGraph,
-      nodes: [...currentGraph.nodes, node],
-    };
-    updateGraph(nextGraph);
+    const node = createGraphNode(spec, { x: bounds.x + 180 + currentGraph.nodes.length * 18, y: bounds.y + 160 + currentGraph.nodes.length * 12 });
+    updateGraph({ ...currentGraph, nodes: [...currentGraph.nodes, node] });
     setSelectedNodeId(node.id);
   };
 
   const updateNodeData = (nodeId: string, field: string, nextValue: string, type: GraphNodeSpec["fields"][number]["type"]) => {
     const currentGraph = graphRef.current;
     if (!currentGraph) return;
-    const parsedValue = parseEditableValue(nextValue, type);
-    const nextGraph = {
+    const parsed = parseEditableValue(nextValue, type);
+    updateGraph({
       ...currentGraph,
-      nodes: currentGraph.nodes.map((node) => node.id === nodeId
-        ? {
-            ...node,
-            data: {
-              ...(node.data ?? {}),
-              [field]: parsedValue,
-            },
-          }
-        : node),
-    };
-    updateGraph(nextGraph);
+      nodes: currentGraph.nodes.map((node) => node.id === nodeId ? { ...node, data: { ...(node.data ?? {}), [field]: parsed } } : node),
+    });
   };
 
-  const updateVariable = (index: number, patch: Partial<GraphVariableDefinition>) => {
+  const addVariable = () => {
     const currentGraph = graphRef.current;
-    if (!currentGraph) return;
-    const nextVariables = currentGraph.variables.map((variable, variableIndex) => variableIndex === index ? { ...variable, ...patch } : variable);
-    updateGraph({ ...currentGraph, variables: nextVariables });
+    if (!currentGraph || props.keyboardLocked) return;
+    updateGraph({ ...currentGraph, variables: [...currentGraph.variables, { name: `Var${currentGraph.variables.length + 1}`, scope: "private", type: "float", default: 0 }] });
   };
+
+  const filteredLibrary = GRAPH_NODE_LIBRARY.filter((spec) => `${spec.label} ${spec.type}`.toLowerCase().includes(paletteQuery.trim().toLowerCase()));
 
   return (
-    <div className="debugger-graph-dialog" role="dialog" aria-modal="true" onClick={props.onClose}>
-      <div className="debugger-graph-dialog__panel" onClick={(event) => event.stopPropagation()}>
-        <div className="debugger-graph-dialog__header">
-          <div>
-            <div className="debugger-section__title" style={{ marginBottom: 4 }}>System Graph</div>
-            <div className="debugger-graph-dialog__subtitle">
-              {graph ? graph.name : "loading..."}
-            </div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div className="debugger-graph-zoom-controls">
-              <button className="debugger-content-action" onClick={() => zoomGraph(1 / 1.18)} aria-label="Zoom out">
-                <Minus size={13} strokeWidth={2.5} />
-              </button>
-              <button className="debugger-content-action" onClick={() => setGraphView(fitGraphView(viewportRef.current?.clientWidth ?? 1400, viewportRef.current?.clientHeight ?? 900, bounds))} aria-label="Fit graph">
-                <ScanSearch size={13} strokeWidth={2.5} />
-              </button>
-              <button className="debugger-content-action" onClick={() => zoomGraph(1.18)} aria-label="Zoom in">
-                <Plus size={13} strokeWidth={2.5} />
-              </button>
-              <button className="debugger-content-action" onClick={() => setGraphView(fitGraphView(viewportRef.current?.clientWidth ?? 1400, viewportRef.current?.clientHeight ?? 900, bounds))} aria-label="Reset graph view">
-                <LocateFixed size={13} strokeWidth={2.5} />
-              </button>
-            </div>
-            <button className="debugger-content-action" onClick={props.onClose} aria-label="Close graph dialog">
-              <X size={13} strokeWidth={2.5} />
-            </button>
-          </div>
+    <div className="absolute inset-0 z-40 flex pointer-events-auto text-xs">
+      {/* Canvas */}
+      <div className="flex-1 relative overflow-hidden blueprint-grid">
+        {/* Toolbar */}
+        <div className="absolute top-3 left-3 z-20 flex bg-black/60 backdrop-blur border border-white/10 rounded overflow-hidden">
+          <button className="px-3 py-1.5 text-[#ccc] hover:text-white hover:bg-black/80 transition-all font-medium flex items-center gap-1" onClick={() => setPaletteOpen((open) => !open)} title="Find / add node">
+            <i className="ph-fill ph-magnifying-glass text-[#888]" /> Find
+          </button>
         </div>
-        {props.loading && <div className="debugger-content-empty">loading graph…</div>}
-        {props.error && <div className="debugger-content-empty">{props.error}</div>}
-        {graph && !props.loading && !props.error && (
-          <div style={{ display: "grid", gridTemplateColumns: "260px minmax(0, 1fr) 320px", gap: 12, alignItems: "start" }}>
-            <aside className="debugger-panel" style={{ minHeight: 0 }}>
-              <div className="debugger-graph-side-title">Palette</div>
-              <div style={{ display: "grid", gap: 6 }}>
-                {GRAPH_NODE_LIBRARY.map((spec) => (
-                  <button
-                    key={spec.type}
-                    className="debugger-content-action"
-                    style={{ justifyContent: "space-between", width: "100%", padding: "8px 10px", display: "flex" }}
-                    disabled={props.keyboardLocked}
-                    onClick={() => addNode(spec)}
-                  >
-                    <span>{spec.label}</span>
-                    <span style={{ color: "#94a3b8" }}>{spec.type}</span>
-                  </button>
-                ))}
-              </div>
-              <div className="debugger-graph-side-title" style={{ marginTop: 12 }}>Variables</div>
-              <div style={{ display: "grid", gap: 8 }}>
-                {graph.variables.length === 0 ? <div className="debugger-content-empty">no variables</div> : graph.variables.map((variable, index) => (
-                  <div key={`${variable.name}-${index}`} className="debugger-graph-variable">
-                    <input className="debugger-input" value={variable.name} disabled={props.keyboardLocked} onChange={(event) => updateVariable(index, { name: event.target.value })} />
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                      <select className="debugger-input" value={variable.scope} disabled={props.keyboardLocked} onChange={(event) => updateVariable(index, { scope: event.target.value as GraphVariableDefinition["scope"] })}>
-                        <option value="private">private</option>
-                        <option value="public">public</option>
-                      </select>
-                      <input className="debugger-input" value={variable.type} disabled={props.keyboardLocked} onChange={(event) => updateVariable(index, { type: event.target.value })} />
-                    </div>
-                    <textarea
-                      className="debugger-input"
-                      rows={3}
-                      value={formatJsonValue(variable.default)}
-                      disabled={props.keyboardLocked}
-                      onChange={(event) => updateVariable(index, { default: parseJsonInput(event.target.value, variable.default) })}
-                    />
-                  </div>
-                ))}
-              </div>
-            </aside>
-            <section style={{ minWidth: 0 }}>
-              <div className="debugger-graph-meta">
-                <span>entrypoint: <strong>{graph.entrypoint}</strong></span>
-                <span>nodes: <strong>{graph.nodes.length}</strong></span>
-                <span>edges: <strong>{graph.edges.length}</strong></span>
-                <span>order: <strong>{graph.metadata?.order ?? "n/a"}</strong></span>
-              </div>
-              {typeof graph.metadata?.description === "string" && <div className="debugger-graph-description">{graph.metadata.description}</div>}
-              <div className="debugger-graph-canvas__scroll">
-                <div
-                  ref={viewportRef}
-                  className="debugger-graph-canvas__viewport"
-                  onPointerDown={handleGraphPointerDown}
-                  onWheel={handleGraphWheel}
-                >
-                  <div
-                    ref={canvasRef}
-                    className="debugger-graph-canvas"
-                    style={{
-                      width: `${bounds.width}px`,
-                      height: `${bounds.height}px`,
-                      transform: `translate(${graphView.x}px, ${graphView.y}px) scale(${graphView.zoom})`,
-                    }}
-                  >
-                  <svg className="debugger-graph-canvas__edges" width={bounds.width} height={bounds.height} viewBox={`0 0 ${bounds.width} ${bounds.height}`}>
-                    <defs>
-                      <marker id="graph-edge-end" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
-                        <path d="M 0 0 L 9 4.5 L 0 9 z" fill="#93c5fd" />
-                      </marker>
-                      <marker id="graph-edge-start" markerWidth="12" markerHeight="12" refX="6" refY="6" orient="auto" markerUnits="strokeWidth">
-                        <circle cx="6" cy="6" r="3.4" fill="#38bdf8" />
-                      </marker>
-                      <marker id="graph-edge-terminal" markerWidth="12" markerHeight="12" refX="6" refY="6" orient="auto" markerUnits="strokeWidth">
-                        <circle cx="6" cy="6" r="4" fill="#e0f2fe" stroke="#0f172a" strokeWidth="1.5" />
-                      </marker>
-                    </defs>
-                    {graph.edges.map((edge, index) => {
-                      const from = nodeMap.get(edge.from.node);
-                      const to = nodeMap.get(edge.to.node);
-                      if (!from || !to) return null;
-                      const id = edgeKey(edge);
-                      const isSelected = selectedEdgeKey === id;
-                      const fromPoint = portPoints[`${edge.from.node}:output:${edge.from.port}`] ?? getGraphPortPoint(from, edge.from.port, "output", bounds);
-                      const toPoint = portPoints[`${edge.to.node}:input:${edge.to.port}`] ?? getGraphPortPoint(to, edge.to.port, "input", bounds);
-                      const mid = (fromPoint.x + toPoint.x) / 2;
-                      const path = `M ${fromPoint.x} ${fromPoint.y} C ${mid} ${fromPoint.y}, ${mid} ${toPoint.y}, ${toPoint.x} ${toPoint.y}`;
-                      return (
-                        <g key={`${edge.from.node}-${edge.to.node}-${index}`}>
-                          <path
-                            d={path}
-                            className={`debugger-graph-edge${isSelected ? " is-selected" : ""}`}
-                            markerEnd="url(#graph-edge-end)"
-                            markerStart="url(#graph-edge-start)"
-                            onClick={() => setSelectedEdgeKey(id)}
-                          />
-                          <circle cx={fromPoint.x} cy={fromPoint.y} r={4.5} className="debugger-graph-edge__start" />
-                          <circle cx={toPoint.x} cy={toPoint.y} r={5.5} className="debugger-graph-edge__end" />
-                          <text x={fromPoint.x + 8} y={fromPoint.y - 8} className="debugger-graph-edge-label debugger-graph-edge-label--from">out</text>
-                          <text x={toPoint.x - 8} y={toPoint.y + 14} className="debugger-graph-edge-label debugger-graph-edge-label--to">in</text>
-                        </g>
-                      );
-                    })}
-                  </svg>
-                    {graph.nodes.map((node) => {
-                      const spec = GRAPH_NODE_LIBRARY.find((entry) => entry.type === node.type);
-                      const isSelected = node.id === selectedNodeId;
-                      return (
-                        <div
-                          key={node.id}
-                          className={`debugger-graph-node${node.id === graph.entrypoint ? " is-entrypoint" : ""}${isSelected ? " is-selected" : ""}`}
-                          onPointerDown={(event) => beginDrag(event, node.id)}
-                          onClick={() => setSelectedNodeId(node.id)}
-                          style={{
-                            left: `${node.position.x - bounds.x}px`,
-                            top: `${node.position.y - bounds.y}px`,
-                          }}
-                        >
-                          <div className="debugger-graph-node__title-row">
-                            <div>
-                              <div className="debugger-graph-node__title">{spec?.label ?? node.type}</div>
-                              <div className="debugger-graph-node__type">{node.id}</div>
-                            </div>
-                          <button
-                            className="debugger-graph-node__delete"
-                            title="Delete node"
-                            aria-label="Delete node"
-                            disabled={props.keyboardLocked}
-                            onPointerDown={(event) => event.stopPropagation()}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              deleteNode(node.id);
-                            }}
-                            >
-                              <Trash2 size={11} strokeWidth={2.5} />
-                            </button>
-                          </div>
-                          <div className="debugger-graph-node__flow-row">
-                            <div className="debugger-graph-node__flow-slot debugger-graph-node__flow-slot--input">
-                              {spec?.inputs.filter((port) => port.kind === "flow").map((port) => (
-                                <span
-                                  key={`${node.id}-in-${port.name}`}
-                                  className="debugger-graph-port debugger-graph-port--input debugger-graph-port--flow"
-                                  data-port-direction="in"
-                                  data-port-kind={port.kind}
-                                >
-                                  <span
-                                    className="debugger-graph-port__anchor"
-                                    ref={(element) => {
-                                      const key = `${node.id}:input:${port.name}`;
-                                      if (element) portRefs.current.set(key, element);
-                                      else portRefs.current.delete(key);
-                                    }}
-                                  >
-                                    <ChevronRight size={10} strokeWidth={2.6} className="debugger-graph-port__icon" />
-                                  </span>
-                                  <span className="debugger-graph-port__label">{port.label ?? port.name}</span>
-                                </span>
-                              ))}
-                            </div>
-                            <div className="debugger-graph-node__flow-slot debugger-graph-node__flow-slot--output">
-                              {spec?.outputs.filter((port) => port.kind === "flow").map((port) => (
-                                <span
-                                  key={`${node.id}-out-${port.name}`}
-                                  className="debugger-graph-port debugger-graph-port--output debugger-graph-port--flow"
-                                  data-port-direction="out"
-                                  data-port-kind={port.kind}
-                                >
-                                  <span className="debugger-graph-port__label">{port.label ?? port.name}</span>
-                                  <span
-                                    className="debugger-graph-port__anchor"
-                                    ref={(element) => {
-                                      const key = `${node.id}:output:${port.name}`;
-                                      if (element) portRefs.current.set(key, element);
-                                      else portRefs.current.delete(key);
-                                    }}
-                                  >
-                                    <ChevronRight size={10} strokeWidth={2.6} className="debugger-graph-port__icon" />
-                                  </span>
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                          <div className="debugger-graph-node__ports">
-                            <div className="debugger-graph-node__ports-col">
-                              {spec?.inputs.filter((port) => port.kind !== "flow").map((port) => (
-                                <span
-                                  key={`${node.id}-in-${port.name}`}
-                                  className="debugger-graph-port debugger-graph-port--input"
-                                  data-port-direction="in"
-                                  data-port-kind={port.kind}
-                                >
-                                  <span
-                                    className="debugger-graph-port__anchor"
-                                    ref={(element) => {
-                                      const key = `${node.id}:input:${port.name}`;
-                                      if (element) portRefs.current.set(key, element);
-                                      else portRefs.current.delete(key);
-                                    }}
-                                  />
-                                  <span className="debugger-graph-port__label">{port.label ?? port.name}</span>
-                                </span>
-                              ))}
-                            </div>
-                            <div className="debugger-graph-node__ports-col debugger-graph-node__ports-col--right">
-                              {spec?.outputs.filter((port) => port.kind !== "flow").map((port) => (
-                                <span
-                                  key={`${node.id}-out-${port.name}`}
-                                  className="debugger-graph-port debugger-graph-port--output"
-                                  data-port-direction="out"
-                                  data-port-kind={port.kind}
-                                >
-                                  <span className="debugger-graph-port__label">{port.label ?? port.name}</span>
-                                  <span
-                                    className="debugger-graph-port__anchor"
-                                    ref={(element) => {
-                                      const key = `${node.id}:output:${port.name}`;
-                                      if (element) portRefs.current.set(key, element);
-                                      else portRefs.current.delete(key);
-                                    }}
-                                  />
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                          {node.data && Object.keys(node.data).length > 0 && (
-                            <div className="debugger-graph-node__data">
-                              {Object.entries(node.data).map(([key, value]) => (
-                                <div key={key} className="debugger-graph-node__row">
-                                  <span>{key}</span>
-                                  <strong>{formatGraphValue(value)}</strong>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </section>
-            <aside className="debugger-panel" style={{ minHeight: 0 }}>
-              <div className="debugger-graph-side-title">Inspector</div>
-              <div className="debugger-graph-meta" style={{ marginTop: 0 }}>
-                <span>selected: <strong>{selectedNode?.id ?? "none"}</strong></span>
-                <span>version: <strong>{graph.version}</strong></span>
-              </div>
-              {selectedNode ? (
-                <>
-                  <div className="debugger-graph-description" style={{ marginBottom: 8 }}>{selectedNode.type}</div>
-                  <div style={{ display: "grid", gap: 8 }}>
-                    <div className="debugger-field"><span>UUID</span><strong>{selectedNode.id}</strong></div>
-                      {GRAPH_NODE_LIBRARY.find((spec) => spec.type === selectedNode.type)?.fields.map((field) => (
-                        <label key={field.name} className="debugger-field debugger-field--editable">
-                          <span>{field.label}</span>
-                          <input
-                            className="debugger-field__input"
-                            value={formatEditableValue(selectedNode.data?.[field.name], field.type)}
-                            disabled={props.keyboardLocked}
-                            onChange={(event) => updateNodeData(selectedNode.id, field.name, event.target.value, field.type)}
-                          />
-                        </label>
-                      ))}
-                    <div className="debugger-field">
-                      <span>Ports</span>
-                      <strong>{describeNodePorts(selectedNode.type)}</strong>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="debugger-content-empty">select a node</div>
-              )}
-              <div className="debugger-graph-side-title" style={{ marginTop: 14 }}>Connections</div>
-              <div className="debugger-graph-connection-list">
-                {graph.edges.length === 0 ? (
-                  <div className="debugger-content-empty">no connections</div>
-                ) : graph.edges.map((edge) => {
-                  const id = edgeKey(edge);
+        {/* Zoom controls */}
+        <div className="absolute top-3 right-3 z-20 flex bg-black/60 backdrop-blur border border-white/10 rounded overflow-hidden">
+          <button className="w-8 h-8 flex items-center justify-center text-[#888] hover:text-white hover:bg-black/80 border-r border-white/10" onClick={() => zoomGraph(1 / 1.18)} title="Zoom out"><i className="ph ph-minus" /></button>
+          <button className="w-8 h-8 flex items-center justify-center text-[#888] hover:text-white hover:bg-black/80 border-r border-white/10" onClick={fitView} title="Fit"><i className="ph ph-arrows-in" /></button>
+          <button className="w-8 h-8 flex items-center justify-center text-[#888] hover:text-white hover:bg-black/80" onClick={() => zoomGraph(1.18)} title="Zoom in"><i className="ph ph-plus" /></button>
+        </div>
+        {/* Find popover */}
+        {paletteOpen && (
+          <div className="absolute top-12 left-3 z-30 w-60 bg-[#1e1e1e] border border-[#303030] rounded shadow-lg flex flex-col overflow-hidden">
+            <div className="p-2 border-b border-[#303030]">
+              <input autoFocus className="engine-input w-full px-2 py-1 rounded" placeholder="search nodes" value={paletteQuery} onChange={(e) => setPaletteQuery(e.target.value)} />
+            </div>
+            <div className="max-h-64 overflow-y-auto">
+              {filteredLibrary.map((spec) => (
+                <button key={spec.type} className="w-full text-left px-3 py-1.5 text-[#ccc] hover:bg-[#2d2d2d] hover:text-white flex justify-between gap-2" onClick={() => { addNode(spec); setPaletteOpen(false); setPaletteQuery(""); }}>
+                  <span className="truncate">{spec.label}</span><span className="text-[#666] shrink-0">{spec.type}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {loading && <div className="absolute inset-0 grid place-items-center text-[#666]">loading graph…</div>}
+        {error && <div className="absolute inset-0 grid place-items-center text-[#666]">{error}</div>}
+        {graph && !loading && !error && (
+          <div ref={viewportRef} className="absolute inset-0 overflow-hidden" onPointerDown={handleGraphPointerDown} onWheel={handleGraphWheel}>
+            <div ref={canvasRef} className="absolute top-0 left-0" style={{ width: `${bounds.width}px`, height: `${bounds.height}px`, transform: `translate(${graphView.x}px, ${graphView.y}px) scale(${graphView.zoom})`, transformOrigin: "0 0" }}>
+              <svg className="absolute top-0 left-0 pointer-events-none" width={bounds.width} height={bounds.height} viewBox={`0 0 ${bounds.width} ${bounds.height}`}>
+                {graph.edges.map((edge, index) => {
                   const from = nodeMap.get(edge.from.node);
                   const to = nodeMap.get(edge.to.node);
-                  const isSelected = selectedEdgeKey === id;
+                  if (!from || !to) return null;
+                  const id = edgeKey(edge);
+                  const spec = GRAPH_NODE_LIBRARY.find((s) => s.type === from.type);
+                  const kind = spec?.outputs.find((p) => p.name === edge.from.port)?.kind ?? "data";
+                  const fromPoint = portPoints[`${edge.from.node}:output:${edge.from.port}`] ?? getGraphPortPoint(from, edge.from.port, "output", bounds);
+                  const toPoint = portPoints[`${edge.to.node}:input:${edge.to.port}`] ?? getGraphPortPoint(to, edge.to.port, "input", bounds);
+                  const mid = (fromPoint.x + toPoint.x) / 2;
                   return (
-                    <div
-                      key={id}
-                      className={`debugger-graph-connection${isSelected ? " is-selected" : ""}`}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => setSelectedEdgeKey(id)}
-                      onKeyDown={(event) => {
-                        if (event.key !== "Enter" && event.key !== " ") return;
-                        event.preventDefault();
-                        setSelectedEdgeKey(id);
-                      }}
-                    >
-                      <span className="debugger-graph-connection__flow">
-                        {from ? `${from.type}.${edge.from.port}` : edge.from.node}
-                        <strong>→</strong>
-                        {to ? `${to.type}.${edge.to.port}` : edge.to.node}
-                      </span>
-                      <span className="debugger-graph-connection__actions">
-                        <span className={`debugger-pill${isSelected ? " is-active" : ""}`}>wire</span>
-                        <button
-                          className="debugger-graph-connection__delete"
-                          aria-label="Delete connection"
-                          title="Delete connection"
-                          disabled={props.keyboardLocked}
-                          onPointerDown={(event) => event.stopPropagation()}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            deleteEdge(id);
-                          }}
-                        >
-                          <Trash2 size={11} strokeWidth={2.5} />
-                        </button>
-                      </span>
-                    </div>
+                    <path
+                      key={`${id}-${index}`}
+                      d={`M ${fromPoint.x} ${fromPoint.y} C ${mid} ${fromPoint.y}, ${mid} ${toPoint.y}, ${toPoint.x} ${toPoint.y}`}
+                      fill="none"
+                      stroke={wireColor(kind)}
+                      strokeWidth={selectedEdgeKey === id ? 3.5 : 2.5}
+                      opacity={selectedEdgeKey === id ? 1 : 0.85}
+                      style={{ pointerEvents: "stroke", cursor: "pointer" }}
+                      onClick={() => { setSelectedEdgeKey(id); setSelectedNodeId(undefined); }}
+                    />
                   );
                 })}
-              </div>
-            </aside>
+              </svg>
+              {graph.nodes.map((node) => {
+                const spec = GRAPH_NODE_LIBRARY.find((entry) => entry.type === node.type);
+                const accent = blueprintNodeAccent(node.type);
+                const isSelected = node.id === selectedNodeId;
+                const flowFirst = <T extends { kind: string }>(ports: readonly T[]) =>
+                  [...ports].sort((a, b) => (a.kind === "flow" ? 0 : 1) - (b.kind === "flow" ? 0 : 1));
+                const inputs = flowFirst(spec?.inputs ?? []);
+                const outputs = flowFirst(spec?.outputs ?? []);
+                return (
+                  <div
+                    key={node.id}
+                    className={`blueprint-node absolute w-48 bg-[#1e1e1e]/95 backdrop-blur-sm rounded-md shadow-2xl flex flex-col font-sans text-[11px] ${isSelected ? "ring-2 ring-[#0070e0]" : "border border-black"}`}
+                    style={{ left: `${node.position.x - bounds.x}px`, top: `${node.position.y - bounds.y}px` }}
+                    onPointerDown={(event) => beginDrag(event, node.id)}
+                    onClick={() => { setSelectedNodeId(node.id); setSelectedEdgeKey(undefined); }}
+                  >
+                    <div className={`h-7 rounded-t-md flex items-center px-2 text-white font-bold tracking-wide border-b border-black bg-gradient-to-r ${accent.grad}`}>
+                      <i className={`${accent.icon} mr-1 text-base opacity-80`} /> <span className="truncate flex-1">{spec?.label ?? node.type}</span>
+                      <button
+                        className="ml-1 text-white/70 hover:text-white"
+                        title="Delete node"
+                        disabled={props.keyboardLocked}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onClick={(event) => { event.stopPropagation(); deleteNode(node.id); }}
+                      >
+                        <i className="ph ph-x text-xs" />
+                      </button>
+                    </div>
+                    <div className="p-2 py-3 flex justify-between gap-2">
+                      <div className="space-y-2">
+                        {inputs.map((port) => (
+                          <div key={`in-${port.name}`} className="flex items-center gap-1.5 group">
+                            <span
+                              className={portDotClass(port.kind)}
+                              ref={(el) => { const k = `${node.id}:input:${port.name}`; if (el) portRefs.current.set(k, el); else portRefs.current.delete(k); }}
+                            />
+                            <span className="text-[#ccc] group-hover:text-white">{port.label ?? port.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="space-y-2 text-right">
+                        {outputs.map((port) => (
+                          <div key={`out-${port.name}`} className="flex items-center justify-end gap-1.5 group">
+                            <span className="text-[#ccc] group-hover:text-white">{port.label ?? port.name}</span>
+                            <span
+                              className={portDotClass(port.kind)}
+                              ref={(el) => { const k = `${node.id}:output:${port.name}`; if (el) portRefs.current.set(k, el); else portRefs.current.delete(k); }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    {spec && spec.fields.length > 0 && (
+                      <div className="px-2 pb-2 space-y-1.5">
+                        {spec.fields.map((field) => (
+                          <div key={field.name} className="flex items-center gap-1.5">
+                            <span className="text-[#888] w-14 truncate">{field.label}</span>
+                            {field.type === "boolean" ? (
+                              <input
+                                type="checkbox"
+                                className="accent-[#0070e0]"
+                                checked={String(node.data?.[field.name] ?? "") === "true"}
+                                disabled={props.keyboardLocked}
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onChange={(event) => updateNodeData(node.id, field.name, String(event.target.checked), field.type)}
+                              />
+                            ) : (
+                              <input
+                                type="text"
+                                className="flex-1 min-w-0 bg-[#000] border border-[#303030] text-[9px] px-1 py-0.5 rounded text-center text-[#888]"
+                                value={formatEditableValue(node.data?.[field.name], field.type)}
+                                disabled={props.keyboardLocked}
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onChange={(event) => updateNodeData(node.id, field.name, event.target.value, field.type)}
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
+
+      {/* Right panel: System Variables + Node Details */}
+      <aside className="w-72 bg-[#1e1e1e] border-l border-[#303030] flex flex-col flex-shrink-0 shadow-xl">
+        <div className="flex-1 flex flex-col border-b border-[#303030] min-h-[40%]">
+          <div className="h-8 bg-[#252526] flex items-center px-3 border-b border-[#303030] justify-between text-white font-medium select-none">
+            System Variables
+            <i className="ph ph-plus text-[#888] hover:text-white cursor-pointer" title="Add Variable" onClick={addVariable} />
+          </div>
+          <div className="flex-1 overflow-y-auto py-2 px-2 select-none space-y-1">
+            {graph && graph.variables.length > 0 ? graph.variables.map((variable, index) => (
+              <div key={`${variable.name}-${index}`} className="flex items-center justify-between px-2 py-1 hover:bg-[#2d2d2d] cursor-pointer rounded text-[#ccc] group">
+                <div className="flex items-center gap-2">
+                  <div className={`w-2.5 h-2.5 rounded-full ${variableDotColor(variable.type)}`} />
+                  {variable.name}
+                </div>
+                <span className="text-[10px] text-[#888] bg-[#111] px-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">{variable.type}</span>
+              </div>
+            )) : <div className="text-[#666] px-2 py-1">no variables</div>}
+          </div>
+        </div>
+
+        <div className="flex-1 flex flex-col min-h-[40%]">
+          <div className="h-8 bg-[#252526] flex items-center px-3 border-b border-[#303030] text-white font-medium select-none">Node Details</div>
+          <div className="flex-1 overflow-y-auto p-3 space-y-4">
+            {selectedNode ? (
+              <>
+                <div className="flex items-center gap-2 pb-2 border-b border-[#303030]">
+                  <i className={`${blueprintNodeAccent(selectedNode.type).icon} ${blueprintNodeAccent(selectedNode.type).text} text-lg`} />
+                  <div className="font-medium text-white">{selectedSpec?.label ?? selectedNode.type}</div>
+                </div>
+                <div className="space-y-3">
+                  {selectedSpec && selectedSpec.fields.length > 0 ? selectedSpec.fields.map((field) => (
+                    <div key={field.name} className="space-y-1">
+                      <span className="text-[#888] text-[10px] uppercase font-bold tracking-wide">{field.label}</span>
+                      {field.type === "boolean" ? (
+                        <input
+                          type="checkbox"
+                          className="accent-[#0070e0] w-3.5 h-3.5"
+                          checked={String(selectedNode.data?.[field.name] ?? "") === "true"}
+                          disabled={props.keyboardLocked}
+                          onChange={(event) => updateNodeData(selectedNode.id, field.name, String(event.target.checked), field.type)}
+                        />
+                      ) : (
+                        <input
+                          className="w-full engine-input px-2 py-1.5 rounded text-white text-xs"
+                          value={formatEditableValue(selectedNode.data?.[field.name], field.type)}
+                          disabled={props.keyboardLocked}
+                          onChange={(event) => updateNodeData(selectedNode.id, field.name, event.target.value, field.type)}
+                        />
+                      )}
+                    </div>
+                  )) : <div className="text-[#666]">no settings</div>}
+                  <div className="text-[10px] text-[#666] pt-1 break-all">id: {selectedNode.id}</div>
+                </div>
+              </>
+            ) : <div className="text-[#666]">select a node</div>}
+          </div>
+        </div>
+      </aside>
     </div>
   );
 }
@@ -2021,23 +1994,23 @@ function ContentPreviewDialog(props: {
   onClose: () => void;
 }) {
   return createPortal(
-    <div className="debugger-content-preview" role="dialog" aria-modal="true" onClick={props.onClose}>
-      <div className="debugger-content-preview__panel" onClick={(event) => event.stopPropagation()}>
-        <div className="debugger-content-preview__header">
-          <div>
-            <div className="debugger-section__title" style={{ marginBottom: 4 }}>File Preview</div>
-            <div className="debugger-content-preview__subtitle">{props.path}</div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm text-xs" role="dialog" aria-modal="true" onClick={props.onClose}>
+      <div className="w-[560px] max-w-[90vw] max-h-[80vh] flex flex-col bg-[#1e1e1e] border border-[#303030] rounded-lg shadow-2xl overflow-hidden" onClick={(event) => event.stopPropagation()}>
+        <div className="h-9 bg-[#252526] flex items-center justify-between px-3 border-b border-[#303030]">
+          <div className="flex flex-col">
+            <span className="text-white font-medium">File Preview</span>
+            <span className="text-[#888] text-[10px]">{props.path}</span>
           </div>
-          <button className="debugger-content-action" onClick={props.onClose} aria-label="Close preview">
-            <X size={13} strokeWidth={2.5} />
+          <button className="text-[#888] hover:text-white transition-colors" onClick={props.onClose} aria-label="Close preview">
+            <i className="ph ph-x" />
           </button>
         </div>
         {props.loading ? (
-          <div className="debugger-content-empty">loading file…</div>
+          <div className="p-4 text-[#666]">loading file…</div>
         ) : props.error ? (
-          <div className="debugger-content-empty">{props.error}</div>
+          <div className="p-4 text-[#666]">{props.error}</div>
         ) : (
-          <pre className="debugger-content-preview__json">{JSON.stringify(props.value, null, 2)}</pre>
+          <pre className="flex-1 overflow-auto p-3 font-mono text-[11px] text-[#ccc]">{JSON.stringify(props.value, null, 2)}</pre>
         )}
       </div>
     </div>,
@@ -2057,22 +2030,22 @@ function ContentCreateDialog(props: {
 }) {
   const exists = props.currentChildren.some((node) => node.name === props.name.trim());
   return createPortal(
-    <div className="debugger-content-dialog" role="dialog" aria-modal="true" onClick={props.onClose}>
-      <div className="debugger-content-dialog__panel" onClick={(event) => event.stopPropagation()}>
-        <div className="debugger-content-dialog__header">
-          <div>
-            <div className="debugger-section__title" style={{ marginBottom: 4 }}>Create {props.kind}</div>
-            <div className="debugger-content-dialog__subtitle">{props.basePath || "root"}</div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm text-xs" role="dialog" aria-modal="true" onClick={props.onClose}>
+      <div className="w-[360px] max-w-[90vw] flex flex-col bg-[#1e1e1e] border border-[#303030] rounded-lg shadow-2xl overflow-hidden" onClick={(event) => event.stopPropagation()}>
+        <div className="h-9 bg-[#252526] flex items-center justify-between px-3 border-b border-[#303030]">
+          <div className="flex flex-col">
+            <span className="text-white font-medium capitalize">Create {props.kind}</span>
+            <span className="text-[#888] text-[10px]">{props.basePath || "root"}</span>
           </div>
-          <button className="debugger-content-action" onClick={props.onClose} aria-label="Close dialog">
-            <X size={13} strokeWidth={2.5} />
+          <button className="text-[#888] hover:text-white transition-colors" onClick={props.onClose} aria-label="Close dialog">
+            <i className="ph ph-x" />
           </button>
         </div>
-        <div className="debugger-content-dialog__body">
-          <label className="debugger-field debugger-field--editable">
-            <span>Name</span>
+        <div className="p-3 space-y-2">
+          <label className="flex flex-col gap-1">
+            <span className="text-[#888]">Name</span>
             <input
-              className="debugger-input"
+              className="engine-input px-2 py-1 rounded"
               autoFocus
               placeholder={props.kind === "folder" ? "folder name…" : props.kind === "component" ? "component name…" : props.kind === "prefab" ? "prefab name…" : props.kind === "graph" ? "system name…" : "world name…"}
               value={props.name}
@@ -2084,11 +2057,11 @@ function ContentCreateDialog(props: {
               }}
             />
           </label>
-          {exists && props.name.trim() && !props.keyboardLocked ? <div className="debugger-content-dialog__error">already exists</div> : null}
+          {exists && props.name.trim() && !props.keyboardLocked ? <div className="text-[#f87171]">already exists</div> : null}
         </div>
-        <div className="debugger-content-dialog__footer">
-          <button className="debugger-content-action" onClick={props.onClose}>Cancel</button>
-          <button className="debugger-content-action debugger-content-action--primary" onClick={props.onConfirm} disabled={!props.name.trim() || exists || props.keyboardLocked}>
+        <div className="flex justify-end gap-2 p-3 border-t border-[#303030]">
+          <button className={DIALOG_BTN} onClick={props.onClose}>Cancel</button>
+          <button className={DIALOG_BTN_PRIMARY} onClick={props.onConfirm} disabled={!props.name.trim() || exists || props.keyboardLocked}>
             Create
           </button>
         </div>
@@ -2109,30 +2082,30 @@ function ContentImportDialog(props: {
   onImport: () => void;
 }) {
   return createPortal(
-    <div className="debugger-content-dialog" role="dialog" aria-modal="true" onClick={props.onClose}>
-      <div className="debugger-content-dialog__panel" onClick={(event) => event.stopPropagation()}>
-        <div className="debugger-content-dialog__header">
-          <div>
-            <div className="debugger-section__title" style={{ marginBottom: 4 }}>Import content</div>
-            <div className="debugger-content-dialog__subtitle">{props.basePath || "root"}</div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm text-xs" role="dialog" aria-modal="true" onClick={props.onClose}>
+      <div className="w-[360px] max-w-[90vw] flex flex-col bg-[#1e1e1e] border border-[#303030] rounded-lg shadow-2xl overflow-hidden" onClick={(event) => event.stopPropagation()}>
+        <div className="h-9 bg-[#252526] flex items-center justify-between px-3 border-b border-[#303030]">
+          <div className="flex flex-col">
+            <span className="text-white font-medium">Import content</span>
+            <span className="text-[#888] text-[10px]">{props.basePath || "root"}</span>
           </div>
-          <button className="debugger-content-action" onClick={props.onClose} aria-label="Close dialog">
-            <X size={13} strokeWidth={2.5} />
+          <button className="text-[#888] hover:text-white transition-colors" onClick={props.onClose} aria-label="Close dialog">
+            <i className="ph ph-x" />
           </button>
         </div>
-        <div className="debugger-content-dialog__body">
-          <div className="debugger-content-dialog__hint">Choose a JSON file, then import it into the current folder.</div>
-          <div className="debugger-content-dialog__filebox">
-            <div className="debugger-content-dialog__filelabel">{props.file ? props.file.name : "No file chosen"}</div>
-            <button className="debugger-content-action" onClick={props.onPickFile} disabled={props.keyboardLocked}>
+        <div className="p-3 space-y-2">
+          <div className="text-[#888]">Choose a JSON file, then import it into the current folder.</div>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 truncate text-[#ccc] bg-[#111111] border border-[#303030] rounded px-2 py-1">{props.file ? props.file.name : "No file chosen"}</div>
+            <button className={DIALOG_BTN} onClick={props.onPickFile} disabled={props.keyboardLocked}>
               Choose File
             </button>
           </div>
-          {props.error ? <div className="debugger-content-dialog__error">{props.error}</div> : null}
+          {props.error ? <div className="text-[#f87171]">{props.error}</div> : null}
         </div>
-        <div className="debugger-content-dialog__footer">
-          <button className="debugger-content-action" onClick={props.onClose}>Cancel</button>
-          <button className="debugger-content-action debugger-content-action--primary" onClick={props.onImport} disabled={!props.file || props.keyboardLocked || props.busy}>
+        <div className="flex justify-end gap-2 p-3 border-t border-[#303030]">
+          <button className={DIALOG_BTN} onClick={props.onClose}>Cancel</button>
+          <button className={DIALOG_BTN_PRIMARY} onClick={props.onImport} disabled={!props.file || props.keyboardLocked || props.busy}>
             {props.busy ? "Importing..." : "Import"}
           </button>
         </div>
@@ -2149,23 +2122,23 @@ function DeleteContentDialog(props: {
   onConfirm: () => void;
 }) {
   return createPortal(
-    <div className="debugger-content-dialog" role="dialog" aria-modal="true" onClick={props.onClose}>
-      <div className="debugger-content-dialog__panel" onClick={(event) => event.stopPropagation()}>
-        <div className="debugger-content-dialog__header">
-          <div>
-            <div className="debugger-section__title" style={{ marginBottom: 4 }}>Delete {props.node.kind}</div>
-            <div className="debugger-content-dialog__subtitle">{props.node.path || "root"}</div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm text-xs" role="dialog" aria-modal="true" onClick={props.onClose}>
+      <div className="w-[360px] max-w-[90vw] flex flex-col bg-[#1e1e1e] border border-[#303030] rounded-lg shadow-2xl overflow-hidden" onClick={(event) => event.stopPropagation()}>
+        <div className="h-9 bg-[#252526] flex items-center justify-between px-3 border-b border-[#303030]">
+          <div className="flex flex-col">
+            <span className="text-white font-medium capitalize">Delete {props.node.kind}</span>
+            <span className="text-[#888] text-[10px]">{props.node.path || "root"}</span>
           </div>
-          <button className="debugger-content-action" onClick={props.onClose} aria-label="Close dialog">
-            <X size={13} strokeWidth={2.5} />
+          <button className="text-[#888] hover:text-white transition-colors" onClick={props.onClose} aria-label="Close dialog">
+            <i className="ph ph-x" />
           </button>
         </div>
-        <div className="debugger-content-dialog__body">
-          <div className="debugger-content-dialog__hint">This action cannot be undone.</div>
+        <div className="p-3">
+          <div className="text-[#888]">This action cannot be undone.</div>
         </div>
-        <div className="debugger-content-dialog__footer">
-          <button className="debugger-content-action" onClick={props.onClose}>Cancel</button>
-          <button className="debugger-content-action debugger-content-action--danger" onClick={props.onConfirm} disabled={props.keyboardLocked}>
+        <div className="flex justify-end gap-2 p-3 border-t border-[#303030]">
+          <button className={DIALOG_BTN} onClick={props.onClose}>Cancel</button>
+          <button className={DIALOG_BTN_DANGER} onClick={props.onConfirm} disabled={props.keyboardLocked}>
             Delete
           </button>
         </div>
@@ -2178,17 +2151,34 @@ function DeleteContentDialog(props: {
 function renderContentIcon(kind: ContentTreeNode["kind"]) {
   switch (kind) {
     case "folder":
-      return <Folder size={14} strokeWidth={2} />;
+      return <i className="ph-fill ph-folder" />;
     case "world":
-      return <Globe size={14} strokeWidth={2} />;
+      return <i className="ph-fill ph-globe-hemisphere-west" />;
     case "component":
-      return <Puzzle size={14} strokeWidth={2} />;
+      return <i className="ph-fill ph-puzzle-piece" />;
     case "prefab":
-      return <Package size={14} strokeWidth={2} />;
+      return <i className="ph-fill ph-cube" />;
     case "graph":
-      return <Workflow size={14} strokeWidth={2} />;
+      return <i className="ph-fill ph-graph" />;
     case "file":
-      return <FileJson size={14} strokeWidth={2} />;
+      return <i className="ph-fill ph-file-code" />;
+  }
+}
+
+function contentTypeBarColor(kind: ContentTreeNode["kind"]) {
+  switch (kind) {
+    case "folder":
+      return "bg-[#666]";
+    case "world":
+      return "bg-orange-500";
+    case "component":
+      return "bg-purple-500";
+    case "prefab":
+      return "bg-cyan-500";
+    case "graph":
+      return "bg-green-500";
+    case "file":
+      return "bg-blue-500";
   }
 }
 
