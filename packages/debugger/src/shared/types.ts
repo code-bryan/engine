@@ -96,6 +96,12 @@ export type RuntimeDebuggerOptions<TWorld extends DebuggerWorld = DebuggerWorld>
   onOpenWorldsChanged?: (paths: string[]) => void;
   onAddSystem?: (name: string) => void;
   onRemoveSystem?: (name: string) => void;
+  projectName?: string | null;
+  recentProjects?: string[];
+  onOpenProject?: (path: string) => void;
+  onCreateProject?: (path: string) => void;
+  onCloseProject?: () => void;
+  onBrowseProject?: (mode: "open" | "create") => Promise<string | null>;
 };
 
 export type DebugEditor<TWorld extends DebuggerWorld = DebuggerWorld> = {

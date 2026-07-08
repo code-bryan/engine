@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "name": "Platformer Demo",
+  "entryWorld": "worlds/world-01",
+  "systems": [
+    "player-control",
+    "enemy-follow",
+    "actor-state",
+    "sprite-facing",
+    "restart-on-enemy-touch"
+  ]
+}

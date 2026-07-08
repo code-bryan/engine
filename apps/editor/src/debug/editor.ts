@@ -22,6 +22,10 @@ export type DebugEditorPlayback = {
   onDeleteContent?: (path: string, kind: "folder" | "world" | "prefab" | "component" | "graph" | "file") => void;
   onAddSystem?: (name: string) => void;
   onRemoveSystem?: (name: string) => void;
+  onOpenProject?: (path: string) => void;
+  onCreateProject?: (path: string) => void;
+  onCloseProject?: () => void;
+  onBrowseProject?: (mode: "open" | "create") => Promise<string | null>;
 };
 
 export type DebugEditorOptions = DebugEditorPlayback & {
@@ -32,6 +36,8 @@ export type DebugEditorOptions = DebugEditorPlayback & {
   onContentDrawerToggled?: (open: boolean) => void;
   initialOpenWorlds?: string[];
   onOpenWorldsChanged?: (paths: string[]) => void;
+  projectName?: string | null;
+  recentProjects?: string[];
 };
 
 export function attachDebugEditor(world: GameWorld, engine: EngineApplication, options: DebugEditorOptions) {
@@ -54,6 +60,12 @@ export function attachDebugEditor(world: GameWorld, engine: EngineApplication, o
     onDeleteContent: playback.onDeleteContent,
     onAddSystem: playback.onAddSystem,
     onRemoveSystem: playback.onRemoveSystem,
+    onOpenProject: playback.onOpenProject,
+    onCreateProject: playback.onCreateProject,
+    onCloseProject: playback.onCloseProject,
+    onBrowseProject: playback.onBrowseProject,
+    projectName: options.projectName,
+    recentProjects: options.recentProjects,
     contentTree: options.contentTree,
     activeWorld: options.activeWorld,
     activeSystems: options.activeSystems,

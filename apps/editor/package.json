@@ -1,5 +1,5 @@
 {
-  "name": "@engine/demo-platformer",
+  "name": "@engine/editor",
   "type": "module",
   "version": "0.0.0",
   "private": true,

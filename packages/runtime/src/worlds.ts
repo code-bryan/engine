@@ -122,8 +122,16 @@ function readStoredWorld(name: string): DemoWorldData | null {
   }
 }
 
+// Local edits are cached in localStorage keyed by project so opening a different
+// project doesn't inherit another project's unsaved worlds.
+let storageNamespace = "engine";
+
+export function setStorageNamespace(namespace: string) {
+  storageNamespace = namespace || "engine";
+}
+
 function storageKey(name: string) {
-  return `demo-platformer.${name}`;
+  return `${storageNamespace}.${name}`;
 }
 
 function normalizeScale(scale?: TransformScale) {

@@ -9,6 +9,7 @@ import {
   registerComponentDefinition,
   saveWorldDefinition,
   serializeWorld,
+  setStorageNamespace,
   type PrefabDefinition,
   type DemoWorldData,
 } from "@engine/runtime";
@@ -18,13 +19,79 @@ import { GameWorld } from "./app";
 import { attachDebugEditor } from "./debug/editor";
 import { bootstrapDemoSystems } from "./content/systems";
 
-const defaultWorldSystems = [
-  "player-control",
-  "enemy-follow",
-  "actor-state",
-  "sprite-facing",
-  "restart-on-enemy-touch",
-];
+type ProjectManifest = {
+  version: number;
+  name: string;
+  entryWorld: string;
+  systems?: string[];
+};
+
+// The editor opens whatever project the CLI wired in; the manifest supplies the
+// entry world and the default system set for worlds that don't declare their own.
+// Returns null when no project is open (server active project cleared).
+async function fetchProject(): Promise<ProjectManifest | null> {
+  try {
+    const res = await fetch("/api/project");
+    if (res.ok) {
+      const data = (await res.json()) as ProjectManifest | { open: false };
+      if ("open" in data && data.open === false) return null;
+      return data as ProjectManifest;
+    }
+  } catch {}
+  return null;
+}
+
+let projectManifest: ProjectManifest = { version: 1, name: "Untitled", entryWorld: "worlds/main", systems: [] };
+
+// Recent projects live client-side (the server has no per-user state).
+const RECENTS_KEY = "engine.recentProjects";
+function loadRecents(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENTS_KEY);
+    if (raw) return (JSON.parse(raw) as string[]).filter((p) => typeof p === "string");
+  } catch {}
+  return [];
+}
+function saveRecent(path: string) {
+  const next = [path, ...loadRecents().filter((p) => p !== path)].slice(0, 10);
+  try {
+    localStorage.setItem(RECENTS_KEY, JSON.stringify(next));
+  } catch {}
+}
+
+// Switching projects reloads the page: the server swaps its active project and a
+// fresh boot picks it up cleanly (avoids re-plumbing runtime module singletons).
+async function switchProject(endpoint: "open" | "create", path: string) {
+  const res = await fetch(`/api/project/${endpoint}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    window.alert(`${endpoint === "open" ? "Open" : "Create"} project failed: ${err.error ?? res.status}`);
+    return;
+  }
+  saveRecent(path);
+  location.reload();
+}
+async function closeCurrentProject() {
+  await fetch("/api/project/close", { method: "POST" });
+  location.reload();
+}
+
+// Ask the CLI (running on the user's machine) to open a native folder dialog and
+// return the chosen absolute path.
+async function browseProject(mode: "open" | "create"): Promise<string | null> {
+  try {
+    const res = await fetch(`/api/project/pick?mode=${mode}`);
+    if (!res.ok) return null;
+    const data = (await res.json()) as { path?: string; cancelled?: boolean };
+    return data.path ?? null;
+  } catch {
+    return null;
+  }
+}
 
 const shell = document.createElement("main");
 shell.className = "app-shell";
@@ -42,7 +109,7 @@ let openWorldPaths: string[] = [];
 
 // One persistent world/physics/engine/debugger for the whole session — worlds load in place.
 const gameWorld = new GameWorld(createPhysics({ gravity: { x: 0, y: 0 } }));
-let worldName = "worlds/world-01";
+let worldName = "";
 let activeWorldSystems: string[] = [];
 let authoredSnapshot: ReturnType<typeof captureWorldSnapshot> | undefined;
 
@@ -96,7 +163,15 @@ async function refreshContent() {
 }
 
 async function boot(startPlaying: boolean) {
-  const contentTree = await materializeInto("worlds/world-01");
+  const project = await fetchProject();
+  const hasProject = project !== null;
+  if (project) {
+    projectManifest = project;
+    setStorageNamespace(project.name);
+  }
+  // No project open → boot an empty engine; the debugger's start screen (shown
+  // when projectName is null) covers the UI with Open/Create/recent.
+  const contentTree = hasProject ? await materializeInto(project.entryWorld) : [];
 
   engine = await createEngineApplication({
     world: gameWorld,
@@ -211,6 +286,12 @@ async function boot(startPlaying: boolean) {
     onOpenWorldsChanged(paths) {
       openWorldPaths = paths;
     },
+    onOpenProject: (path) => { void switchProject("open", path); },
+    onCreateProject: (path) => { void switchProject("create", path); },
+    onCloseProject: () => { void closeCurrentProject(); },
+    onBrowseProject: browseProject,
+    projectName: hasProject ? projectManifest.name : null,
+    recentProjects: loadRecents(),
     contentTree,
     activeWorld: worldName,
     activeSystems: activeWorldSystems,
@@ -246,5 +327,7 @@ function toTitleCase(value: string) {
 }
 
 function resolveWorldSystems(systems: string[]) {
-  return systems;
+  // A world declares its own systems; fall back to the project defaults when it
+  // has none (e.g. a freshly created world).
+  return systems.length > 0 ? systems : projectManifest.systems ?? [];
 }

@@ -62,6 +62,10 @@ export type DebuggerUiActions = {
   openLevel: () => void;
   toggleContentDrawer: () => void;
   loadWorld: (name: string) => void;
+  openProject: (path: string) => void;
+  createProject: (path: string) => void;
+  closeProject: () => void;
+  browseProject: (mode: "open" | "create") => Promise<string | null>;
 };
 
 export function renderDebuggerUi<TWorld extends DebuggerWorld>(
@@ -155,6 +159,12 @@ export function renderDebuggerUi<TWorld extends DebuggerWorld>(
     onCreateGraph: options.onCreateGraph,
     onImportContent: options.onImportContent,
     onDeleteContent: options.onDeleteContent,
+    projectName: options.projectName ?? null,
+    recentProjects: options.recentProjects ?? [],
+    onOpenProject: actions.openProject,
+    onCreateProject: actions.createProject,
+    onCloseProject: actions.closeProject,
+    onBrowseProject: actions.browseProject,
   }));
 }
 

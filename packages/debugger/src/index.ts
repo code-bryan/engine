@@ -293,6 +293,18 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
         removeSystem(name) {
           options.onRemoveSystem?.(name);
         },
+        openProject(path) {
+          options.onOpenProject?.(path);
+        },
+        createProject(path) {
+          options.onCreateProject?.(path);
+        },
+        closeProject() {
+          options.onCloseProject?.();
+        },
+        browseProject(mode) {
+          return options.onBrowseProject?.(mode) ?? Promise.resolve(null);
+        },
         toggleComponentCollapse(id) {
           if (state.collapsedComponents.has(id)) state.collapsedComponents.delete(id);
           else state.collapsedComponents.add(id);

@@ -1,106 +1,113 @@
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { type IncomingMessage, type ServerResponse } from "node:http";
 import { dirname, join, relative, resolve } from "node:path";
-import { defineConfig, type Plugin } from "vite";
 
-type ContentTreeNode = {
+// Folder-scoped content filesystem API. All handlers operate on `contentDir`
+// (a project's `content/` folder) — nothing is hardcoded, so the same code
+// serves any project the editor opens. Extracted verbatim from the old Vite
+// `worldEditorPlugin` so behaviour (and the path-traversal guards) is unchanged.
+
+export type ContentTreeNode = {
   name: string;
   path: string;
   kind: "folder" | "world" | "prefab" | "component" | "graph" | "file";
   children?: ContentTreeNode[];
 };
 
-function worldEditorPlugin(): Plugin {
-  const contentDir = resolve(__dirname, "src/content");
+type Next = (err?: unknown) => void;
 
-  return {
-    name: "world-editor",
-    apply: "serve",
-    configureServer(server) {
-      server.watcher.unwatch(contentDir);
-      server.middlewares.use((req, res, next) => {
-        const url = new URL(req.url ?? "", "http://localhost");
-        const pathName = url.pathname;
-        const contentPath = url.searchParams.get("path") ?? "";
+// Connect-style middleware factory. Returns a handler that answers the
+// `/api/*` content routes and calls `next()` for everything else. `getContentDir`
+// is read per request so the active project can change at runtime; when it
+// returns null (no project open) the routes respond empty/404 instead of reading disk.
+export function createContentApiMiddleware(getContentDir: () => string | null) {
+  return function contentApi(req: IncomingMessage, res: ServerResponse, next: Next) {
+    const url = new URL(req.url ?? "", "http://localhost");
+    const pathName = url.pathname;
+    const contentPath = url.searchParams.get("path") ?? "";
 
-        if (req.method === "GET" && pathName === "/api/worlds") {
-          collectWorldNames(contentDir)
-            .then((names) => {
-              res.setHeader("Content-Type", "application/json");
-              res.end(JSON.stringify(names.map((name) => ({ name }))));
-            })
-            .catch(() => {
-              res.statusCode = 500;
-              res.end(JSON.stringify({ error: "read failed" }));
-            });
-          return;
-        }
+    const contentDir = getContentDir();
+    if (!contentDir) {
+      if (pathName === "/api/content/tree") {
+        res.setHeader("Content-Type", "application/json");
+        res.end("[]");
+        return;
+      }
+      if (pathName === "/api/worlds") {
+        res.setHeader("Content-Type", "application/json");
+        res.end("[]");
+        return;
+      }
+      if (pathName === "/api/content/file" || pathName === "/api/world" || pathName === "/api/content/folder") {
+        res.statusCode = 409;
+        res.end(JSON.stringify({ error: "no project open" }));
+        return;
+      }
+      next();
+      return;
+    }
 
-        if (req.method === "GET" && pathName === "/api/content/tree") {
-          readContentTree(contentDir)
-            .then((tree) => {
-              res.setHeader("Content-Type", "application/json");
-              res.end(JSON.stringify(tree));
-            })
-            .catch(() => {
-              res.statusCode = 500;
-              res.end(JSON.stringify({ error: "read failed" }));
-            });
-          return;
-        }
+    if (req.method === "GET" && pathName === "/api/worlds") {
+      collectWorldNames(contentDir)
+        .then((names) => {
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify(names.map((name) => ({ name }))));
+        })
+        .catch(() => {
+          res.statusCode = 500;
+          res.end(JSON.stringify({ error: "read failed" }));
+        });
+      return;
+    }
 
-        if (req.method === "POST" && pathName === "/api/content/folder") {
-          createSafePath(contentDir, contentPath)
-            .then((absolutePath) => mkdir(absolutePath, { recursive: true }))
-            .then(() => {
-              res.setHeader("Content-Type", "application/json");
-              res.end(JSON.stringify({ ok: true }));
-            })
-            .catch((error) => {
-              res.statusCode = 400;
-              res.end(JSON.stringify({ error: error instanceof Error ? error.message : "invalid path" }));
-            });
-          return;
-        }
+    if (req.method === "GET" && pathName === "/api/content/tree") {
+      readContentTree(contentDir)
+        .then((tree) => {
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify(tree));
+        })
+        .catch(() => {
+          res.statusCode = 500;
+          res.end(JSON.stringify({ error: "read failed" }));
+        });
+      return;
+    }
 
-        if (req.method === "DELETE" && pathName === "/api/content/folder") {
-          deleteContentPath(contentDir, contentPath, true)
-            .then(() => {
-              res.setHeader("Content-Type", "application/json");
-              res.end(JSON.stringify({ ok: true }));
-            })
-            .catch((error) => {
-              res.statusCode = 400;
-              res.end(JSON.stringify({ error: error instanceof Error ? error.message : "invalid path" }));
-            });
-          return;
-        }
+    if (req.method === "POST" && pathName === "/api/content/folder") {
+      createSafePath(contentDir, contentPath)
+        .then((absolutePath) => mkdir(absolutePath, { recursive: true }))
+        .then(() => {
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ ok: true }));
+        })
+        .catch((error) => {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ error: error instanceof Error ? error.message : "invalid path" }));
+        });
+      return;
+    }
 
-        if (pathName === "/api/content/file" || pathName === "/api/world") {
-          serveJsonFile(contentDir, contentPath, req, res);
-          return;
-        }
+    if (req.method === "DELETE" && pathName === "/api/content/folder") {
+      deleteContentPath(contentDir, contentPath, true)
+        .then(() => {
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ ok: true }));
+        })
+        .catch((error) => {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ error: error instanceof Error ? error.message : "invalid path" }));
+        });
+      return;
+    }
 
-        next();
-      });
-    },
+    if (pathName === "/api/content/file" || pathName === "/api/world") {
+      serveJsonFile(contentDir, contentPath, req, res);
+      return;
+    }
+
+    next();
   };
 }
-
-export default defineConfig({
-  plugins: [worldEditorPlugin()],
-  resolve: {
-    alias: {
-      "@engine/ecs-core": resolve(__dirname, "../../packages/ecs-core/src/index.ts"),
-      "@engine/debugger": resolve(__dirname, "../../packages/debugger/src/index.ts"),
-      "@engine/renderer": resolve(__dirname, "../../packages/renderer/src/index.ts"),
-      "@engine/loader": resolve(__dirname, "../../packages/loader/src/index.ts"),
-      "@engine/input": resolve(__dirname, "../../packages/input/src/index.ts"),
-      "@engine/physics": resolve(__dirname, "../../packages/physics/src/index.ts"),
-      "@engine/runtime": resolve(__dirname, "../../packages/runtime/src/index.ts"),
-    },
-  },
-});
 
 async function collectWorldNames(root: string, base = ""): Promise<string[]> {
   const entries = await readdir(root, { withFileTypes: true });

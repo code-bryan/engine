@@ -173,6 +173,12 @@ export type DebuggerUiProps = {
   onImportContent?: (path: string, value: unknown) => void;
   onDeleteContent?: (path: string, kind: ContentTreeNode["kind"]) => void;
   onToggleContentDrawer: () => void;
+  projectName: string | null;
+  recentProjects: string[];
+  onOpenProject: (path: string) => void;
+  onCreateProject: (path: string) => void;
+  onCloseProject: () => void;
+  onBrowseProject: (mode: "open" | "create") => Promise<string | null>;
 };
 
 export function DebuggerUi(props: DebuggerUiProps) {
@@ -181,6 +187,8 @@ export function DebuggerUi(props: DebuggerUiProps) {
   const [cameraTuningOpen, setCameraTuningOpen] = useState(false);
   const [windowPanel, setWindowPanel] = useState<BottomDrawerTab | null>(null);
   const [windowMenuOpen, setWindowMenuOpen] = useState(false);
+  const [fileMenuOpen, setFileMenuOpen] = useState(false);
+  const [projectDialog, setProjectDialog] = useState<"open" | "create" | null>(null);
   const [snapMenu, setSnapMenu] = useState<"grid" | "rot" | null>(null);
   const [zoomToastOpen, setZoomToastOpen] = useState(false);
   const zoomToastTimerRef = useRef<number | undefined>(undefined);
@@ -220,6 +228,17 @@ export function DebuggerUi(props: DebuggerUiProps) {
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [windowMenuOpen]);
+
+  useEffect(() => {
+    if (!fileMenuOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!(event.target instanceof Element)) return;
+      if (event.target.closest("[data-file-menu-root]")) return;
+      setFileMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [fileMenuOpen]);
 
   useEffect(() => {
     if (!snapMenu) return;
@@ -292,7 +311,38 @@ export function DebuggerUi(props: DebuggerUiProps) {
               NEXUS
             </div>
             <nav className="flex space-x-1 text-[#cccccc]" data-window-menu-root onClick={(event) => event.stopPropagation()}>
-              <div className="px-2 py-1 hover:bg-[#2d2d2d] rounded cursor-pointer transition-colors">File</div>
+              <div className="relative" data-file-menu-root>
+                <div
+                  className={`px-2 py-1 rounded cursor-pointer transition-colors${fileMenuOpen ? " bg-[#2d2d2d] text-white" : " hover:bg-[#2d2d2d]"}`}
+                  onClick={() => setFileMenuOpen((open) => !open)}
+                >
+                  File
+                </div>
+                {fileMenuOpen && (
+                  <div className="absolute left-0 top-full mt-1 w-44 bg-[#1e1e1e] border border-[#303030] rounded shadow-xl py-1 z-40">
+                    <button
+                      className="w-full text-left px-3 py-1.5 text-[#ccc] hover:bg-[#2d2d2d] hover:text-white transition-colors"
+                      onClick={() => { setProjectDialog("open"); setFileMenuOpen(false); }}
+                    >
+                      Open Project…
+                    </button>
+                    <button
+                      className="w-full text-left px-3 py-1.5 text-[#ccc] hover:bg-[#2d2d2d] hover:text-white transition-colors"
+                      onClick={() => { setProjectDialog("create"); setFileMenuOpen(false); }}
+                    >
+                      New Project…
+                    </button>
+                    <div className="my-1 border-t border-[#303030]" />
+                    <button
+                      className="w-full text-left px-3 py-1.5 text-[#ccc] hover:bg-[#2d2d2d] hover:text-white transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
+                      disabled={!props.projectName}
+                      onClick={() => { props.onCloseProject(); setFileMenuOpen(false); }}
+                    >
+                      Close Project
+                    </button>
+                  </div>
+                )}
+              </div>
               <div className="px-2 py-1 hover:bg-[#2d2d2d] rounded cursor-pointer transition-colors">Edit</div>
               <div className="relative">
                 <div
@@ -757,7 +807,165 @@ export function DebuggerUi(props: DebuggerUiProps) {
           </div>
         </div>
       )}
+
+      {projectDialog && (
+        <ProjectPathDialog
+          mode={projectDialog}
+          recentProjects={props.recentProjects}
+          onBrowse={() => props.onBrowseProject(projectDialog)}
+          onSubmit={(path) => {
+            if (projectDialog === "open") props.onOpenProject(path);
+            else props.onCreateProject(path);
+            setProjectDialog(null);
+          }}
+          onClose={() => setProjectDialog(null)}
+        />
+      )}
+
+      {!props.projectName && (
+        <StartScreen
+          recentProjects={props.recentProjects}
+          onOpen={() => setProjectDialog("open")}
+          onCreate={() => setProjectDialog("create")}
+          onPickRecent={(path) => props.onOpenProject(path)}
+        />
+      )}
     </>
+  );
+}
+
+function ProjectPathDialog(props: {
+  mode: "open" | "create";
+  recentProjects: string[];
+  onBrowse: () => Promise<string | null>;
+  onSubmit: (path: string) => void;
+  onClose: () => void;
+}) {
+  // For "open" the folder comes from the native OS picker (via onBrowse) or a
+  // recent entry — never typed. For "create" the user picks a parent folder and
+  // names the new project subfolder.
+  const [parent, setParent] = useState("");
+  const [name, setName] = useState("");
+  const isCreate = props.mode === "create";
+
+  const browse = async () => {
+    const picked = await props.onBrowse();
+    if (!picked) return;
+    if (isCreate) setParent(picked);
+    else props.onSubmit(picked);
+  };
+
+  const createPath = parent && name.trim() ? `${parent.replace(/\/$/, "")}/${name.trim()}` : "";
+
+  return createPortal(
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm text-xs" role="dialog" aria-modal="true" onClick={props.onClose}>
+      <div className="w-[440px] max-w-[90vw] flex flex-col bg-[#1e1e1e] border border-[#303030] rounded-lg shadow-2xl overflow-hidden" onClick={(event) => event.stopPropagation()}>
+        <div className="h-9 bg-[#252526] flex items-center justify-between px-3 border-b border-[#303030]">
+          <span className="text-white font-medium">{isCreate ? "New Project" : "Open Project"}</span>
+          <button className="text-[#888] hover:text-white transition-colors" onClick={props.onClose} aria-label="Close dialog">
+            <i className="ph ph-x" />
+          </button>
+        </div>
+        <div className="p-3 space-y-3">
+          {isCreate ? (
+            <>
+              <div className="flex items-end gap-2">
+                <label className="flex flex-col gap-1 flex-1 min-w-0">
+                  <span className="text-[#888]">Location</span>
+                  <div className="truncate text-[#ccc] bg-[#111111] border border-[#303030] rounded px-2 py-1" title={parent}>{parent || "Choose a parent folder…"}</div>
+                </label>
+                <button className={DIALOG_BTN} onClick={browse}><i className="ph ph-folder-open mr-1" />Browse…</button>
+              </div>
+              <label className="flex flex-col gap-1">
+                <span className="text-[#888]">Project name</span>
+                <input
+                  className="engine-input px-2 py-1 rounded"
+                  autoFocus
+                  placeholder="my-project"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && createPath) props.onSubmit(createPath);
+                    if (event.key === "Escape") props.onClose();
+                  }}
+                />
+              </label>
+            </>
+          ) : (
+            <button className={`${DIALOG_BTN} w-full justify-center flex items-center py-2`} onClick={browse}>
+              <i className="ph ph-folder-open mr-2" />Browse for project folder…
+            </button>
+          )}
+          {props.recentProjects.length > 0 && (
+            <div className="space-y-1">
+              <span className="text-[#888]">Recent</span>
+              <div className="max-h-40 overflow-y-auto border border-[#303030] rounded">
+                {props.recentProjects.map((recent) => (
+                  <button
+                    key={recent}
+                    className="w-full text-left px-2 py-1.5 text-[#ccc] hover:bg-[#2d2d2d] hover:text-white transition-colors truncate"
+                    title={recent}
+                    onClick={() => props.onSubmit(recent)}
+                  >
+                    {recent}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        {isCreate && (
+          <div className="flex justify-end gap-2 p-3 border-t border-[#303030]">
+            <button className={DIALOG_BTN} onClick={props.onClose}>Cancel</button>
+            <button className={DIALOG_BTN_PRIMARY} onClick={() => props.onSubmit(createPath)} disabled={!createPath}>Create</button>
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function StartScreen(props: {
+  recentProjects: string[];
+  onOpen: () => void;
+  onCreate: () => void;
+  onPickRecent: (path: string) => void;
+}) {
+  return createPortal(
+    <div className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-[#111111] text-xs">
+      <div className="w-[460px] max-w-[90vw] flex flex-col bg-[#1e1e1e] border border-[#303030] rounded-lg shadow-2xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-[#303030] flex items-center gap-2">
+          <i className="ph-fill ph-hexagon text-[#0070e0] text-xl" />
+          <span className="text-white font-bold text-sm tracking-wide">NEXUS</span>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="text-[#888]">No project open.</div>
+          <div className="flex gap-2">
+            <button className={DIALOG_BTN_PRIMARY} onClick={props.onOpen}>Open Project…</button>
+            <button className={DIALOG_BTN} onClick={props.onCreate}>New Project…</button>
+          </div>
+          {props.recentProjects.length > 0 && (
+            <div className="space-y-1">
+              <span className="text-[#888]">Recent</span>
+              <div className="max-h-48 overflow-y-auto border border-[#303030] rounded">
+                {props.recentProjects.map((recent) => (
+                  <button
+                    key={recent}
+                    className="w-full text-left px-3 py-2 text-[#ccc] hover:bg-[#2d2d2d] hover:text-white transition-colors truncate"
+                    title={recent}
+                    onClick={() => props.onPickRecent(recent)}
+                  >
+                    {recent}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
