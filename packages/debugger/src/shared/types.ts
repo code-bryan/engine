@@ -154,8 +154,8 @@ export type DebugState = {
   inspectorQuery: string;
   openDropdown: string | undefined;
   contentDrawerOpen: boolean;
-  openBlueprints: string[];
-  activeBlueprint: string | null;
+  openDocs: Array<{ path: string; kind: "graph" | "component" }>;
+  activeDoc: string | null;
   snapGrid: boolean;
   snapGridSize: number;
   snapRotate: boolean;

@@ -50,11 +50,10 @@ export type DebuggerUiActions = {
   calcGridSnapSize: () => void;
   toggleRotationSnap: () => void;
   setRotationSnapDeg: (value: number) => void;
-  openBlueprint: (path: string) => void;
-  closeBlueprint: (path: string) => void;
+  openDoc: (path: string, kind: "graph" | "component") => void;
+  closeDoc: (path: string) => void;
   selectViewportTab: () => void;
-  selectBlueprintTab: (path: string) => void;
-  compile: () => void;
+  selectDoc: (path: string) => void;
   openLevel: () => void;
   toggleContentDrawer: () => void;
   loadWorld: (name: string) => void;
@@ -123,13 +122,12 @@ export function renderDebuggerUi<TWorld extends DebuggerWorld>(
     onToggleRotationSnap: actions.toggleRotationSnap,
     onSetRotationSnapDeg: actions.setRotationSnapDeg,
     activeWorldName: options.activeWorld ? (options.activeWorld.split("/").filter(Boolean).at(-1) ?? options.activeWorld) : "Scene",
-    openBlueprints: state.openBlueprints.map((path) => ({ path, name: path.split("/").filter(Boolean).at(-1) ?? path })),
-    activeBlueprint: state.activeBlueprint,
-    onOpenBlueprint: actions.openBlueprint,
-    onCloseBlueprint: actions.closeBlueprint,
+    openDocs: state.openDocs.map((doc) => ({ ...doc, name: doc.path.split("/").filter(Boolean).at(-1) ?? doc.path })),
+    activeDoc: state.activeDoc,
+    onOpenDoc: actions.openDoc,
+    onCloseDoc: actions.closeDoc,
     onSelectViewportTab: actions.selectViewportTab,
-    onSelectBlueprintTab: actions.selectBlueprintTab,
-    onCompile: actions.compile,
+    onSelectDoc: actions.selectDoc,
     onOpenLevel: actions.openLevel,
     contentDrawerOpen: state.contentDrawerOpen,
     contentTree: options.contentTree ?? [],

@@ -86,8 +86,8 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     inspectorQuery: "",
     openDropdown: undefined,
     contentDrawerOpen: options.initialContentDrawerOpen ?? false,
-    openBlueprints: [],
-    activeBlueprint: null,
+    openDocs: [],
+    activeDoc: null,
     snapGrid: true,
     snapGridSize: 16,
     snapRotate: true,
@@ -348,30 +348,26 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
           if (Number.isFinite(value)) state.snapRotateDeg = clamp(Math.round(value), 1, 180);
           refresh();
         },
-        openBlueprint(path) {
-          if (!state.openBlueprints.includes(path)) state.openBlueprints = [...state.openBlueprints, path];
-          state.activeBlueprint = path;
+        openDoc(path, kind) {
+          if (!state.openDocs.some((doc) => doc.path === path)) state.openDocs = [...state.openDocs, { path, kind }];
+          state.activeDoc = path;
           refresh();
         },
-        closeBlueprint(path) {
-          const index = state.openBlueprints.indexOf(path);
-          state.openBlueprints = state.openBlueprints.filter((entry) => entry !== path);
-          if (state.activeBlueprint === path) {
-            const fallback = state.openBlueprints[index] ?? state.openBlueprints[index - 1] ?? null;
-            state.activeBlueprint = fallback;
+        closeDoc(path) {
+          const index = state.openDocs.findIndex((doc) => doc.path === path);
+          state.openDocs = state.openDocs.filter((doc) => doc.path !== path);
+          if (state.activeDoc === path) {
+            state.activeDoc = state.openDocs[index]?.path ?? state.openDocs[index - 1]?.path ?? null;
           }
           refresh();
         },
         selectViewportTab() {
-          state.activeBlueprint = null;
+          state.activeDoc = null;
           refresh();
         },
-        selectBlueprintTab(path) {
-          state.activeBlueprint = path;
+        selectDoc(path) {
+          state.activeDoc = path;
           refresh();
-        },
-        compile() {
-          if (options.activeWorld) options.onLoadWorld?.(options.activeWorld);
         },
       }, ALL_LOG_CATEGORIES);
   };

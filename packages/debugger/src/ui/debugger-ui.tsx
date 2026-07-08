@@ -142,13 +142,12 @@ export type DebuggerUiProps = {
   onToggleRotationSnap: () => void;
   onSetRotationSnapDeg: (value: number) => void;
   activeWorldName: string;
-  openBlueprints: Array<{ path: string; name: string }>;
-  activeBlueprint: string | null;
-  onOpenBlueprint: (path: string) => void;
-  onCloseBlueprint: (path: string) => void;
+  openDocs: Array<{ path: string; name: string; kind: "graph" | "component" }>;
+  activeDoc: string | null;
+  onOpenDoc: (path: string, kind: "graph" | "component") => void;
+  onCloseDoc: (path: string) => void;
   onSelectViewportTab: () => void;
-  onSelectBlueprintTab: (path: string) => void;
-  onCompile: () => void;
+  onSelectDoc: (path: string) => void;
   onOpenLevel?: () => void;
   contentDrawerOpen: boolean;
   contentTree: ContentTreeNode[];
@@ -177,6 +176,7 @@ export function DebuggerUi(props: DebuggerUiProps) {
   const didMountRef = useRef(false);
   const isPlaying = props.playbackState === "playing";
   const selectedEntity = props.entities.find((entity) => entity.selected);
+  const activeDocEntry = props.openDocs.find((doc) => doc.path === props.activeDoc);
 
   useEffect(() => {
     selectedEntityRef.current?.scrollIntoView({ block: "nearest", behavior: "instant" });
@@ -344,25 +344,26 @@ export function DebuggerUi(props: DebuggerUiProps) {
         {/* TAB BAR: viewport + open blueprints */}
         <div className="pointer-events-auto h-8 bg-[#181818] border-b border-[#303030] flex items-center px-1 flex-shrink-0 select-none z-20 overflow-x-auto">
           <button
-            className={`px-4 py-1.5 text-[11px] font-medium flex items-center gap-2 flex-shrink-0 border-t-2 transition-colors ${props.activeBlueprint === null ? "bg-[#1e1e1e] text-white border-[#0070e0]" : "text-[#888] hover:bg-[#1e1e1e] hover:text-[#ccc] border-transparent"}`}
+            className={`px-4 py-1.5 text-[11px] font-medium flex items-center gap-2 flex-shrink-0 border-t-2 transition-colors ${props.activeDoc === null ? "bg-[#1e1e1e] text-white border-[#0070e0]" : "text-[#888] hover:bg-[#1e1e1e] hover:text-[#ccc] border-transparent"}`}
             onClick={props.onSelectViewportTab}
           >
-            <i className={`ph-fill ph-globe-hemisphere-west ${props.activeBlueprint === null ? "text-[#0070e0]" : "text-[#888]"}`} /> {props.activeWorldName}
+            <i className={`ph-fill ph-globe-hemisphere-west ${props.activeDoc === null ? "text-[#0070e0]" : "text-[#888]"}`} /> {props.activeWorldName}
           </button>
-          {props.openBlueprints.map((bp) => {
-            const active = props.activeBlueprint === bp.path;
+          {props.openDocs.map((doc) => {
+            const active = props.activeDoc === doc.path;
+            const icon = doc.kind === "component" ? "ph-puzzle-piece" : "ph-file-code";
             return (
               <button
-                key={bp.path}
+                key={doc.path}
                 className={`px-4 py-1.5 text-[11px] font-medium flex items-center gap-2 flex-shrink-0 border-t-2 transition-colors ${active ? "bg-[#1e1e1e] text-white border-[#0070e0]" : "text-[#888] hover:bg-[#1e1e1e] hover:text-[#ccc] border-transparent"}`}
-                onClick={() => props.onSelectBlueprintTab(bp.path)}
+                onClick={() => props.onSelectDoc(doc.path)}
               >
-                <i className={`ph-fill ph-file-code ${active ? "text-[#0070e0]" : "text-[#888]"}`} /> {bp.name}
+                <i className={`ph-fill ${icon} ${active ? "text-[#0070e0]" : "text-[#888]"}`} /> {doc.name}
                 <span
                   className="ml-2 p-0.5 rounded-full hover:bg-[#333] hover:text-white"
                   role="button"
                   aria-label="Close tab"
-                  onClick={(event) => { event.stopPropagation(); props.onCloseBlueprint(bp.path); }}
+                  onClick={(event) => { event.stopPropagation(); props.onCloseDoc(doc.path); }}
                 >
                   <i className="ph ph-x" />
                 </span>
@@ -575,7 +576,7 @@ export function DebuggerUi(props: DebuggerUiProps) {
                     onCreateGraph={props.onCreateGraph}
                     onImportContent={props.onImportContent}
                     onDeleteContent={props.onDeleteContent}
-                    onOpenGraph={props.onOpenBlueprint}
+                    onOpenDoc={props.onOpenDoc}
                     keyboardLocked={isPlaying}
                   />
                 </div>
@@ -675,14 +676,13 @@ export function DebuggerUi(props: DebuggerUiProps) {
             </div>
           </aside>
 
-          {/* BLUEPRINT VIEW — overlays the whole workspace (canvas + its own right panel) */}
-          {props.activeBlueprint !== null && (
-            <BlueprintView
-              key={props.activeBlueprint}
-              path={props.activeBlueprint}
-              keyboardLocked={isPlaying}
-              onCompile={props.onCompile}
-            />
+          {/* DOC VIEW — overlays the whole workspace (blueprint or component editor) */}
+          {activeDocEntry && (
+            activeDocEntry.kind === "component" ? (
+              <ComponentView key={activeDocEntry.path} path={activeDocEntry.path} keyboardLocked={isPlaying} />
+            ) : (
+              <BlueprintView key={activeDocEntry.path} path={activeDocEntry.path} keyboardLocked={isPlaying} />
+            )
           )}
         </div>
       </div>
@@ -820,7 +820,7 @@ function ContentBrowser(props: {
   onCreateGraph?: (path: string) => void;
   onImportContent?: (path: string, value: unknown) => void;
   onDeleteContent?: (path: string, kind: ContentTreeNode["kind"]) => void;
-  onOpenGraph: (path: string) => void;
+  onOpenDoc: (path: string, kind: "graph" | "component") => void;
   keyboardLocked: boolean;
 }) {
   const [selectedFolderPath, setSelectedFolderPath] = useState("");
@@ -971,9 +971,9 @@ function ContentBrowser(props: {
       props.onLoadWorld(node.path);
       return;
     }
-    if (node.kind === "graph") {
+    if (node.kind === "graph" || node.kind === "component") {
       setPreviewPath(undefined);
-      props.onOpenGraph(node.path);
+      props.onOpenDoc(node.path, node.kind);
       return;
     }
     setPreviewPath(node.path);
@@ -1419,6 +1419,14 @@ async function fetchContentFile(path: string): Promise<unknown | null> {
   return await response.json();
 }
 
+async function saveContentJson(path: string, value: unknown): Promise<void> {
+  await fetch(`/api/content/file?path=${encodeURIComponent(path)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(value, null, 2),
+  });
+}
+
 async function fetchGraphAsset(path: string): Promise<GraphAsset | null> {
   const raw = await fetchContentFile(path);
   if (raw === null) return null;
@@ -1512,6 +1520,220 @@ function isGraphEdge(value: unknown): value is GraphAsset["edges"][number] {
     && typeof edge.to.port === "string";
 }
 
+type ComponentFieldType = "Float" | "Int" | "Bool" | "String" | "Vector2";
+const COMPONENT_FIELD_TYPES: ComponentFieldType[] = ["Float", "Int", "Bool", "String", "Vector2"];
+type ComponentField = { name: string; type: ComponentFieldType; value: unknown };
+
+function inferComponentFieldType(value: unknown): ComponentFieldType {
+  if (typeof value === "boolean") return "Bool";
+  if (typeof value === "number") return Number.isInteger(value) ? "Int" : "Float";
+  if (typeof value === "string") return "String";
+  if (value && typeof value === "object" && "x" in value && "y" in value) return "Vector2";
+  return "String";
+}
+
+function defaultForComponentType(type: ComponentFieldType): unknown {
+  if (type === "Bool") return false;
+  if (type === "String") return "";
+  if (type === "Vector2") return { x: 0, y: 0 };
+  return 0;
+}
+
+function componentFieldDotColor(type: ComponentFieldType): string {
+  if (type === "Bool") return "bg-[#f87171] shadow-[0_0_5px_#f87171]";
+  if (type === "String") return "bg-[#60a5fa] shadow-[0_0_5px_#60a5fa]";
+  if (type === "Vector2") return "bg-[#eab308] shadow-[0_0_5px_#eab308]";
+  return "bg-[#4ade80] shadow-[0_0_5px_#4ade80]";
+}
+
+function ComponentView(props: { path: string; keyboardLocked: boolean }) {
+  const [id, setId] = useState("");
+  const [label, setLabel] = useState("");
+  const [fields, setFields] = useState<ComponentField[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | undefined>();
+  const [copied, setCopied] = useState(false);
+  const idRef = useRef("");
+  const labelRef = useRef("");
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError(undefined);
+    fetchContentFile(props.path)
+      .then((raw) => {
+        if (!alive) return;
+        if (!raw || typeof raw !== "object") { setError("component not found"); return; }
+        const parsed = raw as { id?: string; label?: string; defaultValue?: unknown };
+        const nextId = typeof parsed.id === "string" ? parsed.id : (props.path.split("/").filter(Boolean).at(-1) ?? "component");
+        const nextLabel = typeof parsed.label === "string" ? parsed.label : nextId;
+        const dv = parsed.defaultValue && typeof parsed.defaultValue === "object" ? parsed.defaultValue as Record<string, unknown> : {};
+        setId(nextId); idRef.current = nextId;
+        setLabel(nextLabel); labelRef.current = nextLabel;
+        setFields(Object.entries(dv).map(([name, value]) => ({ name, type: inferComponentFieldType(value), value })));
+      })
+      .catch(() => { if (alive) setError("failed to load component"); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [props.path]);
+
+  const toDefinition = (nextFields: ComponentField[]) => ({
+    version: 1 as const,
+    id: idRef.current,
+    label: labelRef.current,
+    defaultValue: Object.fromEntries(nextFields.filter((f) => f.name.trim() !== "").map((f) => [f.name, f.value])),
+  });
+
+  const persist = (nextFields: ComponentField[]) => { void saveContentJson(props.path, toDefinition(nextFields)); };
+  const commit = (nextFields: ComponentField[]) => { setFields(nextFields); persist(nextFields); };
+
+  const setLabelValue = (next: string) => { setLabel(next); labelRef.current = next; persist(fields); };
+  const addField = () => {
+    if (props.keyboardLocked) return;
+    commit([...fields, { name: `field${fields.length + 1}`, type: "Float", value: 0 }]);
+  };
+  const removeField = (index: number) => commit(fields.filter((_, i) => i !== index));
+  const patchField = (index: number, patch: Partial<ComponentField>) =>
+    commit(fields.map((f, i) => i === index ? { ...f, ...patch } : f));
+
+  const definition = toDefinition(fields);
+  const json = JSON.stringify(definition, null, 2);
+
+  const copyJson = () => {
+    void navigator.clipboard?.writeText(json);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
+  };
+
+  const renderValueInput = (field: ComponentField, index: number) => {
+    if (field.type === "Bool") {
+      return (
+        <input type="checkbox" className="accent-[#0070e0]" checked={field.value === true} disabled={props.keyboardLocked}
+          onChange={(e) => patchField(index, { value: e.target.checked })} />
+      );
+    }
+    if (field.type === "String") {
+      return (
+        <input type="text" className="flex-1 min-w-0 engine-input px-1.5 py-0.5 rounded text-[10px]" value={String(field.value ?? "")} disabled={props.keyboardLocked}
+          onChange={(e) => patchField(index, { value: e.target.value })} />
+      );
+    }
+    if (field.type === "Vector2") {
+      const v = (field.value && typeof field.value === "object" ? field.value : { x: 0, y: 0 }) as { x?: number; y?: number };
+      return (
+        <div className="flex gap-1">
+          <input type="number" className="w-12 engine-input px-1 py-0.5 rounded text-[10px] text-center" value={Number(v.x ?? 0)} disabled={props.keyboardLocked}
+            onChange={(e) => patchField(index, { value: { x: Number(e.target.value), y: Number(v.y ?? 0) } })} />
+          <input type="number" className="w-12 engine-input px-1 py-0.5 rounded text-[10px] text-center" value={Number(v.y ?? 0)} disabled={props.keyboardLocked}
+            onChange={(e) => patchField(index, { value: { x: Number(v.x ?? 0), y: Number(e.target.value) } })} />
+        </div>
+      );
+    }
+    return (
+      <input type="number" className="w-20 engine-input px-1.5 py-0.5 rounded text-[10px] text-center" value={Number(field.value ?? 0)} disabled={props.keyboardLocked}
+        onChange={(e) => patchField(index, { value: field.type === "Int" ? Math.round(Number(e.target.value)) : Number(e.target.value) })} />
+    );
+  };
+
+  const previewValue = (field: ComponentField) => {
+    if (field.type === "Vector2") {
+      const v = (field.value && typeof field.value === "object" ? field.value : {}) as { x?: number; y?: number };
+      return `(${v.x ?? 0}, ${v.y ?? 0})`;
+    }
+    return String(field.value);
+  };
+
+  return (
+    <div className="absolute inset-0 z-40 flex pointer-events-auto text-xs">
+      {/* Center: preview card + live JSON */}
+      <div className="flex-1 flex bg-[#141414] p-6 gap-6 overflow-auto min-w-0">
+        <div className="flex-1 flex flex-col items-center justify-center min-w-0">
+          {loading ? <div className="text-[#666]">loading component…</div> : error ? <div className="text-[#666]">{error}</div> : (
+            <div className="w-72 bg-[#1e1e1e] border border-black rounded-md shadow-2xl flex flex-col font-sans text-[11px]">
+              <div className="h-8 bg-gradient-to-r from-purple-800 to-purple-700 rounded-t-md flex items-center justify-between px-3 text-white font-bold tracking-wide border-b border-black">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <i className="ph-fill ph-puzzle-piece text-lg opacity-80" />
+                  <span className="truncate">{label || id}</span>
+                </div>
+                <span className="text-[9px] bg-black/30 px-1.5 py-0.5 rounded shrink-0">v1</span>
+              </div>
+              <div className="p-3 py-4 space-y-3">
+                <div className="text-[#888] font-bold uppercase text-[9px] tracking-wider mb-1">Default Values Struct</div>
+                {fields.length === 0 ? <div className="text-[#666]">no fields</div> : fields.map((field, index) => (
+                  <div key={index} className="flex justify-between items-center bg-[#111] p-1.5 rounded border border-[#303030]">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className={`w-3 h-3 rounded-full shrink-0 ${componentFieldDotColor(field.type)}`} />
+                      <span className="text-white truncate">{field.name}</span>
+                    </div>
+                    <span className="text-[#888] text-[10px] bg-[#222] px-1.5 rounded shrink-0">{previewValue(field)} ({field.type})</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="w-80 bg-[#1a1a1a] border border-[#303030] rounded flex flex-col shadow-xl flex-shrink-0">
+          <div className="h-8 bg-[#252526] flex items-center justify-between px-3 border-b border-[#303030] text-white font-medium">
+            Live JSON Output
+            <i className={`ph ${copied ? "ph-check text-[#4ade80]" : "ph-copy text-[#888] hover:text-white"} cursor-pointer`} title="Copy JSON" onClick={copyJson} />
+          </div>
+          <pre className="flex-1 p-4 text-[#a3e635] text-[11px] overflow-auto font-mono bg-[#0f0f0f] leading-relaxed whitespace-pre">{json}</pre>
+        </div>
+      </div>
+
+      {/* Right panel: Component Metadata + Schema / Fields */}
+      <aside className="w-72 bg-[#1e1e1e] border-l border-[#303030] flex flex-col flex-shrink-0 shadow-xl">
+        <div className="flex-1 flex flex-col border-b border-[#303030] min-h-[40%]">
+          <div className="h-8 bg-[#252526] flex items-center px-3 border-b border-[#303030] text-white font-medium select-none">Component Metadata</div>
+          <div className="flex-1 overflow-y-auto p-3 space-y-3">
+            <div className="space-y-1">
+              <span className="text-[#888] text-[10px] uppercase font-bold tracking-wide">Label</span>
+              <input type="text" className="w-full engine-input px-2 py-1.5 rounded text-white text-xs" value={label} disabled={props.keyboardLocked}
+                onChange={(e) => setLabelValue(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <span className="text-[#888] text-[10px] uppercase font-bold tracking-wide">ID (Internal)</span>
+              <input type="text" className="w-full engine-input px-2 py-1.5 rounded text-[#aaa] text-xs font-mono opacity-70 cursor-not-allowed" value={id} readOnly title="Auto-generated on creation" />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 flex flex-col min-h-[50%]">
+          <div className="h-8 bg-[#252526] flex items-center px-3 border-b border-[#303030] text-white font-medium select-none justify-between">
+            Schema / Fields
+            <i className="ph ph-plus text-[#888] hover:text-white cursor-pointer" title="Add Field" onClick={addField} />
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 space-y-2">
+            {fields.map((field, index) => (
+              <div key={index} className="bg-[#252526] rounded border border-[#303030] p-2 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <i className="ph ph-dots-six-vertical text-[#888]" />
+                    <input type="text" className="w-20 bg-black border border-[#444] text-white px-1 text-xs rounded focus:border-[#0070e0] outline-none" value={field.name} disabled={props.keyboardLocked}
+                      onChange={(e) => patchField(index, { name: e.target.value })} />
+                  </div>
+                  <i className="ph ph-trash text-[#f87171] hover:text-red-400 cursor-pointer" title="Remove field" onClick={() => { if (!props.keyboardLocked) removeField(index); }} />
+                </div>
+                <div className="flex gap-2 items-center">
+                  <select className="flex-1 engine-input px-1 py-1 rounded text-white text-xs cursor-pointer" value={field.type} disabled={props.keyboardLocked}
+                    onChange={(e) => { const type = e.target.value as ComponentFieldType; patchField(index, { type, value: defaultForComponentType(type) }); }}>
+                    {COMPONENT_FIELD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  {renderValueInput(field, index)}
+                </div>
+              </div>
+            ))}
+            <button className="w-full py-1.5 mt-2 bg-[#2d2d2d] hover:bg-[#3a3a3a] border border-[#303030] rounded text-white transition-colors flex justify-center items-center gap-2 disabled:opacity-40" disabled={props.keyboardLocked} onClick={addField}>
+              <i className="ph ph-plus" /> Add Property
+            </button>
+          </div>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
 function blueprintNodeAccent(type: string): { grad: string; icon: string; text: string } {
   if (/^On[A-Z]/.test(type) || /Event|Update|Start|Tick/i.test(type)) {
     return { grad: "from-red-800 to-red-700", icon: "ph-fill ph-lightning", text: "text-red-500" };
@@ -1545,7 +1767,7 @@ function variableDotColor(type: string): string {
   return "bg-slate-500";
 }
 
-function BlueprintView(props: { path: string; keyboardLocked: boolean; onCompile: () => void }) {
+function BlueprintView(props: { path: string; keyboardLocked: boolean }) {
   const [graph, setGraphState] = useState<GraphAsset | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
