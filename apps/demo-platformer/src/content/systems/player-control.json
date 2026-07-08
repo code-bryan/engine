@@ -15,16 +15,16 @@
       "id": "1fd28581-ff3c-4200-85de-06ac8e8ba043",
       "type": "OnUpdate",
       "position": {
-        "x": 120,
-        "y": 80
+        "x": 59,
+        "y": 97
       }
     },
     {
       "id": "4ba918c4-b440-43ab-ada1-b0206fc5bd78",
       "type": "ForEachEntityWithTag",
       "position": {
-        "x": 445,
-        "y": 58
+        "x": 432,
+        "y": 108
       },
       "data": {
         "tag": "player"
@@ -42,8 +42,8 @@
       "id": "2a762780-1476-45eb-abc5-111e4866d13b",
       "type": "GetComponent",
       "position": {
-        "x": 1164,
-        "y": 263
+        "x": 1183,
+        "y": 23
       },
       "data": {
         "component": "player",
@@ -54,16 +54,16 @@
       "id": "0381665f-72ef-4e3d-94fd-18fc07942e8d",
       "type": "ScaleVector",
       "position": {
-        "x": 1576,
-        "y": 104
+        "x": 1598,
+        "y": 278
       }
     },
     {
       "id": "d77ab043-1bf8-43b0-8772-6a566f4a32bc",
       "type": "SetComponent",
       "position": {
-        "x": 1922,
-        "y": 182
+        "x": 2002,
+        "y": 270
       },
       "data": {
         "component": "velocity"

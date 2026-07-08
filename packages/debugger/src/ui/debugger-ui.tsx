@@ -88,6 +88,7 @@ export type DebuggerUiProps = {
   showPhysics: boolean;
   showLabels: boolean;
   showSprites: boolean;
+  cameraZoomSensitivity: number;
   cameraLocked: boolean;
   debugMenuOpen: boolean;
   toolMode: EditorToolMode;
@@ -111,6 +112,7 @@ export type DebuggerUiProps = {
   onSetToolMode: (mode: EditorToolMode) => void;
   onPlaybackAction: (action: "play" | "pause" | "step" | "stop") => void;
   onZoomAction: (action: "zoom-in" | "zoom-out" | "zoom-100" | "zoom-fit" | "camera-reset") => void;
+  onSetZoomSensitivity: (value: number) => void;
   onEntityQueryChange: (value: string) => void;
   onInspectorQueryChange: (value: string) => void;
   onSelectEntity: (entity: number) => void;
@@ -135,10 +137,22 @@ export type DebuggerUiProps = {
 
 export function DebuggerUi(props: DebuggerUiProps) {
   const selectedEntityRef = useRef<HTMLButtonElement | null>(null);
+  const [cameraTuningOpen, setCameraTuningOpen] = useState(false);
 
   useEffect(() => {
     selectedEntityRef.current?.scrollIntoView({ block: "nearest", behavior: "instant" });
   }, [props.entities]);
+
+  useEffect(() => {
+    if (!cameraTuningOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!(event.target instanceof Element)) return;
+      if (event.target.closest("[data-camera-tuning-root]")) return;
+      setCameraTuningOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [cameraTuningOpen]);
 
   return (
     <>
@@ -214,6 +228,34 @@ export function DebuggerUi(props: DebuggerUiProps) {
               <div className="debugger-zoom-sep"></div>
               <button onClick={() => props.onZoomAction("camera-reset")} title="Reset Camera" aria-label="Reset Camera"><LocateFixed size={14} strokeWidth={2} /></button>
               <button className={props.cameraLocked ? "is-active" : ""} onClick={props.onToggleCameraLock} title="Lock Camera to Entity" aria-label="Lock Camera to Entity"><Camera size={14} strokeWidth={2} /></button>
+            </div>
+            <div className="debugger-zoom-tuning-wrap" data-camera-tuning-root onClick={(event) => event.stopPropagation()}>
+              <button
+                className={`debugger-zoom-tuning-toggle${cameraTuningOpen ? " is-active" : ""}`}
+                onClick={() => setCameraTuningOpen((open) => !open)}
+                title="Camera speed"
+                aria-label="Camera speed"
+                aria-expanded={cameraTuningOpen}
+                aria-haspopup="true"
+              >
+                <Camera size={14} strokeWidth={2} />
+              </button>
+              {cameraTuningOpen && (
+                <div className="debugger-zoom-tuning" title="Camera speed">
+                  <span className="debugger-zoom-tuning__label">Speed</span>
+                  <input
+                    className="debugger-zoom-tuning__slider"
+                    type="range"
+                    min="1"
+                    max="8"
+                    step="0.1"
+                    value={props.cameraZoomSensitivity}
+                    onChange={(event) => props.onSetZoomSensitivity(Number(event.target.value))}
+                    aria-label="Camera speed"
+                  />
+                  <span className="debugger-zoom-tuning__value">{props.cameraZoomSensitivity.toFixed(1)}x</span>
+                </div>
+              )}
             </div>
           </div>
         </header>

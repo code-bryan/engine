@@ -103,6 +103,7 @@ export type FrameMetric = {
 export type EntitySnapshot = {
   components: Map<string, unknown>;
   physics?: { x: number; y: number; vx: number; vy: number };
+  transform?: { x: number; y: number; rotation?: number; scale?: number | { x: number; y: number } };
 };
 
 export type WorldSnapshot = {
@@ -142,6 +143,7 @@ export type DebugState = {
   showLabels: boolean;
   showSprites: boolean;
   camera: { x: number; y: number; zoom: number };
+  cameraZoomSensitivity: number;
   lockTarget: Entity | undefined;
   toolMode: EditorToolMode;
   entityQuery: string;

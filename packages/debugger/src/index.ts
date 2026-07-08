@@ -42,6 +42,11 @@ export type {
 export type { WorldEntityBase, WorldData } from "./shared/world";
 export { createStoreInspector, captureWorldSnapshot, restoreWorldSnapshot };
 
+const CAMERA_ZOOM_SENSITIVITY_STORAGE_KEY = "engine.debugger.cameraZoomSensitivity";
+const DEFAULT_CAMERA_ZOOM_SENSITIVITY = 2.5;
+const MIN_CAMERA_ZOOM_SENSITIVITY = 1;
+const MAX_CAMERA_ZOOM_SENSITIVITY = 8;
+
 export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   world: TWorld,
   engine: EngineApplication,
@@ -74,6 +79,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     showLabels: false,
     showSprites: false,
     camera: { x: 0, y: 0, zoom: 1 },
+    cameraZoomSensitivity: loadCameraZoomSensitivity(),
     lockTarget: undefined,
     toolMode: "select",
     entityQuery: "",
@@ -241,6 +247,11 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
           applyZoomAction(action, engine, state, centerCamera);
           refresh();
         },
+        setZoomSensitivity(value) {
+          state.cameraZoomSensitivity = clamp(value, MIN_CAMERA_ZOOM_SENSITIVITY, MAX_CAMERA_ZOOM_SENSITIVITY);
+          saveCameraZoomSensitivity(state.cameraZoomSensitivity);
+          refresh();
+        },
         setEntityQuery(value) {
           state.entityQuery = value;
           refresh();
@@ -351,6 +362,11 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   let didDrag = false;
   let suppressCanvasClick = false;
 
+  const isCameraPanGesture = (event: PointerEvent) => (
+    event.button === 1
+    || (event.button === 0 && (event.altKey || event.metaKey))
+  );
+
   const handleCanvasClick = (event: MouseEvent) => {
     if (suppressCanvasClick) {
       suppressCanvasClick = false;
@@ -367,6 +383,14 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   };
 
   const handleCanvasPointerDown = (event: PointerEvent) => {
+    if (isCameraPanGesture(event)) {
+      event.preventDefault();
+      drag = { startX: event.clientX, startY: event.clientY, camX: state.camera.x, camY: state.camera.y };
+      didDrag = false;
+      engine.app.canvas.setPointerCapture(event.pointerId);
+      return;
+    }
+
     if (event.button === 0) {
       const worldPt = toWorldPoint(engine.app.canvas, engine.app.stage, event.clientX, event.clientY);
       const gizmoHit = hitEditorGizmo(world, state.selectedEntity, state.toolMode, worldPt, state.camera.zoom);
@@ -408,12 +432,6 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
         }
       }
     }
-
-    if (event.button !== 1) return;
-    event.preventDefault();
-    drag = { startX: event.clientX, startY: event.clientY, camX: state.camera.x, camY: state.camera.y };
-    didDrag = false;
-    engine.app.canvas.setPointerCapture(event.pointerId);
   };
 
   const handleCanvasPointerMove = (event: PointerEvent) => {
@@ -472,7 +490,9 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     const cy = (event.clientY - rect.top) / cssScale;
     const wx = (cx - state.camera.x) / state.camera.zoom;
     const wy = (cy - state.camera.y) / state.camera.zoom;
-    const factor = event.deltaY < 0 ? 1.1 : 1 / 1.1;
+    const delta = event.deltaY * (event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? 240 : 1);
+    const speed = Math.pow(state.cameraZoomSensitivity, 1.35);
+    const factor = Math.exp(-delta * 0.0015 * speed);
     state.camera.zoom = Math.max(0.1, Math.min(20, state.camera.zoom * factor));
     state.camera.x = cx - wx * state.camera.zoom;
     state.camera.y = cy - wy * state.camera.zoom;
@@ -691,6 +711,25 @@ function applyCameraToStage(
 ) {
   stage.scale.set(camera.zoom);
   stage.position.set(camera.x, camera.y);
+}
+
+function loadCameraZoomSensitivity() {
+  if (typeof localStorage === "undefined") return DEFAULT_CAMERA_ZOOM_SENSITIVITY;
+  const raw = localStorage.getItem(CAMERA_ZOOM_SENSITIVITY_STORAGE_KEY);
+  if (raw === null) return DEFAULT_CAMERA_ZOOM_SENSITIVITY;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed)
+    ? clamp(parsed, MIN_CAMERA_ZOOM_SENSITIVITY, MAX_CAMERA_ZOOM_SENSITIVITY)
+    : DEFAULT_CAMERA_ZOOM_SENSITIVITY;
+}
+
+function saveCameraZoomSensitivity(value: number) {
+  if (typeof localStorage === "undefined") return;
+  localStorage.setItem(CAMERA_ZOOM_SENSITIVITY_STORAGE_KEY, String(value));
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function toCanvasPoint(canvas: HTMLCanvasElement, clientX: number, clientY: number) {

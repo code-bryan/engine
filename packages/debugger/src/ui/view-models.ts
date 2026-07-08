@@ -34,6 +34,7 @@ export type DebuggerUiActions = {
   setToolMode: (mode: EditorToolMode) => void;
   playback: (action: "play" | "pause" | "step" | "stop") => void;
   zoom: (action: "zoom-in" | "zoom-out" | "zoom-100" | "zoom-fit" | "camera-reset") => void;
+  setZoomSensitivity: (value: number) => void;
   setEntityQuery: (value: string) => void;
   setInspectorQuery: (value: string) => void;
   selectEntity: (entity: number) => void;
@@ -67,6 +68,7 @@ export function renderDebuggerUi<TWorld extends DebuggerWorld>(
     showPhysics: state.showPhysics,
     showLabels: state.showLabels,
     showSprites: state.showSprites,
+    cameraZoomSensitivity: state.cameraZoomSensitivity,
     cameraLocked: state.lockTarget !== undefined,
     debugMenuOpen: state.openDropdown === "debug",
     toolMode: state.toolMode,
@@ -90,6 +92,7 @@ export function renderDebuggerUi<TWorld extends DebuggerWorld>(
     onSetToolMode: actions.setToolMode,
     onPlaybackAction: actions.playback,
     onZoomAction: actions.zoom,
+    onSetZoomSensitivity: actions.setZoomSensitivity,
     onEntityQueryChange: actions.setEntityQuery,
     onInspectorQueryChange: actions.setInspectorQuery,
     onSelectEntity: actions.selectEntity,

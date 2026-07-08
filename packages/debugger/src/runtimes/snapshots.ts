@@ -1,5 +1,5 @@
 import { getComponentRegistry, type ComponentRegistryEntry, type Entity } from "@engine/ecs-core";
-import { transforms } from "@engine/renderer";
+import { transforms, type TransformScale } from "@engine/renderer";
 import type { DebuggerWorld, DebugWorldSnapshot, EntitySnapshot, WorldSnapshot } from "../shared/types";
 
 function captureSnapshot<TWorld extends DebuggerWorld>(
@@ -18,14 +18,27 @@ function captureSnapshot<TWorld extends DebuggerWorld>(
     const rigidBody = world.physics.rigidBodies.get(entity);
     const physics = rigidBody
       ? {
-          x: rigidBody.body.position.x - rigidBody.width / 2,
-          y: rigidBody.body.position.y - rigidBody.height / 2,
-          vx: rigidBody.body.velocity.x,
-          vy: rigidBody.body.velocity.y,
-        }
+        x: rigidBody.body.position.x - rigidBody.width / 2,
+        y: rigidBody.body.position.y - rigidBody.height / 2,
+        vx: rigidBody.body.velocity.x,
+        vy: rigidBody.body.velocity.y,
+      }
       : undefined;
 
-    entities.set(entity, { components, physics });
+    const transform = transforms.get(entity);
+
+    entities.set(entity, transform
+      ? {
+          components,
+          physics,
+          transform: {
+            x: transform.x,
+            y: transform.y,
+            rotation: transform.rotation,
+            scale: cloneTransformScale(transform.scale),
+          },
+        }
+      : { components, physics });
   }
 
   return { frame: world.getFrame(), entities };
@@ -51,10 +64,15 @@ function restoreSnapshot<TWorld extends DebuggerWorld>(
 
     if (data.physics) {
       world.physics.reset(entity, { x: data.physics.x, y: data.physics.y }, { x: data.physics.vx, y: data.physics.vy });
+    }
+
+    if (data.transform) {
       const transform = transforms.get(entity);
       if (transform) {
-        transform.x = data.physics.x;
-        transform.y = data.physics.y;
+        transform.x = data.transform.x;
+        transform.y = data.transform.y;
+        transform.rotation = data.transform.rotation;
+        transform.scale = data.transform.scale === undefined ? transform.scale : cloneTransformScale(data.transform.scale);
       }
     }
   }
@@ -80,4 +98,9 @@ export function restoreRegistrySnapshot<TWorld extends DebuggerWorld>(
   registry: readonly ComponentRegistryEntry[],
 ) {
   restoreSnapshot(world, snapshot, registry);
+}
+
+function cloneTransformScale(scale: TransformScale | undefined) {
+  if (scale === undefined) return undefined;
+  return typeof scale === "number" ? scale : { x: scale.x, y: scale.y };
 }

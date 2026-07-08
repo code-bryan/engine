@@ -1355,6 +1355,69 @@ export function ensureDebuggerStyles() {
       margin: 0 2px;
       flex-shrink: 0;
     }
+    .debugger-zoom-tuning-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .debugger-zoom-tuning-toggle {
+      height: 28px;
+      width: 30px;
+      padding: 0;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 9px;
+      background: #18181b;
+      color: #a1a1aa;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+    }
+    .debugger-zoom-tuning-toggle:hover {
+      background: rgba(255, 255, 255, 0.07);
+      color: #e4e4e7;
+    }
+    .debugger-zoom-tuning-toggle.is-active {
+      border-color: rgba(96, 165, 250, 0.4);
+      background: rgba(37, 99, 235, 0.22);
+      color: #bfdbfe;
+    }
+    .debugger-zoom-tuning {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 8px);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 200px;
+      padding: 6px 8px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      background: #18181b;
+      box-shadow: 0 18px 36px rgba(0, 0, 0, 0.32);
+      color: #a1a1aa;
+      font-size: 11px;
+      line-height: 1;
+      z-index: 30;
+    }
+    .debugger-zoom-tuning__label {
+      flex-shrink: 0;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      color: #60a5fa;
+    }
+    .debugger-zoom-tuning__slider {
+      flex: 1;
+      min-width: 84px;
+      accent-color: #60a5fa;
+    }
+    .debugger-zoom-tuning__value {
+      flex-shrink: 0;
+      width: 40px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      color: #e4e4e7;
+    }
     .debugger-section--worlds {
       min-height: 0;
       display: flex;

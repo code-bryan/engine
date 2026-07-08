@@ -58,16 +58,16 @@
       "id": "d2899fa5-5475-48d4-b69e-4fa50b7e8061",
       "type": "DirectionToTarget",
       "position": {
-        "x": 2088,
-        "y": 242
+        "x": 2065,
+        "y": 177
       }
     },
     {
       "id": "adc9dba3-edf1-4252-bdbc-e08a9329d70f",
       "type": "ScaleVector",
       "position": {
-        "x": 2413,
-        "y": 72
+        "x": 2454,
+        "y": 60
       }
     },
     {
