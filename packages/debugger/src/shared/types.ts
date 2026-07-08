@@ -64,7 +64,7 @@ export type DebugGridOptions = {
 export type ContentTreeNode = {
   name: string;
   path: string;
-  kind: "folder" | "world" | "prefab" | "component" | "graph";
+  kind: "folder" | "world" | "prefab" | "component" | "graph" | "file";
   children?: ContentTreeNode[];
 };
 
@@ -86,6 +86,10 @@ export type RuntimeDebuggerOptions<TWorld extends DebuggerWorld = DebuggerWorld>
   onCreateWorld?: (name: string) => void;
   onCreateFolder?: (path: string) => void;
   onCreateComponent?: (path: string) => void;
+  onCreatePrefab?: (path: string) => void;
+  onCreateGraph?: (path: string) => void;
+  onImportContent?: (path: string, value: unknown) => void;
+  onDeleteContent?: (path: string, kind: ContentTreeNode["kind"]) => void;
   initialContentDrawerOpen?: boolean;
   onContentDrawerToggled?: (open: boolean) => void;
 };

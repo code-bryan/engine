@@ -549,9 +549,31 @@ export function ensureDebuggerStyles() {
     }
     .debugger-content-create {
       display: grid;
+      gap: 8px;
+      padding: 10px 12px;
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      border-radius: 16px;
+      background: rgba(10, 13, 20, 0.72);
+    }
+    .debugger-content-create--drawer {
       grid-template-columns: minmax(0, 1fr) auto;
-      gap: 6px;
-      align-items: center;
+      align-items: end;
+    }
+    .debugger-content-create__title {
+      display: grid;
+      gap: 2px;
+      color: #e2e8f0;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .debugger-content-create__title span {
+      color: #64748b;
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: 0;
+      text-transform: none;
     }
     .debugger-content-create__input {
       margin-bottom: 0;
@@ -559,6 +581,7 @@ export function ensureDebuggerStyles() {
     .debugger-content-create__actions {
       display: flex;
       gap: 4px;
+      justify-content: flex-end;
     }
     .debugger-content-create__btn {
       width: 28px;
@@ -590,26 +613,11 @@ export function ensureDebuggerStyles() {
     }
     .debugger-content-body {
       display: grid;
-      grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
-      gap: 10px;
       min-height: 0;
     }
-    .debugger-content-tree,
-    .debugger-content-browser {
-      min-height: 0;
-      overflow: auto;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 10px;
-      background: rgba(24, 24, 27, 0.65);
-    }
-    .debugger-content-tree {
-      padding: 6px;
-    }
-    .debugger-content-browser {
-      display: grid;
+    .debugger-content-body--grid {
       grid-template-rows: auto minmax(0, 1fr);
-      padding: 8px;
-      gap: 8px;
+      gap: 10px;
     }
     .debugger-content-browser__header {
       display: flex;
@@ -621,109 +629,255 @@ export function ensureDebuggerStyles() {
       color: #71717a;
       font-size: 10px;
     }
-    .debugger-content-list {
+    .debugger-content-grid {
       display: grid;
-      gap: 6px;
-      align-content: start;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 10px;
       min-height: 0;
       overflow: auto;
+      padding-right: 2px;
     }
-    .debugger-content-item {
+    .debugger-content-tile {
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto;
-      align-items: center;
-      gap: 8px;
-      padding: 8px;
-      border: 1px solid transparent;
-      border-radius: 10px;
-      background: #09090b;
+      grid-template-rows: auto 1fr auto;
+      align-content: start;
+      gap: 10px;
+      min-height: 116px;
+      padding: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      border-radius: 16px;
+      background:
+        linear-gradient(180deg, rgba(15, 23, 42, 0.76), rgba(2, 6, 23, 0.82)),
+        rgba(15, 23, 42, 0.24);
       color: #d4d4d8;
       cursor: pointer;
       text-align: left;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.04),
+        0 12px 24px rgba(0, 0, 0, 0.14);
     }
-    .debugger-content-item:hover {
-      background: #18181b;
+    .debugger-content-tile:hover {
+      border-color: rgba(96, 165, 250, 0.24);
+      background:
+        linear-gradient(180deg, rgba(15, 23, 42, 0.92), rgba(2, 6, 23, 0.94)),
+        rgba(15, 23, 42, 0.24);
+      color: #e2e8f0;
     }
-    .debugger-content-item.is-active {
-      border-color: rgba(96, 165, 250, 0.4);
-      background: rgba(37, 99, 235, 0.18);
+    .debugger-content-tile.is-selected {
+      border-color: rgba(96, 165, 250, 0.44);
+      background:
+        linear-gradient(180deg, rgba(30, 41, 59, 0.98), rgba(15, 23, 42, 0.98)),
+        rgba(37, 99, 235, 0.18);
       color: #bfdbfe;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 14px 28px rgba(15, 23, 42, 0.35);
     }
-    .debugger-content-item__action {
-      height: 22px;
-      padding: 0 6px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.04);
-      color: #d4d4d8;
-      cursor: pointer;
-      font: 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    .debugger-content-tile.is-active {
+      border-color: rgba(96, 165, 250, 0.54);
     }
-    .debugger-content-item__action:hover {
-      background: rgba(255, 255, 255, 0.1);
+    .debugger-content-tile:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
     }
-    .debugger-content-item__action.is-active {
-      border-color: rgba(74, 222, 128, 0.3);
-      color: #4ade80;
+    .debugger-content-tile__icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      color: #bfdbfe;
+      background: rgba(96, 165, 250, 0.1);
+      border: 1px solid rgba(96, 165, 250, 0.14);
     }
-    .debugger-content-item__icon {
-      color: #93c5fd;
+    .debugger-content-tile__meta {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+      align-self: end;
     }
-    .debugger-content-item__name {
+    .debugger-content-tile__name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13px;
+      color: inherit;
+    }
+    .debugger-content-tile__path {
+      color: #94a3b8;
+      font-size: 10px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .debugger-content-item__path {
-      color: #71717a;
-      font-size: 10px;
-      white-space: nowrap;
-    }
-    .debugger-content-tree__node {
+    .debugger-content-menu {
+      position: fixed;
+      z-index: 80;
+      min-width: 224px;
+      padding: 6px;
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      border-radius: 16px;
+      background: rgba(8, 11, 18, 0.96);
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(18px);
       display: grid;
+      gap: 4px;
     }
-    .debugger-content-tree__row {
-      display: grid;
-      grid-template-columns: auto auto minmax(0, 1fr) auto;
-      align-items: center;
-      gap: 6px;
+    .debugger-content-menu__item {
       width: 100%;
-      padding: 6px 8px;
+      padding: 9px 10px;
       border: 1px solid transparent;
-      border-radius: 8px;
+      border-radius: 10px;
       background: transparent;
-      color: #a1a1aa;
+      color: #d4d4d8;
       cursor: pointer;
       text-align: left;
       font: inherit;
+      font-size: 12px;
     }
-    .debugger-content-tree__row:hover {
-      background: rgba(255, 255, 255, 0.05);
-      color: #e4e4e7;
+    .debugger-content-menu__item:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.06);
+      color: #f8fafc;
     }
-    .debugger-content-tree__row.is-selected {
-      border-color: rgba(96, 165, 250, 0.3);
-      background: rgba(37, 99, 235, 0.16);
-      color: #bfdbfe;
+    .debugger-content-menu__item:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
     }
-    .debugger-content-tree__toggle {
-      width: 12px;
-      height: 12px;
+    .debugger-content-menu__separator {
+      height: 1px;
+      margin: 4px 0;
+      background: rgba(148, 163, 184, 0.14);
+    }
+    .debugger-content-preview {
+      position: fixed;
+      inset: 0;
+      z-index: 74;
       display: grid;
       place-items: center;
-      color: #71717a;
+      padding: 24px;
+      background: rgba(2, 6, 23, 0.45);
     }
-    .debugger-content-tree__spacer {
-      width: 12px;
-      height: 12px;
+    .debugger-content-preview__panel {
+      width: min(860px, 100%);
+      max-height: min(80vh, 760px);
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      border-radius: 20px;
+      background:
+        linear-gradient(180deg, rgba(13, 17, 24, 0.98), rgba(8, 11, 16, 0.98)),
+        rgba(10, 13, 20, 0.96);
+      box-shadow: 0 28px 72px rgba(0, 0, 0, 0.52);
+      backdrop-filter: blur(22px);
     }
-    .debugger-content-tree__icon {
-      color: #93c5fd;
+    .debugger-content-preview__header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
     }
-    .debugger-content-tree__name {
+    .debugger-content-preview__subtitle {
+      color: #94a3b8;
+      font-size: 11px;
+    }
+    .debugger-content-preview__json {
+      margin: 0;
+      min-height: 0;
+      padding: 14px;
+      overflow: auto;
+      border-radius: 14px;
+      background: rgba(2, 6, 23, 0.96);
+      color: #cbd5e1;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .debugger-content-dialog {
+      position: fixed;
+      inset: 0;
+      z-index: 52;
+      display: grid;
+      place-items: center;
+      padding: 16px;
+      background: rgba(9, 9, 11, 0.72);
+      backdrop-filter: blur(10px);
+    }
+    .debugger-content-dialog__panel {
+      width: min(560px, calc(100vw - 32px));
+      max-height: min(80vh, 760px);
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      gap: 14px;
+      padding: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      border-radius: 16px;
+      background: linear-gradient(180deg, #1f2228 0%, #171a1f 100%);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+    }
+    .debugger-content-dialog__header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .debugger-content-dialog__subtitle {
+      color: #94a3b8;
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+    .debugger-content-dialog__body {
+      display: grid;
+      align-content: start;
+      gap: 10px;
+      min-height: 0;
+    }
+    .debugger-content-dialog__hint {
+      color: #cbd5e1;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .debugger-content-dialog__filebox {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .debugger-content-dialog__filelabel {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #e2e8f0;
+      font-size: 12px;
+    }
+    .debugger-content-dialog__error {
+      color: #fca5a5;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+    .debugger-content-dialog__footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .debugger-content-action--primary {
+      border-color: rgba(96, 165, 250, 0.22);
+      background: linear-gradient(180deg, rgba(59, 130, 246, 0.26), rgba(37, 99, 235, 0.18));
+      color: #eff6ff;
+    }
+    .debugger-content-action--danger {
+      border-color: rgba(248, 113, 113, 0.22);
+      background: linear-gradient(180deg, rgba(127, 29, 29, 0.35), rgba(69, 10, 10, 0.26));
+      color: #fee2e2;
     }
     .debugger-graph-dialog {
       position: fixed;
@@ -1551,6 +1705,34 @@ export function ensureDebuggerStyles() {
     .debugger-viewport-hud__value {
       font-size: inherit;
     }
+    .debugger-zoom-toast {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      z-index: 34;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 96px;
+      padding: 10px 14px;
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      border-radius: 999px;
+      background: rgba(3, 6, 14, 0.62);
+      box-shadow: 0 18px 44px rgba(0, 0, 0, 0.42);
+      color: rgba(226, 232, 240, 0.7);
+      font-size: 18px;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.03em;
+      pointer-events: none;
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(0.98);
+      transition: opacity 180ms ease, transform 180ms ease;
+      backdrop-filter: blur(12px);
+    }
+    .debugger-zoom-toast.is-visible {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
     .debugger-layout {
       grid-template-columns: minmax(0, 1fr) 372px;
       grid-template-areas:
@@ -1639,16 +1821,9 @@ export function ensureDebuggerStyles() {
       right: 14px;
       flex-direction: column;
       align-items: stretch;
-      min-width: 118px;
+      min-width: 0;
       gap: 6px;
       padding: 8px;
-    }
-    .debugger-viewport-group__title {
-      color: #7c8aa5;
-      font-size: 10px;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-      padding: 0 2px;
     }
     .debugger-viewport-group__stack {
       display: grid;
@@ -1682,26 +1857,6 @@ export function ensureDebuggerStyles() {
       font-variant-numeric: tabular-nums;
       letter-spacing: 0.02em;
       justify-content: center;
-    }
-    .debugger-viewport-button--wide {
-      display: flex;
-      align-items: center;
-      width: 100%;
-      justify-content: space-between;
-      padding: 0 10px;
-      gap: 8px;
-      border-radius: 12px;
-      background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015)),
-        rgba(255, 255, 255, 0.02);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-    }
-    .debugger-viewport-button--wide span {
-      font-size: 10px;
-      letter-spacing: 0.03em;
-    }
-    .debugger-viewport-button--wide svg {
-      flex-shrink: 0;
     }
     .debugger-drawer {
       position: absolute;
@@ -1834,6 +1989,228 @@ export function ensureDebuggerStyles() {
     }
     .debugger-drawer-panel--systems .debugger-systems {
       max-height: none;
+    }
+    .debugger-drawer {
+      background: #1f2228;
+      border-color: rgba(255, 255, 255, 0.06);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.03),
+        0 24px 60px rgba(0, 0, 0, 0.38);
+    }
+    .debugger-drawer__chrome {
+      background: linear-gradient(180deg, #2a2d33 0%, #202329 100%);
+      border-bottom-color: rgba(255, 255, 255, 0.06);
+    }
+    .debugger-drawer__toggle {
+      border-color: rgba(148, 163, 184, 0.16);
+      background: linear-gradient(180deg, rgba(59, 130, 246, 0.18), rgba(37, 99, 235, 0.10));
+      color: #dbeafe;
+      border-radius: 6px;
+    }
+    .debugger-drawer__action,
+    .debugger-content-action,
+    .debugger-content-create__btn {
+      border-color: rgba(255, 255, 255, 0.08);
+      background: linear-gradient(180deg, #2c3037 0%, #23262d 100%);
+      color: #d1d5db;
+      border-radius: 6px;
+    }
+    .debugger-drawer__tabs {
+      gap: 2px;
+    }
+    .debugger-drawer__tab {
+      border-radius: 6px 6px 0 0;
+      background: linear-gradient(180deg, #2a2d33 0%, #21242a 100%);
+      color: #aeb3bf;
+      border-bottom-color: rgba(255, 255, 255, 0.04);
+    }
+    .debugger-drawer__tab.is-active {
+      background: linear-gradient(180deg, rgba(59, 130, 246, 0.20), rgba(37, 99, 235, 0.12));
+      color: #eff6ff;
+      border-color: rgba(96, 165, 250, 0.22);
+    }
+    .debugger-drawer__body {
+      background: #1a1d22;
+    }
+    .debugger-content-header {
+      align-items: center;
+      padding: 2px 2px 0;
+    }
+    .debugger-content-header__titleblock {
+      min-width: 0;
+    }
+    .debugger-content-breadcrumb {
+      border-color: rgba(255, 255, 255, 0.08);
+      background: #26282e;
+      color: #aeb3bf;
+    }
+    .debugger-content-breadcrumb.is-active {
+      background: rgba(59, 130, 246, 0.20);
+      color: #eff6ff;
+    }
+    .debugger-content-search {
+      border-color: rgba(255, 255, 255, 0.08);
+      background: #101114;
+    }
+    .debugger-content-create {
+      border-color: rgba(255, 255, 255, 0.08);
+      background: linear-gradient(180deg, #21232a 0%, #191b20 100%);
+    }
+    .debugger-content-body--browser {
+      grid-template-columns: 254px minmax(0, 1fr);
+      gap: 12px;
+    }
+    .debugger-content-sidebar {
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 10px;
+      background: #21242a;
+      overflow: hidden;
+    }
+    .debugger-content-sidebar__header {
+      padding: 0 4px;
+      color: #cbd5e1;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .debugger-content-tree {
+      display: grid;
+      gap: 2px;
+      min-height: 0;
+      overflow: auto;
+      padding-right: 2px;
+    }
+    .debugger-content-tree__node {
+      display: grid;
+    }
+    .debugger-content-tree__row {
+      display: grid;
+      grid-template-columns: auto auto minmax(0, 1fr);
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      min-height: 27px;
+      padding: 4px 8px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      background: transparent;
+      color: #b4bac5;
+      cursor: pointer;
+      text-align: left;
+      font: inherit;
+    }
+    .debugger-content-tree__row:hover {
+      background: rgba(255, 255, 255, 0.04);
+      color: #e5e7eb;
+    }
+    .debugger-content-tree__row.is-selected {
+      border-color: rgba(96, 165, 250, 0.22);
+      background: rgba(59, 130, 246, 0.16);
+      color: #eff6ff;
+    }
+    .debugger-content-tree__row--world {
+      color: #c7ccd8;
+    }
+    .debugger-content-tree__toggle {
+      width: 12px;
+      display: grid;
+      place-items: center;
+      color: #778093;
+    }
+    .debugger-content-tree__spacer {
+      width: 12px;
+      height: 12px;
+    }
+    .debugger-content-tree__icon {
+      display: grid;
+      place-items: center;
+      color: #94a3b8;
+    }
+    .debugger-content-tree__name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+    }
+    .debugger-content-browser {
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      background: #21242a;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+      padding: 12px;
+      gap: 10px;
+    }
+    .debugger-content-browser__header {
+      padding-bottom: 4px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .debugger-content-browser__path {
+      color: #94a3b8;
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .debugger-content-grid {
+      grid-auto-rows: minmax(110px, auto);
+      gap: 8px;
+    }
+    .debugger-content-tile {
+      min-height: 110px;
+      padding: 10px;
+      border-color: rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      background: linear-gradient(180deg, #24272a 0%, #1d2025 100%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    }
+    .debugger-content-tile:hover {
+      border-color: rgba(96, 165, 250, 0.20);
+      background: linear-gradient(180deg, #2a2e35 0%, #23262b 100%);
+    }
+    .debugger-content-tile.is-selected {
+      border-color: rgba(96, 165, 250, 0.38);
+      background: linear-gradient(180deg, #313540 0%, #242830 100%);
+    }
+    .debugger-content-tile__icon {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      background: linear-gradient(180deg, rgba(96, 165, 250, 0.18), rgba(59, 130, 246, 0.10));
+      border-color: rgba(96, 165, 250, 0.12);
+      color: #dbeafe;
+    }
+    .debugger-content-menu {
+      border-color: rgba(255, 255, 255, 0.10);
+      background: #202228;
+      border-radius: 10px;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4);
+    }
+    .debugger-content-menu__item {
+      border-radius: 6px;
+      color: #d1d5db;
+    }
+    .debugger-content-menu__item:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.06);
+      color: #ffffff;
+    }
+    .debugger-content-preview {
+      background: rgba(5, 8, 15, 0.64);
+    }
+    .debugger-content-preview__panel {
+      border-radius: 16px;
+      background: linear-gradient(180deg, #1f2127 0%, #17181c 100%);
+      border-color: rgba(255, 255, 255, 0.08);
+    }
+    .debugger-content-preview__json {
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      background: #111317;
     }
     .debugger-panel__toolbar {
       display: flex;

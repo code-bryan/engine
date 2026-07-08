@@ -16,6 +16,10 @@ export type DebugEditorPlayback = {
   onCreateWorld?: (name: string) => void;
   onCreateFolder?: (path: string) => void;
   onCreateComponent?: (path: string) => void;
+  onCreatePrefab?: (path: string) => void;
+  onCreateGraph?: (path: string) => void;
+  onImportContent?: (path: string, value: unknown) => void;
+  onDeleteContent?: (path: string, kind: "folder" | "world" | "prefab" | "component" | "graph" | "file") => void;
 };
 
 export type DebugEditorOptions = DebugEditorPlayback & {
@@ -40,6 +44,10 @@ export function attachDebugEditor(world: GameWorld, engine: EngineApplication, o
     onCreateWorld: playback.onCreateWorld,
     onCreateFolder: playback.onCreateFolder,
     onCreateComponent: playback.onCreateComponent,
+    onCreatePrefab: playback.onCreatePrefab,
+    onCreateGraph: playback.onCreateGraph,
+    onImportContent: playback.onImportContent,
+    onDeleteContent: playback.onDeleteContent,
     contentTree: options.contentTree,
     activeWorld: options.activeWorld,
     activeSystems: options.activeSystems,

@@ -63,7 +63,7 @@ export function renderDebuggerUi<TWorld extends DebuggerWorld>(
     fps: state.fps.toFixed(1),
     frameMs: state.latestFrameMs.toFixed(2),
     playbackState: options.playback?.getState?.() ?? "playing",
-    zoomLabel: `${Math.round(state.camera.zoom * 100)}%`,
+    zoomLabel: `${state.camera.zoom.toFixed(2)}x`,
     showGrid: state.showGrid,
     showPhysics: state.showPhysics,
     showLabels: state.showLabels,
@@ -113,6 +113,10 @@ export function renderDebuggerUi<TWorld extends DebuggerWorld>(
     onCreateFolder: options.onCreateFolder,
     onCreateWorld: options.onCreateWorld ?? (() => {}),
     onCreateComponent: options.onCreateComponent,
+    onCreatePrefab: options.onCreatePrefab,
+    onCreateGraph: options.onCreateGraph,
+    onImportContent: options.onImportContent,
+    onDeleteContent: options.onDeleteContent,
   }));
 }
 

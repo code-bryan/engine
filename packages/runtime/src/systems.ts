@@ -5,7 +5,7 @@ import type { DemoGameWorld } from "./types";
 export type RuntimeContentTreeNode = {
   name: string;
   path: string;
-  kind: "folder" | "world" | "prefab" | "component" | "graph";
+  kind: "folder" | "world" | "prefab" | "component" | "graph" | "file";
   children?: RuntimeContentTreeNode[];
 };
 

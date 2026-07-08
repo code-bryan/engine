@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { type IncomingMessage, type ServerResponse } from "node:http";
 import { dirname, join, relative, resolve } from "node:path";
 import { defineConfig, type Plugin } from "vite";
@@ -6,7 +6,7 @@ import { defineConfig, type Plugin } from "vite";
 type ContentTreeNode = {
   name: string;
   path: string;
-  kind: "folder" | "world" | "prefab" | "component" | "graph";
+  kind: "folder" | "world" | "prefab" | "component" | "graph" | "file";
   children?: ContentTreeNode[];
 };
 
@@ -52,6 +52,19 @@ function worldEditorPlugin(): Plugin {
         if (req.method === "POST" && pathName === "/api/content/folder") {
           createSafePath(contentDir, contentPath)
             .then((absolutePath) => mkdir(absolutePath, { recursive: true }))
+            .then(() => {
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ ok: true }));
+            })
+            .catch((error) => {
+              res.statusCode = 400;
+              res.end(JSON.stringify({ error: error instanceof Error ? error.message : "invalid path" }));
+            });
+          return;
+        }
+
+        if (req.method === "DELETE" && pathName === "/api/content/folder") {
+          deleteContentPath(contentDir, contentPath, true)
             .then(() => {
               res.setHeader("Content-Type", "application/json");
               res.end(JSON.stringify({ ok: true }));
@@ -128,8 +141,7 @@ async function readContentTree(root: string, base = ""): Promise<ContentTreeNode
             ? "component"
             : path.startsWith("systems/")
               ? "graph"
-              : null;
-      if (!kind) return null;
+              : "file";
       return {
         name: entry.name.replace(/\.json$/, ""),
         path: path.replace(/\.json$/, ""),
@@ -194,6 +206,29 @@ function serveJsonFile(root: string, relPath: string, req: IncomingMessage, res:
     });
     return;
   }
+
+  if (req.method === "DELETE") {
+    deleteContentPath(root, relPath, false)
+      .then(() => {
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ ok: true }));
+      })
+      .catch((error) => {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: error instanceof Error ? error.message : "invalid path" }));
+      });
+    return;
+  }
+}
+
+async function deleteContentPath(root: string, relPath: string, isFolder: boolean) {
+  if (isFolder) {
+    const target = resolveContentPath(root, normalizeContentPath(relPath));
+    await rm(target, { recursive: true, force: false });
+    return;
+  }
+  const filePath = resolveJsonFilePath(root, relPath);
+  await rm(filePath, { force: false });
 }
 
 function normalizeContentPath(relPath: string) {

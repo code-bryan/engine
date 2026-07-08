@@ -154,12 +154,19 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
 
   let refresh = () => {};
 
+  const getEditorViewportRect = () => {
+    const stage = document.querySelector(".debugger-stage");
+    if (stage instanceof HTMLElement) return stage.getBoundingClientRect();
+    return viewport.getBoundingClientRect();
+  };
+
   const centerCamera = () => {
-    const w = engine.app.renderer.width;
-    const h = engine.app.renderer.height;
+    const rect = getEditorViewportRect();
+    const w = Math.max(1, rect.width);
+    const h = Math.max(1, rect.height);
     state.camera.zoom = Math.min(w / gameW, h / gameH) * 0.72;
-    state.camera.x = (w - gameW * state.camera.zoom) / 2;
-    state.camera.y = (h - gameH * state.camera.zoom) / 2;
+    state.camera.x = rect.left + (w - gameW * state.camera.zoom) / 2;
+    state.camera.y = rect.top + (h - gameH * state.camera.zoom) / 2;
   };
 
   const resizeRendererToViewport = () => {
@@ -181,10 +188,9 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     if (state.lockTarget !== undefined) {
       const t = transforms.get(state.lockTarget);
       if (t) {
-        const w = engine.app.renderer.width;
-        const h = engine.app.renderer.height;
-        state.camera.x = w / 2 - t.x * state.camera.zoom;
-        state.camera.y = h / 2 - t.y * state.camera.zoom;
+        const rect = getEditorViewportRect();
+        state.camera.x = rect.left + rect.width / 2 - t.x * state.camera.zoom;
+        state.camera.y = rect.top + rect.height / 2 - t.y * state.camera.zoom;
       }
     }
     applyCameraToStage(engine.app.stage, state.camera);
@@ -244,7 +250,7 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
           refresh();
         },
         zoom(action) {
-          applyZoomAction(action, engine, state, centerCamera);
+          applyZoomAction(action, engine, state, centerCamera, getEditorViewportRect);
           refresh();
         },
         setZoomSensitivity(value) {
@@ -679,12 +685,12 @@ function applyZoomAction(
   engine: EngineApplication,
   state: DebugState,
   centerCamera: () => void,
+  getViewportRect: () => DOMRect,
 ) {
   if (action === "zoom-in" || action === "zoom-out" || action === "zoom-100") {
-    const w = engine.app.renderer.width;
-    const h = engine.app.renderer.height;
-    const cx = w / 2;
-    const cy = h / 2;
+    const rect = getViewportRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
     const wx = (cx - state.camera.x) / state.camera.zoom;
     const wy = (cy - state.camera.y) / state.camera.zoom;
     const factor = action === "zoom-in" ? 1.25 : action === "zoom-out" ? 1 / 1.25 : null;

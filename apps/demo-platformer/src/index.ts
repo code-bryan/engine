@@ -9,6 +9,7 @@ import {
   registerComponentDefinition,
   saveWorldDefinition,
   serializeWorld,
+  type PrefabDefinition,
   type DemoWorldData,
 } from "@engine/runtime";
 import { createPhysics } from "@engine/physics";
@@ -123,6 +124,48 @@ async function mountGame(startPlaying: boolean, worldName = "worlds/world-01", w
       };
       await saveContentJson(path, definition);
       registerComponentDefinition(definition);
+      await mountGame(false, worldName);
+    },
+    async onCreatePrefab(path) {
+      const prefabName = path.split("/").filter(Boolean).at(-1) ?? "prefab";
+      const definition: PrefabDefinition = {
+        version: 1,
+        name: prefabName,
+        components: [
+          {
+            component: "transform",
+            value: { x: 0, y: 0, rotation: 0, scale: 1 },
+          },
+        ],
+      };
+      await saveContentJson(path, definition);
+      await mountGame(false, worldName);
+    },
+    async onCreateGraph(path) {
+      const graphName = path.split("/").filter(Boolean).at(-1) ?? "system";
+      await saveContentJson(path, {
+        version: 3,
+        name: graphName,
+        entrypoint: crypto.randomUUID(),
+        variables: [],
+        nodes: [
+          {
+            id: crypto.randomUUID(),
+            type: "OnUpdate",
+            position: { x: 80, y: 80 },
+          },
+        ],
+        edges: [],
+      });
+      await mountGame(false, worldName);
+    },
+    async onImportContent(path, value) {
+      await saveContentJson(path, value);
+      await mountGame(false, worldName);
+    },
+    async onDeleteContent(path, kind) {
+      const endpoint = kind === "folder" ? "/api/content/folder" : "/api/content/file";
+      await fetch(`${endpoint}?path=${encodeURIComponent(path)}`, { method: "DELETE" });
       await mountGame(false, worldName);
     },
     initialContentDrawerOpen: contentDrawerOpen,

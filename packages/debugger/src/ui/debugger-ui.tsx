@@ -2,13 +2,11 @@ import {
   Camera,
   Check,
   Crosshair,
-  ChevronDown,
   ChevronRight,
   Expand,
   FileJson,
-  FilePlus2,
-  FolderOpen,
-  FolderPlus,
+  Folder,
+  Globe,
   LocateFixed,
   MousePointer2,
   Minus,
@@ -22,11 +20,13 @@ import {
   StepForward,
   RefreshCw,
   Search,
+  Package,
   Trash2,
+  Workflow,
   X,
 } from "lucide-react";
 import { createPortal } from "react-dom";
-import { useEffect, useLayoutEffect, useRef, useState, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction, type WheelEvent as ReactWheelEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from "react";
 import { GRAPH_NODE_LIBRARY, type GraphDefinition, type GraphNodeDefinition, type GraphNodeSpec, type GraphVariableDefinition } from "@engine/runtime";
 import type { ContentTreeNode, EditorToolMode } from "../shared/types";
 
@@ -136,13 +136,21 @@ export type DebuggerUiProps = {
   onCreateFolder?: (path: string) => void;
   onCreateWorld: (path: string) => void;
   onCreateComponent?: (path: string) => void;
+  onCreatePrefab?: (path: string) => void;
+  onCreateGraph?: (path: string) => void;
+  onImportContent?: (path: string, value: unknown) => void;
+  onDeleteContent?: (path: string, kind: ContentTreeNode["kind"]) => void;
   onToggleContentDrawer: () => void;
 };
 
 export function DebuggerUi(props: DebuggerUiProps) {
   const selectedEntityRef = useRef<HTMLButtonElement | null>(null);
+  const [stagePortal, setStagePortal] = useState<HTMLElement | null>(null);
   const [cameraTuningOpen, setCameraTuningOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<BottomDrawerTab>("content");
+  const [zoomToastOpen, setZoomToastOpen] = useState(false);
+  const zoomToastTimerRef = useRef<number | undefined>(undefined);
+  const didMountRef = useRef(false);
   const isPlaying = props.playbackState === "playing";
   const selectedEntity = props.entities.find((entity) => entity.selected);
 
@@ -167,8 +175,35 @@ export function DebuggerUi(props: DebuggerUiProps) {
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [cameraTuningOpen]);
 
+  useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      return;
+    }
+
+    setZoomToastOpen(true);
+    window.clearTimeout(zoomToastTimerRef.current);
+    zoomToastTimerRef.current = window.setTimeout(() => {
+      setZoomToastOpen(false);
+    }, 2400);
+
+    return () => {
+      window.clearTimeout(zoomToastTimerRef.current);
+    };
+  }, [props.zoomLabel]);
+
+  const zoomToast = zoomToastOpen && stagePortal
+    ? createPortal(
+      <div className="debugger-zoom-toast is-visible" aria-hidden="true">
+        {props.zoomLabel}
+      </div>,
+      stagePortal,
+    )
+    : null;
+
   return (
     <>
+      {zoomToast}
       <div className="debugger-viewport-hud">
         <div className="debugger-viewport-hud__item">
           <span className="debugger-viewport-hud__label">FPS:</span>
@@ -180,7 +215,7 @@ export function DebuggerUi(props: DebuggerUiProps) {
         </div>
       </div>
       <div className={`debugger-layout${isPlaying ? " debugger-layout--playing" : ""}`} onClickCapture={props.onCloseMenus}>
-        <main className="debugger-stage">
+        <main className="debugger-stage" ref={setStagePortal}>
           <div className="debugger-viewport-overlay" aria-label="Viewport controls">
             <div className="debugger-viewport-group debugger-viewport-group--left" aria-label="Selection tools">
               <button className={`debugger-viewport-button${props.toolMode === "select" ? " is-active" : ""}`} onClick={() => props.onSetToolMode("select")} title="Select Tool" aria-label="Select Tool">
@@ -211,35 +246,29 @@ export function DebuggerUi(props: DebuggerUiProps) {
               </button>
             </div>
             <div className="debugger-viewport-group debugger-viewport-group--right" aria-label="Camera tools">
-              <span className="debugger-viewport-group__title">Camera</span>
               <div className="debugger-zoom-tuning-wrap debugger-viewport-group__stack" data-camera-tuning-root onClick={(event) => event.stopPropagation()}>
                 <button
-                  className={`debugger-viewport-button debugger-viewport-button--wide${props.cameraLocked ? " is-active" : ""}`}
+                  className={`debugger-viewport-button${props.cameraLocked ? " is-active" : ""}`}
                   onClick={props.onToggleCameraLock}
                   title="Lock Camera to Entity"
                   aria-label="Lock Camera to Entity"
                 >
                   <Camera size={14} strokeWidth={2} />
-                  <span>Lock</span>
                 </button>
-                <button className="debugger-viewport-button debugger-viewport-button--wide" onClick={() => props.onZoomAction("camera-reset")} title="Reset Camera" aria-label="Reset Camera">
+                <button className="debugger-viewport-button" onClick={() => props.onZoomAction("camera-reset")} title="Reset Camera" aria-label="Reset Camera">
                   <LocateFixed size={14} strokeWidth={2} />
-                  <span>Reset</span>
                 </button>
-                <button className="debugger-viewport-button debugger-viewport-button--wide" onClick={() => props.onZoomAction("zoom-out")} title="Zoom Out" aria-label="Zoom Out">
+                <button className="debugger-viewport-button" onClick={() => props.onZoomAction("zoom-out")} title="Zoom Out" aria-label="Zoom Out">
                   <Minus size={14} strokeWidth={2} />
-                  <span>Out</span>
                 </button>
-                <button className="debugger-viewport-button debugger-viewport-button--wide" onClick={() => props.onZoomAction("zoom-in")} title="Zoom In" aria-label="Zoom In">
+                <button className="debugger-viewport-button" onClick={() => props.onZoomAction("zoom-in")} title="Zoom In" aria-label="Zoom In">
                   <Plus size={14} strokeWidth={2} />
-                  <span>In</span>
                 </button>
-                <button className="debugger-viewport-button debugger-viewport-button--wide" onClick={() => props.onZoomAction("zoom-fit")} title="Fit game in viewport" aria-label="Fit game in viewport">
+                <button className="debugger-viewport-button" onClick={() => props.onZoomAction("zoom-fit")} title="Fit game in viewport" aria-label="Fit game in viewport">
                   <ScanSearch size={14} strokeWidth={2} />
-                  <span>Fit</span>
                 </button>
                 <button
-                  className={`debugger-viewport-button debugger-viewport-button--wide debugger-zoom-tuning-toggle${cameraTuningOpen ? " is-active" : ""}`}
+                  className={`debugger-viewport-button debugger-zoom-tuning-toggle${cameraTuningOpen ? " is-active" : ""}`}
                   onClick={() => setCameraTuningOpen((open) => !open)}
                   title="Camera speed"
                   aria-label="Camera speed"
@@ -247,7 +276,6 @@ export function DebuggerUi(props: DebuggerUiProps) {
                   aria-haspopup="true"
                 >
                   <Camera size={14} strokeWidth={2} />
-                  <span>Speed</span>
                 </button>
                 {cameraTuningOpen && (
                   <div className="debugger-zoom-tuning" title="Camera speed">
@@ -307,6 +335,10 @@ export function DebuggerUi(props: DebuggerUiProps) {
                   onCreateFolder={props.onCreateFolder}
                   onCreateWorld={props.onCreateWorld}
                   onCreateComponent={props.onCreateComponent}
+                  onCreatePrefab={props.onCreatePrefab}
+                  onCreateGraph={props.onCreateGraph}
+                  onImportContent={props.onImportContent}
+                  onDeleteContent={props.onDeleteContent}
                   keyboardLocked={isPlaying}
                 />
               ) : drawerTab === "systems" ? (
@@ -557,35 +589,51 @@ function ContentBrowser(props: {
   onCreateFolder?: (path: string) => void;
   onCreateWorld: (path: string) => void;
   onCreateComponent?: (path: string) => void;
+  onCreatePrefab?: (path: string) => void;
+  onCreateGraph?: (path: string) => void;
+  onImportContent?: (path: string, value: unknown) => void;
+  onDeleteContent?: (path: string, kind: ContentTreeNode["kind"]) => void;
   keyboardLocked: boolean;
 }) {
   const [selectedFolderPath, setSelectedFolderPath] = useState("");
+  const [selectedItemPath, setSelectedItemPath] = useState<string | undefined>();
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set([""]));
   const [search, setSearch] = useState("");
-  const [createKind, setCreateKind] = useState<"folder" | "world" | "component" | undefined>();
+  const [createKind, setCreateKind] = useState<"folder" | "world" | "component" | "prefab" | "graph" | undefined>();
+  const [createBasePath, setCreateBasePath] = useState("");
   const [createName, setCreateName] = useState("");
-  const [openGraphName, setOpenGraphName] = useState<string | undefined>();
+  const [importDialogBasePath, setImportDialogBasePath] = useState("");
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importError, setImportError] = useState<string | undefined>();
+  const [importBusy, setImportBusy] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ContentTreeNode | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    folderPath: string;
+    item?: ContentTreeNode;
+  } | null>(null);
+  const [previewPath, setPreviewPath] = useState<string | undefined>();
+  const [previewValue, setPreviewValue] = useState<unknown>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | undefined>();
+  const [openGraphPath, setOpenGraphPath] = useState<string | undefined>();
   const [openGraph, setOpenGraph] = useState<GraphAsset | null>(null);
   const [openGraphLoading, setOpenGraphLoading] = useState(false);
   const [openGraphError, setOpenGraphError] = useState<string | undefined>();
+  const touchTapRef = useRef<{ path: string; time: number } | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const nextFolder = parentContentPath(props.activeWorld);
     setSelectedFolderPath(nextFolder);
+    setSelectedItemPath(undefined);
     setExpandedFolders((prev) => {
       const next = new Set(prev);
       for (const crumb of breadcrumbPaths(nextFolder)) next.add(crumb.path);
       return next;
     });
   }, [props.activeWorld]);
-
-  useEffect(() => {
-    setExpandedFolders((prev) => {
-      const next = new Set(prev);
-      for (const crumb of breadcrumbPaths(selectedFolderPath)) next.add(crumb.path);
-      return next;
-    });
-  }, [selectedFolderPath]);
 
   const currentFolder = findContentFolder(props.tree, selectedFolderPath);
   const currentChildren = currentFolder?.children ?? props.tree;
@@ -595,32 +643,61 @@ function ContentBrowser(props: {
   const currentBreadcrumbs = breadcrumbPaths(selectedFolderPath);
   const activeSystems = new Set(props.activeSystems ?? []);
 
-  const canCreateComponent = Boolean(props.onCreateComponent) && (selectedFolderPath === "components" || selectedFolderPath.startsWith("components/"));
+  useEffect(() => {
+    if (!contextMenu) return;
 
-  const startCreate = (kind: "folder" | "world" | "component") => {
-    setCreateKind(kind);
-    setCreateName("");
-  };
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!(event.target instanceof Element)) return;
+      if (event.target.closest("[data-content-context-menu]")) return;
+      setContextMenu(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setContextMenu(null);
+    };
 
-  const confirmCreate = () => {
-    const name = createName.trim();
-    if (!name) return;
-    if (currentChildren.some((node) => node.name === name)) return;
-
-    const nextPath = joinContentPath(selectedFolderPath, name);
-    if (createKind === "folder") {
-      props.onCreateFolder?.(nextPath);
-    } else if (createKind === "component") {
-      props.onCreateComponent?.(nextPath);
-    } else {
-      props.onCreateWorld(nextPath);
-    }
-    setCreateKind(undefined);
-    setCreateName("");
-  };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [contextMenu]);
 
   useEffect(() => {
-    if (!openGraphName) {
+    if (!previewPath) {
+      setPreviewValue(null);
+      setPreviewLoading(false);
+      setPreviewError(undefined);
+      return;
+    }
+
+    let alive = true;
+    setPreviewLoading(true);
+    setPreviewError(undefined);
+    setPreviewValue(null);
+
+    fetchContentFile(previewPath)
+      .then((value) => {
+        if (!alive) return;
+        setPreviewValue(value);
+        setPreviewError(value === null ? "file not found" : undefined);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setPreviewError("failed to load file");
+      })
+      .finally(() => {
+        if (!alive) return;
+        setPreviewLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [previewPath]);
+
+  useEffect(() => {
+    if (!openGraphPath) {
       setOpenGraph(null);
       setOpenGraphError(undefined);
       setOpenGraphLoading(false);
@@ -632,7 +709,7 @@ function ContentBrowser(props: {
     setOpenGraphError(undefined);
     setOpenGraph(null);
 
-    fetchGraphAsset(openGraphName)
+    fetchGraphAsset(openGraphPath)
       .then((graph) => {
         if (!alive) return;
         setOpenGraph(graph);
@@ -651,12 +728,129 @@ function ContentBrowser(props: {
     return () => {
       alive = false;
     };
-  }, [openGraphName]);
+  }, [openGraphPath]);
+
+  const triggerImport = (basePath = selectedFolderPath) => {
+    setImportDialogBasePath(basePath);
+    setImportFile(null);
+    setImportError(undefined);
+    setContextMenu(null);
+  };
+
+  const chooseImportFile = () => {
+    importInputRef.current?.click();
+  };
+
+  const beginCreate = (kind: "folder" | "world" | "component" | "prefab" | "graph", basePath = selectedFolderPath) => {
+    setCreateKind(kind);
+    setCreateBasePath(basePath);
+    setCreateName("");
+    setContextMenu(null);
+  };
+
+  const confirmCreate = () => {
+    const name = createName.trim();
+    if (!name) return;
+    if (currentChildren.some((node) => node.name === name)) return;
+
+    const nextPath = joinContentPath(createBasePath, name);
+    if (createKind === "folder") {
+      props.onCreateFolder?.(nextPath);
+    } else if (createKind === "component") {
+      props.onCreateComponent?.(nextPath);
+    } else if (createKind === "prefab") {
+      props.onCreatePrefab?.(nextPath);
+    } else if (createKind === "graph") {
+      props.onCreateGraph?.(nextPath);
+    } else {
+      props.onCreateWorld(nextPath);
+    }
+    setCreateKind(undefined);
+    setCreateBasePath("");
+    setCreateName("");
+  };
+
+  const openNode = (node: ContentTreeNode) => {
+    setSelectedItemPath(node.path);
+    if (node.kind === "folder") {
+      setSelectedFolderPath(node.path);
+      setExpandedFolders((prev) => new Set(prev).add(node.path));
+      return;
+    }
+    if (node.kind === "world") {
+      props.onLoadWorld(node.path);
+      return;
+    }
+    if (node.kind === "graph") {
+      setPreviewPath(undefined);
+      setOpenGraphPath(node.path);
+      return;
+    }
+    setOpenGraphPath(undefined);
+    setPreviewPath(node.path);
+  };
+
+  const selectNode = (node: ContentTreeNode) => {
+    setSelectedItemPath(node.path);
+  };
+
+  const activateNode = (node: ContentTreeNode) => {
+    openNode(node);
+    setContextMenu(null);
+  };
+
+  const deleteNode = (node: ContentTreeNode) => {
+    setContextMenu(null);
+    setDeleteTarget(node);
+  };
+
+  const handleImportChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setImportFile(file);
+    setImportError(undefined);
+  };
+
+  const handlePointerUp = (node: ContentTreeNode, event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType !== "touch") return;
+    const now = performance.now();
+    const last = touchTapRef.current;
+    if (last && last.path === node.path && now - last.time < 320) {
+      touchTapRef.current = null;
+      activateNode(node);
+      return;
+    }
+    touchTapRef.current = { path: node.path, time: now };
+  };
+
+  const openContextMenu = (event: React.MouseEvent | React.PointerEvent, item?: ContentTreeNode) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedItemPath(item?.path ?? selectedItemPath);
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      item,
+      folderPath: item?.kind === "folder" ? item.path : selectedFolderPath,
+    });
+  };
+
+  const openCreateMenu = (event: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setContextMenu({
+      x: rect.left,
+      y: rect.bottom + 8,
+      folderPath: selectedFolderPath,
+    });
+  };
+
+  const contextFolderPath = contextMenu?.folderPath ?? selectedFolderPath;
 
   return (
     <section className="debugger-section debugger-section--content">
       <div className="debugger-content-header">
-        <div>
+        <div className="debugger-content-header__titleblock">
           <div className="debugger-section__title" style={{ marginBottom: 4 }}>Content</div>
           <div className="debugger-content-breadcrumbs">
             {currentBreadcrumbs.map((crumb, index) => (
@@ -671,18 +865,15 @@ function ContentBrowser(props: {
           </div>
         </div>
         <div className="debugger-content-actions">
-          {props.onCreateFolder && (
-            <button className="debugger-content-action" onClick={() => startCreate("folder")} title="New Folder" aria-label="New Folder" disabled={props.keyboardLocked}>
-              <FolderPlus size={13} strokeWidth={2} />
-            </button>
-          )}
-          {canCreateComponent && (
-            <button className="debugger-content-action" onClick={() => startCreate("component")} title="New Component" aria-label="New Component" disabled={props.keyboardLocked}>
-              <Puzzle size={13} strokeWidth={2} />
-            </button>
-          )}
-          <button className="debugger-content-action" onClick={() => startCreate("world")} title="New World" aria-label="New World" disabled={props.keyboardLocked}>
-            <FilePlus2 size={13} strokeWidth={2} />
+          <button
+            className="debugger-content-action"
+            onClick={openCreateMenu}
+            onContextMenu={openCreateMenu}
+            title="Create"
+            aria-label="Create"
+            disabled={props.keyboardLocked}
+          >
+            <Plus size={13} strokeWidth={2} />
           </button>
           <button className="debugger-content-action" onClick={() => setSearch("")} title="Clear search" aria-label="Clear search" disabled={props.keyboardLocked}>
             <RefreshCw size={13} strokeWidth={2} />
@@ -699,104 +890,206 @@ function ContentBrowser(props: {
           onChange={(event) => setSearch(event.target.value)}
         />
       </div>
-      {createKind && (
-        <div className="debugger-content-create">
-          <input
-            className="debugger-input debugger-content-create__input"
-            autoFocus
-            placeholder={createKind === "folder" ? "folder name…" : createKind === "component" ? "component name…" : "world name…"}
-            value={createName}
-            disabled={props.keyboardLocked}
-            onChange={(event) => setCreateName(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") confirmCreate();
-              if (event.key === "Escape") {
-                setCreateKind(undefined);
-                setCreateName("");
-              }
-            }}
-          />
-          <div className="debugger-content-create__actions">
-            <button className="debugger-content-create__btn debugger-content-create__btn--confirm" onClick={confirmCreate} disabled={!createName.trim() || currentChildren.some((node) => node.name === createName.trim())}>
-              <Check size={12} strokeWidth={2.5} />
-            </button>
-            <button
-              className="debugger-content-create__btn debugger-content-create__btn--cancel"
-              onClick={() => {
-                setCreateKind(undefined);
-                setCreateName("");
-              }}
-            >
-              <X size={12} strokeWidth={2.5} />
-            </button>
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".json,application/json"
+        hidden
+        onChange={handleImportChange}
+      />
+      <div className="debugger-content-body debugger-content-body--browser">
+        <aside className="debugger-content-sidebar">
+          <div className="debugger-content-sidebar__header">Folders</div>
+          <div className="debugger-content-tree">
+            {renderFolderTree(props.tree, selectedFolderPath, expandedFolders, setExpandedFolders, setSelectedFolderPath, props.onLoadWorld)}
           </div>
-          {currentChildren.some((node) => node.name === createName.trim()) && createName.trim() && !props.keyboardLocked && (
-            <span className="debugger-content-create__error">already exists</span>
-          )}
-        </div>
-      )}
-      <div className="debugger-content-body">
-        <aside className="debugger-content-tree">
-          {props.tree.length === 0 ? (
-            <div className="debugger-content-empty">no content</div>
-          ) : (
-            props.tree.map((node) => renderContentTreeNode(node, 0, selectedFolderPath, expandedFolders, setExpandedFolders, setSelectedFolderPath, props.onLoadWorld, activeSystems))
-          )}
         </aside>
         <section className="debugger-content-browser">
           <div className="debugger-content-browser__header">
-            <span className="debugger-section__title" style={{ marginBottom: 0 }}>Assets</span>
-            <span className="debugger-content-browser__hint">
-              {search.trim()
-                ? "filtered"
-                : selectedFolderPath === "systems"
-                  ? `${[...activeSystems].filter((name) => currentChildren.some((node) => node.kind === "graph" && node.name === name)).length} active / ${currentChildren.length} total`
-                  : `${currentChildren.length} item${currentChildren.length === 1 ? "" : "s"}`}
-            </span>
+            <div>
+              <div className="debugger-section__title" style={{ marginBottom: 4 }}>Assets</div>
+              <div className="debugger-content-browser__hint">
+                {search.trim()
+                  ? "filtered"
+                  : selectedFolderPath === "systems"
+                    ? `${[...activeSystems].filter((name) => currentChildren.some((node) => node.kind === "graph" && node.name === name)).length} active / ${currentChildren.length} total`
+                    : `${currentChildren.length} item${currentChildren.length === 1 ? "" : "s"}`}
+              </div>
+            </div>
+            <div className="debugger-content-browser__path">{selectedFolderPath || "Content"}</div>
           </div>
-          <div className="debugger-content-list">
+          <div
+            className="debugger-content-grid"
+            onContextMenu={(event) => openContextMenu(event)}
+          >
             {filteredChildren.length === 0 ? (
               <div className="debugger-content-empty">{search.trim() ? "no matches" : "empty folder"}</div>
-            ) : filteredChildren.map((node) => (
-              <button
-                key={node.path}
-                className={`debugger-content-item${node.kind === "world" && node.path === props.activeWorld ? " is-active" : ""}`}
-                onClick={() => {
-                  if (node.kind === "folder") {
-                    setSelectedFolderPath(node.path);
-                    setExpandedFolders((prev) => new Set(prev).add(node.path));
-                    return;
-                  }
-                  if (node.kind === "world") props.onLoadWorld(node.path);
-                  if (node.kind === "graph") setOpenGraphName(node.name);
-                }}
-              >
-                <span className="debugger-content-item__icon">
-                  {node.kind === "folder" ? <FolderOpen size={13} strokeWidth={2} /> : node.kind === "component" || node.kind === "graph" ? <Puzzle size={13} strokeWidth={2} /> : <FileJson size={13} strokeWidth={2} />}
-                </span>
-                <span className="debugger-content-item__name">{node.name}</span>
-                <span className="debugger-content-item__path">{node.path || "root"}</span>
-                {node.kind === "graph" ? (
-                  <span className={`debugger-pill${activeSystems.has(node.name) ? " is-active" : ""}`}>
-                    {activeSystems.has(node.name) ? "loaded" : "available"}
+            ) : filteredChildren.map((node) => {
+              const isSelected = selectedItemPath === node.path || (node.kind === "world" && node.path === props.activeWorld);
+              const icon = renderContentIcon(node.kind);
+              const kindLabel = node.kind === "graph" ? "system" : node.kind;
+              return (
+                <button
+                  key={node.path}
+                  className={`debugger-content-tile${isSelected ? " is-selected" : ""}${node.kind === "world" && node.path === props.activeWorld ? " is-active" : ""}`}
+                  disabled={props.keyboardLocked}
+                  onClick={() => selectNode(node)}
+                  onDoubleClick={() => activateNode(node)}
+                  onPointerUp={(event) => handlePointerUp(node, event)}
+                  onContextMenu={(event) => openContextMenu(event, node)}
+                >
+                  <span className="debugger-content-tile__icon">{icon}</span>
+                  <span className="debugger-content-tile__meta">
+                    <strong className="debugger-content-tile__name">{node.name}</strong>
+                    <span className="debugger-content-tile__path">{node.path || "root"}</span>
                   </span>
-                ) : node.kind !== "folder" ? <span className="debugger-pill">{node.kind}</span> : null}
-              </button>
-            ))}
+                  <span className={`debugger-pill${node.kind === "graph" && activeSystems.has(node.name) ? " is-active" : ""}`}>
+                    {node.kind === "graph" ? (activeSystems.has(node.name) ? "active" : "system") : kindLabel}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </section>
       </div>
-        {openGraphName && createPortal(
-          <GraphDialog
+      {contextMenu && createPortal(
+        <div
+          className="debugger-content-menu"
+          data-content-context-menu
+          style={{
+            left: `${Math.max(8, Math.min(contextMenu.x, window.innerWidth - 232))}px`,
+            top: `${Math.max(8, Math.min(contextMenu.y, window.innerHeight - 260))}px`,
+          }}
+          onClick={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <button className="debugger-content-menu__item" onClick={() => triggerImport(contextFolderPath)} disabled={!props.onImportContent || props.keyboardLocked}>
+            Import
+          </button>
+          {contextMenu.item && (
+            <button className="debugger-content-menu__item" onClick={() => activateNode(contextMenu.item!)}>
+              {contextMenu.item.kind === "folder" ? "Enter folder" : contextMenu.item.kind === "world" ? "Load world" : contextMenu.item.kind === "graph" ? "Open system" : "Open file"}
+            </button>
+          )}
+          <div className="debugger-content-menu__separator" />
+          <button className="debugger-content-menu__item" onClick={() => beginCreate("folder", contextFolderPath)} disabled={!props.onCreateFolder || props.keyboardLocked}>
+            New Folder
+          </button>
+          <button className="debugger-content-menu__item" onClick={() => beginCreate("world", contextFolderPath)} disabled={props.keyboardLocked}>
+            New World
+          </button>
+          <button className="debugger-content-menu__item" onClick={() => beginCreate("component", contextFolderPath)} disabled={!props.onCreateComponent || props.keyboardLocked}>
+            New Component
+          </button>
+          <button className="debugger-content-menu__item" onClick={() => beginCreate("prefab", contextFolderPath)} disabled={!props.onCreatePrefab || props.keyboardLocked}>
+            New Prefab
+          </button>
+          <button className="debugger-content-menu__item" onClick={() => beginCreate("graph", contextFolderPath)} disabled={!props.onCreateGraph || props.keyboardLocked}>
+            New System
+          </button>
+          <div className="debugger-content-menu__separator" />
+          <button
+            className="debugger-content-menu__item"
+            onClick={() => {
+              if (contextMenu.item) deleteNode(contextMenu.item);
+              else setContextMenu(null);
+            }}
+            disabled={!contextMenu.item || !props.onDeleteContent || props.keyboardLocked}
+          >
+            Delete
+          </button>
+        </div>,
+        document.body,
+      )}
+      {createKind && createPortal(
+        <ContentCreateDialog
+          kind={createKind}
+          basePath={createBasePath}
+          name={createName}
+          currentChildren={currentChildren}
+          keyboardLocked={props.keyboardLocked}
+          onNameChange={setCreateName}
+          onConfirm={confirmCreate}
+          onClose={() => {
+            setCreateKind(undefined);
+            setCreateBasePath("");
+            setCreateName("");
+          }}
+        />,
+        document.body,
+      )}
+      {importDialogBasePath && createPortal(
+        <ContentImportDialog
+          basePath={importDialogBasePath}
+          file={importFile}
+          error={importError}
+          busy={importBusy}
+          keyboardLocked={props.keyboardLocked}
+          onPickFile={chooseImportFile}
+          onClose={() => {
+            setImportDialogBasePath("");
+            setImportFile(null);
+            setImportError(undefined);
+            setImportBusy(false);
+          }}
+          onImport={async () => {
+            if (!props.onImportContent || !importFile) return;
+            setImportBusy(true);
+            setImportError(undefined);
+            try {
+              const text = await importFile.text();
+              const value = JSON.parse(text) as unknown;
+              const stem = importFile.name.replace(/\.json$/i, "");
+              await Promise.resolve(props.onImportContent(joinContentPath(importDialogBasePath, stem), value));
+              setImportDialogBasePath("");
+              setImportFile(null);
+              setImportError(undefined);
+              setImportBusy(false);
+            } catch {
+              setImportBusy(false);
+              setImportError("Import failed: JSON file could not be parsed or saved.");
+            }
+          }}
+        />,
+        document.body,
+      )}
+      {deleteTarget && createPortal(
+        <DeleteContentDialog
+          node={deleteTarget}
+          keyboardLocked={props.keyboardLocked}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={() => {
+            if (!props.onDeleteContent) return;
+            if (selectedItemPath === deleteTarget.path) setSelectedItemPath(undefined);
+            if (previewPath === deleteTarget.path) setPreviewPath(undefined);
+            if (openGraphPath === deleteTarget.path) setOpenGraphPath(undefined);
+            props.onDeleteContent(deleteTarget.path, deleteTarget.kind);
+            setDeleteTarget(null);
+          }}
+        />,
+        document.body,
+      )}
+      {previewPath && createPortal(
+        <ContentPreviewDialog
+          path={previewPath}
+          value={previewValue}
+          loading={previewLoading}
+          error={previewError}
+          onClose={() => setPreviewPath(undefined)}
+        />,
+        document.body,
+      )}
+      {openGraphPath && createPortal(
+        <GraphDialog
           graph={openGraph}
           loading={openGraphLoading}
           error={openGraphError}
           keyboardLocked={props.keyboardLocked}
-          onClose={() => setOpenGraphName(undefined)}
+          onClose={() => setOpenGraphPath(undefined)}
           onChange={(nextGraph) => setOpenGraph(nextGraph)}
           onSave={(nextGraph) => {
             setOpenGraph(nextGraph);
-            void saveGraphAsset(nextGraph);
+            void saveGraphAsset(openGraphPath, nextGraph);
           }}
         />,
         document.body,
@@ -817,6 +1110,63 @@ function RuntimeCard(props: { title: string; fields: Array<{ label: string; valu
       ))}
     </div>
   );
+}
+
+function renderFolderTree(
+  nodes: ContentTreeNode[],
+  selectedFolderPath: string,
+  expandedFolders: Set<string>,
+  setExpandedFolders: (next: Set<string>) => void,
+  setSelectedFolderPath: (path: string) => void,
+  onLoadWorld: (name: string) => void,
+  depth = 0,
+) {
+  return nodes
+    .filter((node) => node.kind === "folder" || node.kind === "world")
+    .map((node) => {
+      const isFolder = node.kind === "folder";
+      const isExpanded = expandedFolders.has(node.path);
+      const isSelected = isFolder && node.path === selectedFolderPath;
+      const hasChildren = isFolder && (node.children?.length ?? 0) > 0;
+
+      return (
+        <div key={node.path} className="debugger-content-tree__node">
+          <button
+            className={`debugger-content-tree__row${isSelected ? " is-selected" : ""}${node.kind === "world" ? " debugger-content-tree__row--world" : ""}`}
+            style={{ paddingLeft: `${depth * 14 + 8}px` }}
+            onClick={() => {
+              if (isFolder) {
+                setSelectedFolderPath(node.path);
+                const next = new Set(expandedFolders);
+                if (next.has(node.path)) next.delete(node.path);
+                else next.add(node.path);
+                setExpandedFolders(next);
+                return;
+              }
+              onLoadWorld(node.path);
+            }}
+            onContextMenu={(event) => {
+              if (!isFolder) return;
+              event.preventDefault();
+              event.stopPropagation();
+              setSelectedFolderPath(node.path);
+              const next = new Set(expandedFolders);
+              next.add(node.path);
+              setExpandedFolders(next);
+            }}
+          >
+            <span className="debugger-content-tree__toggle">
+              {isFolder ? (hasChildren ? (isExpanded ? <ChevronRight size={12} strokeWidth={2.2} style={{ transform: "rotate(90deg)" }} /> : <ChevronRight size={12} strokeWidth={2.2} />) : <span className="debugger-content-tree__spacer" />) : <span className="debugger-content-tree__spacer" />}
+            </span>
+            <span className="debugger-content-tree__icon">{isFolder ? <Folder size={12} strokeWidth={2} /> : <Globe size={12} strokeWidth={2} />}</span>
+            <span className="debugger-content-tree__name">{node.name}</span>
+          </button>
+          {isFolder && isExpanded && node.children?.length
+            ? renderFolderTree(node.children, selectedFolderPath, expandedFolders, setExpandedFolders, setSelectedFolderPath, onLoadWorld, depth + 1)
+            : null}
+        </div>
+      );
+    });
 }
 
 function InspectorField(
@@ -873,58 +1223,6 @@ function InspectorField(
   );
 }
 
-function renderContentTreeNode(
-  node: ContentTreeNode,
-  depth: number,
-  selectedFolderPath: string,
-  expandedFolders: Set<string>,
-  setExpandedFolders: Dispatch<SetStateAction<Set<string>>>,
-  setSelectedFolderPath: (path: string) => void,
-  onLoadWorld: (path: string) => void,
-  activeSystems: Set<string>,
-) {
-  const isFolder = node.kind === "folder";
-  const isExpanded = expandedFolders.has(node.path);
-  const isSelected = isFolder && node.path === selectedFolderPath;
-  const hasChildren = isFolder && (node.children?.length ?? 0) > 0;
-
-  return (
-    <div key={node.path} className="debugger-content-tree__node">
-      <button
-        className={`debugger-content-tree__row${isSelected ? " is-selected" : ""}`}
-        style={{ paddingLeft: `${depth * 14 + 6}px` }}
-        onClick={() => {
-          if (isFolder) {
-            setSelectedFolderPath(node.path);
-            const next = new Set(expandedFolders);
-            if (next.has(node.path)) next.delete(node.path);
-            else next.add(node.path);
-            setExpandedFolders(next);
-            return;
-          }
-          if (node.kind === "world") onLoadWorld(node.path);
-        }}
-      >
-        <span className="debugger-content-tree__toggle">
-          {isFolder ? (hasChildren ? (isExpanded ? <ChevronDown size={12} strokeWidth={2.2} /> : <ChevronRight size={12} strokeWidth={2.2} />) : <span className="debugger-content-tree__spacer" />) : <span className="debugger-content-tree__spacer" />}
-        </span>
-        <span className="debugger-content-tree__icon">
-          {isFolder ? <FolderOpen size={12} strokeWidth={2} /> : node.kind === "component" || node.kind === "graph" ? <Puzzle size={12} strokeWidth={2} /> : <FileJson size={12} strokeWidth={2} />}
-        </span>
-        <span className="debugger-content-tree__name">{node.name}</span>
-        {node.kind === "graph" ? (
-          <span className={`debugger-pill${activeSystems.has(node.name) ? " is-active" : ""}`}>
-            {activeSystems.has(node.name) ? "active" : "available"}
-          </span>
-        ) : node.kind !== "folder" ? <span className="debugger-pill">{node.kind}</span> : null}
-      </button>
-      {isFolder && isExpanded && node.children?.length
-        ? node.children.map((child) => renderContentTreeNode(child, depth + 1, selectedFolderPath, expandedFolders, setExpandedFolders, setSelectedFolderPath, onLoadWorld, activeSystems))
-        : null}
-    </div>
-  );
-}
-
 function joinContentPath(parent: string, child: string) {
   const cleanChild = child.trim().replace(/^\/+|\/+$/g, "");
   if (!cleanChild) return parent;
@@ -963,15 +1261,20 @@ function findContentFolder(nodes: ContentTreeNode[], targetPath: string): Conten
 
 type GraphAsset = GraphDefinition;
 
-async function fetchGraphAsset(name: string): Promise<GraphAsset | null> {
-  const response = await fetch(`/api/content/file?path=${encodeURIComponent(`systems/${name}`)}`);
+async function fetchContentFile(path: string): Promise<unknown | null> {
+  const response = await fetch(`/api/content/file?path=${encodeURIComponent(path)}`);
   if (!response.ok) return null;
-  const raw = await response.json();
+  return await response.json();
+}
+
+async function fetchGraphAsset(path: string): Promise<GraphAsset | null> {
+  const raw = await fetchContentFile(path);
+  if (raw === null) return null;
   return parseGraphAsset(raw);
 }
 
-async function saveGraphAsset(graph: GraphAsset): Promise<void> {
-  await fetch(`/api/content/file?path=${encodeURIComponent(`systems/${graph.name}`)}`, {
+async function saveGraphAsset(path: string, graph: GraphAsset): Promise<void> {
+  await fetch(`/api/content/file?path=${encodeURIComponent(path)}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -1708,6 +2011,185 @@ function GraphDialog(props: {
       </div>
     </div>
   );
+}
+
+function ContentPreviewDialog(props: {
+  path: string;
+  value: unknown;
+  loading: boolean;
+  error?: string;
+  onClose: () => void;
+}) {
+  return createPortal(
+    <div className="debugger-content-preview" role="dialog" aria-modal="true" onClick={props.onClose}>
+      <div className="debugger-content-preview__panel" onClick={(event) => event.stopPropagation()}>
+        <div className="debugger-content-preview__header">
+          <div>
+            <div className="debugger-section__title" style={{ marginBottom: 4 }}>File Preview</div>
+            <div className="debugger-content-preview__subtitle">{props.path}</div>
+          </div>
+          <button className="debugger-content-action" onClick={props.onClose} aria-label="Close preview">
+            <X size={13} strokeWidth={2.5} />
+          </button>
+        </div>
+        {props.loading ? (
+          <div className="debugger-content-empty">loading file…</div>
+        ) : props.error ? (
+          <div className="debugger-content-empty">{props.error}</div>
+        ) : (
+          <pre className="debugger-content-preview__json">{JSON.stringify(props.value, null, 2)}</pre>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function ContentCreateDialog(props: {
+  kind: "folder" | "world" | "component" | "prefab" | "graph";
+  basePath: string;
+  name: string;
+  currentChildren: ContentTreeNode[];
+  keyboardLocked: boolean;
+  onNameChange: (value: string) => void;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  const exists = props.currentChildren.some((node) => node.name === props.name.trim());
+  return createPortal(
+    <div className="debugger-content-dialog" role="dialog" aria-modal="true" onClick={props.onClose}>
+      <div className="debugger-content-dialog__panel" onClick={(event) => event.stopPropagation()}>
+        <div className="debugger-content-dialog__header">
+          <div>
+            <div className="debugger-section__title" style={{ marginBottom: 4 }}>Create {props.kind}</div>
+            <div className="debugger-content-dialog__subtitle">{props.basePath || "root"}</div>
+          </div>
+          <button className="debugger-content-action" onClick={props.onClose} aria-label="Close dialog">
+            <X size={13} strokeWidth={2.5} />
+          </button>
+        </div>
+        <div className="debugger-content-dialog__body">
+          <label className="debugger-field debugger-field--editable">
+            <span>Name</span>
+            <input
+              className="debugger-input"
+              autoFocus
+              placeholder={props.kind === "folder" ? "folder name…" : props.kind === "component" ? "component name…" : props.kind === "prefab" ? "prefab name…" : props.kind === "graph" ? "system name…" : "world name…"}
+              value={props.name}
+              disabled={props.keyboardLocked}
+              onChange={(event) => props.onNameChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") props.onConfirm();
+                if (event.key === "Escape") props.onClose();
+              }}
+            />
+          </label>
+          {exists && props.name.trim() && !props.keyboardLocked ? <div className="debugger-content-dialog__error">already exists</div> : null}
+        </div>
+        <div className="debugger-content-dialog__footer">
+          <button className="debugger-content-action" onClick={props.onClose}>Cancel</button>
+          <button className="debugger-content-action debugger-content-action--primary" onClick={props.onConfirm} disabled={!props.name.trim() || exists || props.keyboardLocked}>
+            Create
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function ContentImportDialog(props: {
+  basePath: string;
+  file: File | null;
+  error?: string;
+  busy: boolean;
+  keyboardLocked: boolean;
+  onPickFile: () => void;
+  onClose: () => void;
+  onImport: () => void;
+}) {
+  return createPortal(
+    <div className="debugger-content-dialog" role="dialog" aria-modal="true" onClick={props.onClose}>
+      <div className="debugger-content-dialog__panel" onClick={(event) => event.stopPropagation()}>
+        <div className="debugger-content-dialog__header">
+          <div>
+            <div className="debugger-section__title" style={{ marginBottom: 4 }}>Import content</div>
+            <div className="debugger-content-dialog__subtitle">{props.basePath || "root"}</div>
+          </div>
+          <button className="debugger-content-action" onClick={props.onClose} aria-label="Close dialog">
+            <X size={13} strokeWidth={2.5} />
+          </button>
+        </div>
+        <div className="debugger-content-dialog__body">
+          <div className="debugger-content-dialog__hint">Choose a JSON file, then import it into the current folder.</div>
+          <div className="debugger-content-dialog__filebox">
+            <div className="debugger-content-dialog__filelabel">{props.file ? props.file.name : "No file chosen"}</div>
+            <button className="debugger-content-action" onClick={props.onPickFile} disabled={props.keyboardLocked}>
+              Choose File
+            </button>
+          </div>
+          {props.error ? <div className="debugger-content-dialog__error">{props.error}</div> : null}
+        </div>
+        <div className="debugger-content-dialog__footer">
+          <button className="debugger-content-action" onClick={props.onClose}>Cancel</button>
+          <button className="debugger-content-action debugger-content-action--primary" onClick={props.onImport} disabled={!props.file || props.keyboardLocked || props.busy}>
+            {props.busy ? "Importing..." : "Import"}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function DeleteContentDialog(props: {
+  node: ContentTreeNode;
+  keyboardLocked: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return createPortal(
+    <div className="debugger-content-dialog" role="dialog" aria-modal="true" onClick={props.onClose}>
+      <div className="debugger-content-dialog__panel" onClick={(event) => event.stopPropagation()}>
+        <div className="debugger-content-dialog__header">
+          <div>
+            <div className="debugger-section__title" style={{ marginBottom: 4 }}>Delete {props.node.kind}</div>
+            <div className="debugger-content-dialog__subtitle">{props.node.path || "root"}</div>
+          </div>
+          <button className="debugger-content-action" onClick={props.onClose} aria-label="Close dialog">
+            <X size={13} strokeWidth={2.5} />
+          </button>
+        </div>
+        <div className="debugger-content-dialog__body">
+          <div className="debugger-content-dialog__hint">This action cannot be undone.</div>
+        </div>
+        <div className="debugger-content-dialog__footer">
+          <button className="debugger-content-action" onClick={props.onClose}>Cancel</button>
+          <button className="debugger-content-action debugger-content-action--danger" onClick={props.onConfirm} disabled={props.keyboardLocked}>
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function renderContentIcon(kind: ContentTreeNode["kind"]) {
+  switch (kind) {
+    case "folder":
+      return <Folder size={14} strokeWidth={2} />;
+    case "world":
+      return <Globe size={14} strokeWidth={2} />;
+    case "component":
+      return <Puzzle size={14} strokeWidth={2} />;
+    case "prefab":
+      return <Package size={14} strokeWidth={2} />;
+    case "graph":
+      return <Workflow size={14} strokeWidth={2} />;
+    case "file":
+      return <FileJson size={14} strokeWidth={2} />;
+  }
 }
 
 function createGraphNode(spec: GraphNodeSpec, position: { x: number; y: number }): GraphAsset["nodes"][number] {
