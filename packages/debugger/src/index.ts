@@ -195,8 +195,6 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   const resizeObserver = new ResizeObserver(resizeRendererToViewport);
   resizeObserver.observe(viewport);
 
-  queueMicrotask(() => options.playback?.onPause?.());
-
   refresh = () => {
     if (state.lockTarget !== undefined) {
       const t = transforms.get(state.lockTarget);

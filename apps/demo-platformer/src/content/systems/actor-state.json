@@ -16,8 +16,8 @@
       "id": "dcb57f41-644f-483b-8213-e513dff48ea4",
       "type": "ForEachEntityWithTag",
       "position": {
-        "x": 16,
-        "y": 129
+        "x": 17,
+        "y": 130
       },
       "data": {
         "tag": "player"
@@ -71,6 +71,28 @@
       },
       "data": {
         "component": "actor-state",
+        "value": "idle"
+      }
+    },
+    {
+      "id": "b1a9b44c-4306-4129-9d84-611463411751",
+      "type": "SetSpriteState",
+      "position": {
+        "x": 1884,
+        "y": 31
+      },
+      "data": {
+        "value": "walk"
+      }
+    },
+    {
+      "id": "c8fc624c-3b60-4341-9351-e25608b202c6",
+      "type": "SetSpriteState",
+      "position": {
+        "x": 1884,
+        "y": 282
+      },
+      "data": {
         "value": "idle"
       }
     }
@@ -153,6 +175,26 @@
       },
       "to": {
         "node": "8fc624ca-3b60-4341-935b-e25608b202c5",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "3a1a9b44-c430-4612-9d94-861146341175",
+        "port": "flow"
+      },
+      "to": {
+        "node": "b1a9b44c-4306-4129-9d84-611463411751",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "8fc624ca-3b60-4341-935b-e25608b202c5",
+        "port": "flow"
+      },
+      "to": {
+        "node": "c8fc624c-3b60-4341-9351-e25608b202c6",
         "port": "flow"
       }
     }

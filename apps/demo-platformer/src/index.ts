@@ -226,7 +226,8 @@ async function boot(startPlaying: boolean) {
   }
 }
 
-await boot(true);
+// Editor opens in a stopped state; the game runs only when the user presses Play.
+await boot(false);
 
 async function saveContentJson(path: string, data: unknown) {
   await fetch(`/api/content/file?path=${encodeURIComponent(path)}`, {
