@@ -1,9 +1,13 @@
 import { registerComponent, type ComponentStore } from "@engine/ecs-core";
 
+export type ComponentKind = "struct" | "scalar" | "enum";
+
 export type ComponentDefinition = {
   version: 1;
   id: string;
   label: string;
+  kind?: ComponentKind;
+  values?: string[];
   defaultValue?: unknown;
 };
 
@@ -107,10 +111,20 @@ function parseComponentDefinition(value: unknown): ComponentDefinition {
   if (parsed.version !== 1) throw new Error("invalid component definition version");
   if (typeof parsed.id !== "string" || parsed.id.trim() === "") throw new Error("invalid component id");
   if (typeof parsed.label !== "string" || parsed.label.trim() === "") throw new Error(`invalid component label for ${parsed.id}`);
+
+  const kind = parsed.kind === "struct" || parsed.kind === "scalar" || parsed.kind === "enum" ? parsed.kind : undefined;
+  if (kind === "enum") {
+    const values = Array.isArray(parsed.values) ? parsed.values.filter((v): v is string => typeof v === "string" && v.trim() !== "") : [];
+    if (values.length === 0) throw new Error(`enum component "${parsed.id}" must declare at least one value`);
+    const defaultValue = typeof parsed.defaultValue === "string" && values.includes(parsed.defaultValue) ? parsed.defaultValue : values[0];
+    return { version: 1, id: parsed.id, label: parsed.label, kind, values, defaultValue };
+  }
+
   return {
     version: 1,
     id: parsed.id,
     label: parsed.label,
+    ...(kind ? { kind } : {}),
     defaultValue: parsed.defaultValue,
   };
 }

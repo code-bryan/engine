@@ -1,5 +1,5 @@
 import { getComponentRegistry, type Entity } from "@engine/ecs-core";
-import { transforms, type TransformScale } from "@engine/renderer";
+import { transforms, sprites, spriteAnimations, type TransformScale } from "@engine/renderer";
 import type { DemoGameWorld } from "./types";
 import { instantiatePrefab, type PrefabPlacement } from "./prefabs";
 
@@ -55,6 +55,14 @@ export async function fetchContentTree(): Promise<DemoContentNode[]> {
 }
 
 export async function materializeWorld(world: DemoGameWorld, data: DemoWorldData) {
+  // Shared component/render stores are module-level singletons; clear them so a
+  // remounted world starts from a clean slate instead of inheriting the previous
+  // world's (now destroyed) sprites/entities.
+  transforms.clear();
+  sprites.clear();
+  spriteAnimations.clear();
+  for (const { store } of getComponentRegistry()) store.clear();
+
   for (const entity of data.entities) {
     await instantiatePrefab(world, entity);
   }

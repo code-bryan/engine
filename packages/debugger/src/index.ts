@@ -86,8 +86,13 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
     inspectorQuery: "",
     openDropdown: undefined,
     contentDrawerOpen: options.initialContentDrawerOpen ?? false,
+    openWorlds: (() => {
+      const seed = options.initialOpenWorlds ?? (options.activeWorld ? [options.activeWorld] : []);
+      return options.activeWorld && !seed.includes(options.activeWorld) ? [...seed, options.activeWorld] : seed;
+    })(),
     openDocs: [],
     activeDoc: null,
+    sceneSelected: false,
     snapGrid: true,
     snapGridSize: 16,
     snapRotate: true,
@@ -275,7 +280,19 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
         },
         selectEntity(entity) {
           state.selectedEntity = entity;
+          state.sceneSelected = false;
           refresh();
+        },
+        selectScene() {
+          state.sceneSelected = true;
+          state.selectedEntity = undefined;
+          refresh();
+        },
+        addSystem(name) {
+          options.onAddSystem?.(name);
+        },
+        removeSystem(name) {
+          options.onRemoveSystem?.(name);
         },
         toggleComponentCollapse(id) {
           if (state.collapsedComponents.has(id)) state.collapsedComponents.delete(id);
@@ -361,12 +378,38 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
           }
           refresh();
         },
-        selectViewportTab() {
+        selectDoc(path) {
+          state.activeDoc = path;
+          refresh();
+        },
+        openWorld(path) {
+          if (!state.openWorlds.includes(path)) {
+            state.openWorlds = [...state.openWorlds, path];
+            options.onOpenWorldsChanged?.(state.openWorlds);
+          }
+          if (path !== options.activeWorld) {
+            options.onLoadWorld?.(path);
+            return;
+          }
           state.activeDoc = null;
           refresh();
         },
-        selectDoc(path) {
-          state.activeDoc = path;
+        selectWorld(path) {
+          if (path !== options.activeWorld) {
+            options.onLoadWorld?.(path);
+            return;
+          }
+          state.activeDoc = null;
+          refresh();
+        },
+        closeWorld(path) {
+          const index = state.openWorlds.indexOf(path);
+          state.openWorlds = state.openWorlds.filter((entry) => entry !== path);
+          options.onOpenWorldsChanged?.(state.openWorlds);
+          if (path === options.activeWorld) {
+            const fallback = state.openWorlds[index] ?? state.openWorlds[index - 1];
+            if (fallback) { options.onLoadWorld?.(fallback); return; }
+          }
           refresh();
         },
       }, ALL_LOG_CATEGORIES);
@@ -611,6 +654,10 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
 
   return {
     world,
+    setActiveSystems(names: string[]) {
+      options.activeSystems = names;
+      refresh();
+    },
     destroy() {
       overlay.destroy();
       for (const label of labels.values()) label.destroy();

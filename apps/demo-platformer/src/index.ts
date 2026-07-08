@@ -38,6 +38,7 @@ let engine: Awaited<ReturnType<typeof createEngineApplication>> | undefined;
 let debuggerEditor: ReturnType<typeof attachDebugEditor> | undefined;
 let playbackState: "playing" | "paused" | "stopped" = "playing";
 let contentDrawerOpen = false;
+let openWorldPaths: string[] = [];
 
 async function mountGame(startPlaying: boolean, worldName = "worlds/world-01", worldOverride?: DemoWorldData) {
   debuggerEditor?.destroy();
@@ -50,7 +51,8 @@ async function mountGame(startPlaying: boolean, worldName = "worlds/world-01", w
     fetchContentTree(),
     initializeDemoRuntime(),
   ]);
-  const activeWorldSystems = resolveWorldSystems(worldData.systems);
+  let activeWorldSystems = resolveWorldSystems(worldData.systems);
+  if (!openWorldPaths.includes(worldName)) openWorldPaths = [...openWorldPaths, worldName];
   if (worldOverride) saveWorldDefinition(worldName, worldOverride);
   await materializeWorld(gameWorld, worldData);
   await bootstrapDemoSystems(gameWorld, activeWorldSystems);
@@ -61,6 +63,17 @@ async function mountGame(startPlaying: boolean, worldName = "worlds/world-01", w
     mount: viewport,
     pixi: { width: 320, height: 180, background: 0x141414, roundPixels: true },
   });
+
+  // Rebuild the world's systems in place (correct order) without tearing down the engine/Pixi/debugger.
+  const reloadSystems = async (next: string[]) => {
+    activeWorldSystems = next;
+    saveWorldDefinition(worldName, serializeWorld(gameWorld, next));
+    gameWorld.clearSystems();
+    await bootstrapDemoSystems(gameWorld, next);
+    engine?.installSystems();
+    debuggerEditor?.setActiveSystems(next);
+    engine?.tick(0);
+  };
 
   debuggerEditor = attachDebugEditor(gameWorld, engine, {
     onPlay() {
@@ -105,10 +118,16 @@ async function mountGame(startPlaying: boolean, worldName = "worlds/world-01", w
     async onCreateWorld(name) {
       await saveWorldDefinition(name, {
         version: 1,
-        systems: defaultWorldSystems,
+        systems: [],
         entities: [],
       });
       await mountGame(false, name);
+    },
+    onAddSystem(name) {
+      void reloadSystems(Array.from(new Set([...activeWorldSystems, name])));
+    },
+    onRemoveSystem(name) {
+      void reloadSystems(activeWorldSystems.filter((system) => system !== name));
     },
     async onCreateFolder(path) {
       await fetch(`/api/content/folder?path=${encodeURIComponent(path)}`, { method: "POST" });
@@ -172,6 +191,10 @@ async function mountGame(startPlaying: boolean, worldName = "worlds/world-01", w
     onContentDrawerToggled(open) {
       contentDrawerOpen = open;
     },
+    initialOpenWorlds: openWorldPaths,
+    onOpenWorldsChanged(paths) {
+      openWorldPaths = paths;
+    },
     contentTree,
     activeWorld: worldName,
     activeSystems: activeWorldSystems,
@@ -206,5 +229,5 @@ function toTitleCase(value: string) {
 }
 
 function resolveWorldSystems(systems: string[]) {
-  return systems.length > 0 ? systems : defaultWorldSystems;
+  return systems;
 }

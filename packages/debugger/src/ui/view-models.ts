@@ -52,8 +52,13 @@ export type DebuggerUiActions = {
   setRotationSnapDeg: (value: number) => void;
   openDoc: (path: string, kind: "graph" | "component") => void;
   closeDoc: (path: string) => void;
-  selectViewportTab: () => void;
   selectDoc: (path: string) => void;
+  openWorld: (path: string) => void;
+  selectWorld: (path: string) => void;
+  closeWorld: (path: string) => void;
+  selectScene: () => void;
+  addSystem: (name: string) => void;
+  removeSystem: (name: string) => void;
   openLevel: () => void;
   toggleContentDrawer: () => void;
   loadWorld: (name: string) => void;
@@ -121,13 +126,21 @@ export function renderDebuggerUi<TWorld extends DebuggerWorld>(
     onCalcGridSnapSize: actions.calcGridSnapSize,
     onToggleRotationSnap: actions.toggleRotationSnap,
     onSetRotationSnapDeg: actions.setRotationSnapDeg,
-    activeWorldName: options.activeWorld ? (options.activeWorld.split("/").filter(Boolean).at(-1) ?? options.activeWorld) : "Scene",
+    worlds: state.openWorlds.map((path) => ({ path, name: path.split("/").filter(Boolean).at(-1) ?? path })),
+    worldName: options.activeWorld ? (options.activeWorld.split("/").filter(Boolean).at(-1) ?? options.activeWorld) : "World",
+    sceneSelected: state.sceneSelected,
+    availableSystems: collectGraphNames(options.contentTree ?? []).filter((name) => !(options.activeSystems ?? []).includes(name)),
+    onSelectScene: actions.selectScene,
+    onAddSystem: actions.addSystem,
+    onRemoveSystem: actions.removeSystem,
     openDocs: state.openDocs.map((doc) => ({ ...doc, name: doc.path.split("/").filter(Boolean).at(-1) ?? doc.path })),
     activeDoc: state.activeDoc,
     onOpenDoc: actions.openDoc,
     onCloseDoc: actions.closeDoc,
-    onSelectViewportTab: actions.selectViewportTab,
     onSelectDoc: actions.selectDoc,
+    onOpenWorld: actions.openWorld,
+    onSelectWorld: actions.selectWorld,
+    onCloseWorld: actions.closeWorld,
     onOpenLevel: actions.openLevel,
     contentDrawerOpen: state.contentDrawerOpen,
     contentTree: options.contentTree ?? [],
@@ -212,6 +225,9 @@ export function buildSystemViews<TWorld extends DebuggerWorld>(
       index,
       label: entry.label,
       enabled: entry.enabled,
+      cur,
+      avg,
+      peak,
       timing: !entry.enabled ? "off"
         : cur === null ? "—"
         : `${cur.toFixed(2)} / ${avg?.toFixed(2) ?? "—"} / ${peak?.toFixed(2) ?? "—"}`,
@@ -238,6 +254,21 @@ export function toInspectorFieldView(
     selectEntity: field.selectEntity,
     selectEntities: field.selectEntities,
   };
+}
+
+function collectGraphNames(nodes: import("../shared/types").ContentTreeNode[]): string[] {
+  const names: string[] = [];
+  const walk = (list: import("../shared/types").ContentTreeNode[]) => {
+    for (const node of list) {
+      if (node.kind === "graph") {
+        const base = node.path.split("/").filter(Boolean).at(-1) ?? node.name;
+        if (base && !names.includes(base)) names.push(base);
+      }
+      if (node.children?.length) walk(node.children);
+    }
+  };
+  walk(nodes);
+  return names;
 }
 
 function entityListTitle<TWorld extends DebuggerWorld>(world: TWorld, entity: Entity) {

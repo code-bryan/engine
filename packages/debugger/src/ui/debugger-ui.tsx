@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from "react";
-import { GRAPH_NODE_LIBRARY, type GraphDefinition, type GraphNodeDefinition, type GraphNodeSpec, type GraphVariableDefinition } from "@engine/runtime";
+import { GRAPH_NODE_LIBRARY, getComponentDefinitions, type ComponentDefinition, type GraphDefinition, type GraphNodeDefinition, type GraphNodeSpec, type GraphVariableDefinition } from "@engine/runtime";
 import type { ContentTreeNode, EditorToolMode } from "../shared/types";
 
 const GRAPH_ZOOM_SENSITIVITY = 2.5;
@@ -78,6 +78,9 @@ export type DebuggerSystemView = {
   label: string;
   enabled: boolean;
   timing: string;
+  cur: number | null;
+  avg: number | null;
+  peak: number | null;
 };
 
 export type DebuggerLogEntryView = {
@@ -141,13 +144,21 @@ export type DebuggerUiProps = {
   onCalcGridSnapSize: () => void;
   onToggleRotationSnap: () => void;
   onSetRotationSnapDeg: (value: number) => void;
-  activeWorldName: string;
+  worlds: Array<{ path: string; name: string }>;
+  worldName: string;
+  sceneSelected: boolean;
+  availableSystems: string[];
+  onSelectScene: () => void;
+  onAddSystem: (name: string) => void;
+  onRemoveSystem: (name: string) => void;
   openDocs: Array<{ path: string; name: string; kind: "graph" | "component" }>;
   activeDoc: string | null;
   onOpenDoc: (path: string, kind: "graph" | "component") => void;
   onCloseDoc: (path: string) => void;
-  onSelectViewportTab: () => void;
   onSelectDoc: (path: string) => void;
+  onOpenWorld: (path: string) => void;
+  onSelectWorld: (path: string) => void;
+  onCloseWorld: (path: string) => void;
   onOpenLevel?: () => void;
   contentDrawerOpen: boolean;
   contentTree: ContentTreeNode[];
@@ -341,14 +352,30 @@ export function DebuggerUi(props: DebuggerUiProps) {
           </div>
         </header>
 
-        {/* TAB BAR: viewport + open blueprints */}
+        {/* TAB BAR: open worlds + open docs */}
         <div className="pointer-events-auto h-8 bg-[#181818] border-b border-[#303030] flex items-center px-1 flex-shrink-0 select-none z-20 overflow-x-auto">
-          <button
-            className={`px-4 py-1.5 text-[11px] font-medium flex items-center gap-2 flex-shrink-0 border-t-2 transition-colors ${props.activeDoc === null ? "bg-[#1e1e1e] text-white border-[#0070e0]" : "text-[#888] hover:bg-[#1e1e1e] hover:text-[#ccc] border-transparent"}`}
-            onClick={props.onSelectViewportTab}
-          >
-            <i className={`ph-fill ph-globe-hemisphere-west ${props.activeDoc === null ? "text-[#0070e0]" : "text-[#888]"}`} /> {props.activeWorldName}
-          </button>
+          {props.worlds.map((world) => {
+            const active = props.activeDoc === null && world.path === props.activeWorld;
+            return (
+              <button
+                key={world.path}
+                className={`px-4 py-1.5 text-[11px] font-medium flex items-center gap-2 flex-shrink-0 border-t-2 transition-colors ${active ? "bg-[#1e1e1e] text-white border-[#0070e0]" : "text-[#888] hover:bg-[#1e1e1e] hover:text-[#ccc] border-transparent"}`}
+                onClick={() => props.onSelectWorld(world.path)}
+              >
+                <i className={`ph-fill ph-globe-hemisphere-west ${active ? "text-[#0070e0]" : "text-[#888]"}`} /> {world.name}
+                {props.worlds.length > 1 && (
+                  <span
+                    className="ml-2 p-0.5 rounded-full hover:bg-[#333] hover:text-white"
+                    role="button"
+                    aria-label="Close world tab"
+                    onClick={(event) => { event.stopPropagation(); props.onCloseWorld(world.path); }}
+                  >
+                    <i className="ph ph-x" />
+                  </span>
+                )}
+              </button>
+            );
+          })}
           {props.openDocs.map((doc) => {
             const active = props.activeDoc === doc.path;
             const icon = doc.kind === "component" ? "ph-puzzle-piece" : "ph-file-code";
@@ -568,7 +595,7 @@ export function DebuggerUi(props: DebuggerUiProps) {
                     tree={props.contentTree}
                     activeWorld={props.activeWorld}
                     activeSystems={props.activeSystems}
-                    onLoadWorld={props.onLoadWorld}
+                    onOpenWorld={props.onOpenWorld}
                     onCreateFolder={props.onCreateFolder}
                     onCreateWorld={props.onCreateWorld}
                     onCreateComponent={props.onCreateComponent}
@@ -601,11 +628,14 @@ export function DebuggerUi(props: DebuggerUiProps) {
                 />
               </div>
               <div className="flex-1 overflow-y-auto py-1 select-none">
-                <div className="flex items-center px-3 py-1 text-[#ccc]">
+                <button
+                  className={`w-full flex items-center px-3 py-1 cursor-pointer text-left ${props.sceneSelected ? "bg-[#2d2d2d] border-l-2 border-[#0070e0] text-white" : "text-[#ccc] hover:bg-[#2d2d2d]"}`}
+                  onClick={props.onSelectScene}
+                >
                   <i className="ph ph-caret-down text-[10px] mr-1 text-[#888]" />
-                  <i className="ph ph-globe-hemisphere-west text-[#888] mr-2" />
-                  Scene
-                </div>
+                  <i className={`ph-fill ph-globe-hemisphere-west mr-2 ${props.sceneSelected ? "text-[#0070e0]" : "text-[#888]"}`} />
+                  <span className="truncate">{props.worldName}</span>
+                </button>
                 {props.entities.map((entity) => (
                   <button
                     key={entity.entity}
@@ -627,51 +657,69 @@ export function DebuggerUi(props: DebuggerUiProps) {
                 Details
                 <i className="ph ph-funnel text-[#888]" />
               </div>
-              <div className="px-2 py-1.5 border-b border-[#303030]">
-                <input
-                  className="engine-input w-full px-2 py-1 rounded text-[11px]"
-                  placeholder="filter fields…"
-                  value={props.inspectorQuery}
-                  onChange={(event) => props.onInspectorQueryChange(event.target.value)}
-                />
-              </div>
+              {!props.sceneSelected && (
+                <div className="px-2 py-1.5 border-b border-[#303030]">
+                  <input
+                    className="engine-input w-full px-2 py-1 rounded text-[11px]"
+                    placeholder="filter fields…"
+                    value={props.inspectorQuery}
+                    onChange={(event) => props.onInspectorQueryChange(event.target.value)}
+                  />
+                </div>
+              )}
               <div className="flex-1 overflow-y-auto">
-                {selectedEntity ? (
-                  <div className="p-3 border-b border-[#303030] flex items-center gap-2">
-                    <i className="ph-fill ph-cube text-[#0070e0] text-lg" />
-                    <input type="text" value={selectedEntity.title} readOnly className="engine-input px-2 py-1 w-full rounded font-medium" />
-                  </div>
+                {props.sceneSelected ? (
+                  <SceneSystemsPanel
+                    worldName={props.worldName}
+                    systems={props.systems}
+                    frameMs={props.frameMs}
+                    availableSystems={props.availableSystems}
+                    onToggleSystem={props.onToggleSystem}
+                    onAddSystem={props.onAddSystem}
+                    onRemoveSystem={props.onRemoveSystem}
+                  />
                 ) : (
-                  <div className="p-3 text-[#666]">No entity selected</div>
-                )}
-                {props.inspectorCards.map((card) => (
-                  <div className="border-b border-[#303030]" key={card.id}>
-                    <button
-                      className="w-full px-3 py-2 bg-[#252526] flex items-center cursor-pointer select-none text-white hover:bg-[#2a2a2b] text-left"
-                      onClick={() => props.onToggleComponentCollapse(card.id)}
-                    >
-                      <i className={`ph ${card.collapsed ? "ph-caret-right" : "ph-caret-down"} text-[10px] mr-2`} />
-                      {card.title}
-                    </button>
-                    {card.collapsed ? null : (
-                      <div className="p-3 space-y-2">
-                        {card.fields.map((field, index) => (
-                          <InspectorField
-                            key={`${card.id}-${field.label}-${index}`}
-                            field={field}
-                            onEdit={props.onInspectorEdit}
-                            onSelectEntity={props.onSelectEntity}
-                          />
-                        ))}
+                  <>
+                    {selectedEntity ? (
+                      <div className="p-3 border-b border-[#303030] flex items-center gap-2">
+                        <i className="ph-fill ph-cube text-[#0070e0] text-lg" />
+                        <input type="text" value={selectedEntity.title} readOnly className="engine-input px-2 py-1 w-full rounded font-medium" />
+                      </div>
+                    ) : (
+                      <div className="p-3 text-[#666]">Select the world or an entity</div>
+                    )}
+                    {selectedEntity && props.inspectorCards.map((card) => (
+                      <div className="border-b border-[#303030]" key={card.id}>
+                        <button
+                          className="w-full px-3 py-2 bg-[#252526] flex items-center cursor-pointer select-none text-white hover:bg-[#2a2a2b] text-left"
+                          onClick={() => props.onToggleComponentCollapse(card.id)}
+                        >
+                          <i className={`ph ${card.collapsed ? "ph-caret-right" : "ph-caret-down"} text-[10px] mr-2`} />
+                          {card.title}
+                        </button>
+                        {card.collapsed ? null : (
+                          <div className="p-3 space-y-2">
+                            {card.fields.map((field, index) => (
+                              <InspectorField
+                                key={`${card.id}-${field.label}-${index}`}
+                                field={field}
+                                onEdit={props.onInspectorEdit}
+                                onSelectEntity={props.onSelectEntity}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {selectedEntity && (
+                      <div className="p-3">
+                        <button className="w-full py-1.5 bg-[#2d2d2d] hover:bg-[#3a3a3a] border border-[#303030] rounded text-white transition-colors flex justify-center items-center gap-2 cursor-default" title="Add Component (coming soon)">
+                          <i className="ph ph-plus" /> Add Component
+                        </button>
                       </div>
                     )}
-                  </div>
-                ))}
-                <div className="p-3">
-                  <button className="w-full py-1.5 bg-[#2d2d2d] hover:bg-[#3a3a3a] border border-[#303030] rounded text-white transition-colors flex justify-center items-center gap-2 cursor-default" title="Add Component (coming soon)">
-                    <i className="ph ph-plus" /> Add Component
-                  </button>
-                </div>
+                  </>
+                )}
               </div>
             </div>
           </aside>
@@ -710,6 +758,79 @@ export function DebuggerUi(props: DebuggerUiProps) {
         </div>
       )}
     </>
+  );
+}
+
+function SceneSystemsPanel(props: {
+  worldName: string;
+  systems: DebuggerSystemView[];
+  frameMs: string;
+  availableSystems: string[];
+  onToggleSystem: (index: number) => void;
+  onAddSystem: (name: string) => void;
+  onRemoveSystem: (name: string) => void;
+}) {
+  const [addOpen, setAddOpen] = useState(false);
+  const totalCur = props.systems.reduce((sum, s) => sum + (s.cur ?? 0), 0);
+  return (
+    <div className="p-3 space-y-3">
+      <div className="flex items-center gap-2 pb-2 border-b border-[#303030]">
+        <i className="ph-fill ph-globe-hemisphere-west text-[#0070e0] text-lg" />
+        <div className="font-medium text-white truncate">{props.worldName}</div>
+      </div>
+
+      <div className="space-y-1">
+        <span className="text-[#888] text-[10px] uppercase font-bold tracking-wide">Systems ({props.systems.length})</span>
+        <div className="space-y-1">
+          {props.systems.length === 0 ? (
+            <div className="text-[#666]">no systems — add one below</div>
+          ) : props.systems.map((system) => (
+            <div key={system.index} className={`flex items-center gap-2 px-2 py-1 rounded border border-[#303030] bg-[#111111] ${system.enabled ? "" : "opacity-50"}`}>
+              <button className={`transition-colors ${system.enabled ? "text-[#4ade80]" : "text-[#666] hover:text-[#888]"}`} onClick={() => props.onToggleSystem(system.index)} title={system.enabled ? "Disable" : "Enable"}>
+                <i className="ph-fill ph-circle text-[10px]" />
+              </button>
+              <span className="flex-1 text-[#ccc] truncate">{system.label}</span>
+              <span className="text-[#888] font-mono text-[10px] shrink-0">
+                {system.cur === null ? "—" : `${system.cur.toFixed(2)}/${system.avg?.toFixed(2) ?? "—"}/${system.peak?.toFixed(2) ?? "—"}`}
+              </span>
+              <button className="text-[#666] hover:text-[#f87171] shrink-0" title="Remove system" onClick={() => props.onRemoveSystem(system.label)}>
+                <i className="ph ph-x" />
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="text-[9px] text-[#666] text-right pr-1">cur / avg / peak (ms)</div>
+      </div>
+
+      <div className="flex items-center justify-between px-2 py-1.5 rounded bg-[#252526] border border-[#303030] text-[11px]">
+        <span className="text-[#888] font-bold uppercase tracking-wide">Total</span>
+        <span className="text-white font-mono">{totalCur.toFixed(2)} ms <span className="text-[#666]">· frame {props.frameMs} ms</span></span>
+      </div>
+
+      <div className="relative" data-add-system-root onClick={(event) => event.stopPropagation()}>
+        <button
+          className="w-full py-1.5 bg-[#2d2d2d] hover:bg-[#3a3a3a] border border-[#303030] rounded text-white transition-colors flex justify-center items-center gap-2 disabled:opacity-40"
+          disabled={props.availableSystems.length === 0}
+          onClick={() => setAddOpen((open) => !open)}
+          title={props.availableSystems.length === 0 ? "No systems available to add" : "Add System"}
+        >
+          <i className="ph ph-plus" /> Add System
+        </button>
+        {addOpen && props.availableSystems.length > 0 && (
+          <div className="absolute bottom-full mb-1 left-0 right-0 max-h-48 overflow-y-auto bg-[#1e1e1e] border border-[#303030] rounded shadow-lg flex flex-col py-1 z-50">
+            {props.availableSystems.map((name) => (
+              <button
+                key={name}
+                className="text-left px-3 py-1.5 text-[#ccc] hover:bg-[#2d2d2d] hover:text-white flex items-center gap-2"
+                onClick={() => { props.onAddSystem(name); setAddOpen(false); }}
+              >
+                <i className="ph-fill ph-file-code text-[#0070e0]" /> {name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -812,7 +933,7 @@ function ContentBrowser(props: {
   tree: ContentTreeNode[];
   activeWorld?: string;
   activeSystems?: string[];
-  onLoadWorld: (name: string) => void;
+  onOpenWorld: (name: string) => void;
   onCreateFolder?: (path: string) => void;
   onCreateWorld: (path: string) => void;
   onCreateComponent?: (path: string) => void;
@@ -968,7 +1089,7 @@ function ContentBrowser(props: {
       return;
     }
     if (node.kind === "world") {
-      props.onLoadWorld(node.path);
+      props.onOpenWorld(node.path);
       return;
     }
     if (node.kind === "graph" || node.kind === "component") {
@@ -1047,7 +1168,18 @@ function ContentBrowser(props: {
       />
       {/* Left: Folder Tree */}
       <div className="w-48 border-r border-[#303030] bg-[#1a1a1a] p-2 overflow-y-auto flex-shrink-0">
-        {renderFolderTree(props.tree, selectedFolderPath, expandedFolders, setExpandedFolders, setSelectedFolderPath, props.onLoadWorld)}
+        <button
+          className={`w-full flex items-center pr-2 py-1 rounded cursor-pointer text-left transition-colors ${selectedFolderPath === "" ? "bg-[#2d2d2d] text-white" : "text-[#ccc] hover:bg-[#2d2d2d]"}`}
+          style={{ paddingLeft: "8px" }}
+          onClick={() => setSelectedFolderPath("")}
+        >
+          <span className="w-3 flex justify-center text-[#888]"><i className="ph ph-caret-down text-[10px]" /></span>
+          <span className="mr-2 text-[#0070e0]"><i className="ph-fill ph-folder-open" /></span>
+          <span className="truncate">Content</span>
+        </button>
+        <div style={{ paddingLeft: "8px" }}>
+          {renderFolderTree(props.tree, selectedFolderPath, expandedFolders, setExpandedFolders, setSelectedFolderPath, props.onOpenWorld)}
+        </div>
       </div>
       {/* Right: Asset area */}
       <div className="flex-1 bg-[#1e1e1e] flex flex-col min-w-0">
@@ -1546,15 +1678,40 @@ function componentFieldDotColor(type: ComponentFieldType): string {
   return "bg-[#4ade80] shadow-[0_0_5px_#4ade80]";
 }
 
+
+type ComponentEditKind = "struct" | "scalar" | "enum";
+type ComponentEditState = {
+  id: string;
+  label: string;
+  kind: ComponentEditKind;
+  fields: ComponentField[];
+  scalarType: ComponentFieldType;
+  scalarValue: unknown;
+  values: string[];
+  enumDefault: string;
+};
+
+function buildComponentDefinition(st: ComponentEditState): Record<string, unknown> {
+  const base = { version: 1, id: st.id, label: st.label };
+  if (st.kind === "enum") {
+    const values = st.values.map((v) => v.trim()).filter((v) => v !== "");
+    const defaultValue = values.includes(st.enumDefault) ? st.enumDefault : values[0] ?? "";
+    return { ...base, kind: "enum", values, defaultValue };
+  }
+  if (st.kind === "scalar") {
+    return { ...base, defaultValue: st.scalarValue };
+  }
+  return {
+    ...base,
+    defaultValue: Object.fromEntries(st.fields.filter((f) => f.name.trim() !== "").map((f) => [f.name, f.value])),
+  };
+}
+
 function ComponentView(props: { path: string; keyboardLocked: boolean }) {
-  const [id, setId] = useState("");
-  const [label, setLabel] = useState("");
-  const [fields, setFields] = useState<ComponentField[]>([]);
+  const [st, setSt] = useState<ComponentEditState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
   const [copied, setCopied] = useState(false);
-  const idRef = useRef("");
-  const labelRef = useRef("");
 
   useEffect(() => {
     let alive = true;
@@ -1564,76 +1721,68 @@ function ComponentView(props: { path: string; keyboardLocked: boolean }) {
       .then((raw) => {
         if (!alive) return;
         if (!raw || typeof raw !== "object") { setError("component not found"); return; }
-        const parsed = raw as { id?: string; label?: string; defaultValue?: unknown };
-        const nextId = typeof parsed.id === "string" ? parsed.id : (props.path.split("/").filter(Boolean).at(-1) ?? "component");
-        const nextLabel = typeof parsed.label === "string" ? parsed.label : nextId;
-        const dv = parsed.defaultValue && typeof parsed.defaultValue === "object" ? parsed.defaultValue as Record<string, unknown> : {};
-        setId(nextId); idRef.current = nextId;
-        setLabel(nextLabel); labelRef.current = nextLabel;
-        setFields(Object.entries(dv).map(([name, value]) => ({ name, type: inferComponentFieldType(value), value })));
+        const parsed = raw as { id?: string; label?: string; kind?: string; values?: unknown; defaultValue?: unknown };
+        const id = typeof parsed.id === "string" ? parsed.id : (props.path.split("/").filter(Boolean).at(-1) ?? "component");
+        const label = typeof parsed.label === "string" ? parsed.label : id;
+        const dv = parsed.defaultValue;
+        let next: ComponentEditState;
+        if (parsed.kind === "enum" || Array.isArray(parsed.values)) {
+          const values = (Array.isArray(parsed.values) ? parsed.values : []).filter((v): v is string => typeof v === "string");
+          const enumDefault = typeof dv === "string" && values.includes(dv) ? dv : values[0] ?? "";
+          next = { id, label, kind: "enum", fields: [], scalarType: "String", scalarValue: enumDefault, values, enumDefault };
+        } else if (dv && typeof dv === "object") {
+          next = { id, label, kind: "struct", fields: Object.entries(dv as Record<string, unknown>).map(([name, value]) => ({ name, type: inferComponentFieldType(value), value })), scalarType: "Float", scalarValue: 0, values: [], enumDefault: "" };
+        } else {
+          const scalarType = dv === undefined ? "Float" : inferComponentFieldType(dv);
+          next = { id, label, kind: "scalar", fields: [], scalarType: scalarType === "Vector2" ? "String" : scalarType, scalarValue: dv ?? 0, values: [], enumDefault: "" };
+        }
+        setSt(next);
       })
       .catch(() => { if (alive) setError("failed to load component"); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [props.path]);
 
-  const toDefinition = (nextFields: ComponentField[]) => ({
-    version: 1 as const,
-    id: idRef.current,
-    label: labelRef.current,
-    defaultValue: Object.fromEntries(nextFields.filter((f) => f.name.trim() !== "").map((f) => [f.name, f.value])),
-  });
-
-  const persist = (nextFields: ComponentField[]) => { void saveContentJson(props.path, toDefinition(nextFields)); };
-  const commit = (nextFields: ComponentField[]) => { setFields(nextFields); persist(nextFields); };
-
-  const setLabelValue = (next: string) => { setLabel(next); labelRef.current = next; persist(fields); };
-  const addField = () => {
-    if (props.keyboardLocked) return;
-    commit([...fields, { name: `field${fields.length + 1}`, type: "Float", value: 0 }]);
-  };
-  const removeField = (index: number) => commit(fields.filter((_, i) => i !== index));
-  const patchField = (index: number, patch: Partial<ComponentField>) =>
-    commit(fields.map((f, i) => i === index ? { ...f, ...patch } : f));
-
-  const definition = toDefinition(fields);
-  const json = JSON.stringify(definition, null, 2);
-
-  const copyJson = () => {
-    void navigator.clipboard?.writeText(json);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1200);
+  const commit = (patch: Partial<ComponentEditState>) => {
+    setSt((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, ...patch };
+      void saveContentJson(props.path, buildComponentDefinition(next));
+      return next;
+    });
   };
 
-  const renderValueInput = (field: ComponentField, index: number) => {
-    if (field.type === "Bool") {
-      return (
-        <input type="checkbox" className="accent-[#0070e0]" checked={field.value === true} disabled={props.keyboardLocked}
-          onChange={(e) => patchField(index, { value: e.target.checked })} />
-      );
+  const changeKind = (kind: ComponentEditKind) => {
+    if (!st) return;
+    if (kind === "enum" && st.values.length === 0) {
+      const seed = typeof st.scalarValue === "string" && st.scalarValue.trim() !== "" ? [st.scalarValue] : ["value"];
+      commit({ kind, values: seed, enumDefault: seed[0] });
+    } else if (kind === "scalar" && st.scalarValue === undefined) {
+      commit({ kind, scalarType: "Float", scalarValue: 0 });
+    } else {
+      commit({ kind });
     }
-    if (field.type === "String") {
-      return (
-        <input type="text" className="flex-1 min-w-0 engine-input px-1.5 py-0.5 rounded text-[10px]" value={String(field.value ?? "")} disabled={props.keyboardLocked}
-          onChange={(e) => patchField(index, { value: e.target.value })} />
-      );
-    }
-    if (field.type === "Vector2") {
-      const v = (field.value && typeof field.value === "object" ? field.value : { x: 0, y: 0 }) as { x?: number; y?: number };
+  };
+
+  const valueInput = (type: ComponentFieldType, value: unknown, onChange: (next: unknown) => void, compact = false) => {
+    const cls = compact ? "engine-input px-1 py-0.5 rounded text-[10px] text-center" : "engine-input px-2 py-1.5 rounded text-white text-xs";
+    if (type === "Bool") return <input type="checkbox" className="accent-[#0070e0]" checked={value === true} disabled={props.keyboardLocked} onChange={(e) => onChange(e.target.checked)} />;
+    if (type === "String") return <input type="text" className={`${cls} ${compact ? "w-20" : "w-full"}`} value={String(value ?? "")} disabled={props.keyboardLocked} onChange={(e) => onChange(e.target.value)} />;
+    if (type === "Vector2") {
+      const v = (value && typeof value === "object" ? value : {}) as { x?: number; y?: number };
       return (
         <div className="flex gap-1">
-          <input type="number" className="w-12 engine-input px-1 py-0.5 rounded text-[10px] text-center" value={Number(v.x ?? 0)} disabled={props.keyboardLocked}
-            onChange={(e) => patchField(index, { value: { x: Number(e.target.value), y: Number(v.y ?? 0) } })} />
-          <input type="number" className="w-12 engine-input px-1 py-0.5 rounded text-[10px] text-center" value={Number(v.y ?? 0)} disabled={props.keyboardLocked}
-            onChange={(e) => patchField(index, { value: { x: Number(v.x ?? 0), y: Number(e.target.value) } })} />
+          <input type="number" className="w-12 engine-input px-1 py-0.5 rounded text-[10px] text-center" value={Number(v.x ?? 0)} disabled={props.keyboardLocked} onChange={(e) => onChange({ x: Number(e.target.value), y: Number(v.y ?? 0) })} />
+          <input type="number" className="w-12 engine-input px-1 py-0.5 rounded text-[10px] text-center" value={Number(v.y ?? 0)} disabled={props.keyboardLocked} onChange={(e) => onChange({ x: Number(v.x ?? 0), y: Number(e.target.value) })} />
         </div>
       );
     }
-    return (
-      <input type="number" className="w-20 engine-input px-1.5 py-0.5 rounded text-[10px] text-center" value={Number(field.value ?? 0)} disabled={props.keyboardLocked}
-        onChange={(e) => patchField(index, { value: field.type === "Int" ? Math.round(Number(e.target.value)) : Number(e.target.value) })} />
-    );
+    return <input type="number" className={`${cls} ${compact ? "w-20" : "w-full"}`} value={Number(value ?? 0)} disabled={props.keyboardLocked} onChange={(e) => onChange(type === "Int" ? Math.round(Number(e.target.value)) : Number(e.target.value))} />;
   };
+
+  const definition = st ? buildComponentDefinition(st) : {};
+  const json = JSON.stringify(definition, null, 2);
+  const copyJson = () => { void navigator.clipboard?.writeText(json); setCopied(true); window.setTimeout(() => setCopied(false), 1200); };
 
   const previewValue = (field: ComponentField) => {
     if (field.type === "Vector2") {
@@ -1648,31 +1797,46 @@ function ComponentView(props: { path: string; keyboardLocked: boolean }) {
       {/* Center: preview card + live JSON */}
       <div className="flex-1 flex bg-[#141414] p-6 gap-6 overflow-auto min-w-0">
         <div className="flex-1 flex flex-col items-center justify-center min-w-0">
-          {loading ? <div className="text-[#666]">loading component…</div> : error ? <div className="text-[#666]">{error}</div> : (
+          {loading ? <div className="text-[#666]">loading component…</div> : error ? <div className="text-[#666]">{error}</div> : st && (
             <div className="w-72 bg-[#1e1e1e] border border-black rounded-md shadow-2xl flex flex-col font-sans text-[11px]">
               <div className="h-8 bg-gradient-to-r from-purple-800 to-purple-700 rounded-t-md flex items-center justify-between px-3 text-white font-bold tracking-wide border-b border-black">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <i className="ph-fill ph-puzzle-piece text-lg opacity-80" />
-                  <span className="truncate">{label || id}</span>
-                </div>
+                <div className="flex items-center gap-1.5 min-w-0"><i className="ph-fill ph-puzzle-piece text-lg opacity-80" /><span className="truncate">{st.label || st.id}</span></div>
                 <span className="text-[9px] bg-black/30 px-1.5 py-0.5 rounded shrink-0">v1</span>
               </div>
-              <div className="p-3 py-4 space-y-3">
-                <div className="text-[#888] font-bold uppercase text-[9px] tracking-wider mb-1">Default Values Struct</div>
-                {fields.length === 0 ? <div className="text-[#666]">no fields</div> : fields.map((field, index) => (
-                  <div key={index} className="flex justify-between items-center bg-[#111] p-1.5 rounded border border-[#303030]">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className={`w-3 h-3 rounded-full shrink-0 ${componentFieldDotColor(field.type)}`} />
-                      <span className="text-white truncate">{field.name}</span>
+              <div className="p-3 py-4 space-y-2">
+                {st.kind === "enum" ? (
+                  <>
+                    <div className="text-[#888] font-bold uppercase text-[9px] tracking-wider mb-1">Enum Values</div>
+                    {st.values.length === 0 ? <div className="text-[#666]">no values</div> : st.values.map((v, i) => (
+                      <div key={i} className="flex justify-between items-center bg-[#111] p-1.5 rounded border border-[#303030]">
+                        <div className="flex items-center gap-2 min-w-0"><div className="w-3 h-3 rounded-full shrink-0 bg-purple-400 shadow-[0_0_5px_#a78bfa]" /><span className="text-white truncate">{v}</span></div>
+                        {v === st.enumDefault && <span className="text-[#888] text-[10px] bg-[#222] px-1.5 rounded shrink-0">default</span>}
+                      </div>
+                    ))}
+                  </>
+                ) : st.kind === "scalar" ? (
+                  <>
+                    <div className="text-[#888] font-bold uppercase text-[9px] tracking-wider mb-1">Value</div>
+                    <div className="flex justify-between items-center bg-[#111] p-1.5 rounded border border-[#303030]">
+                      <div className="flex items-center gap-2"><div className={`w-3 h-3 rounded-full shrink-0 ${componentFieldDotColor(st.scalarType)}`} /><span className="text-white">value</span></div>
+                      <span className="text-[#888] text-[10px] bg-[#222] px-1.5 rounded shrink-0">{String(st.scalarValue)} ({st.scalarType})</span>
                     </div>
-                    <span className="text-[#888] text-[10px] bg-[#222] px-1.5 rounded shrink-0">{previewValue(field)} ({field.type})</span>
-                  </div>
-                ))}
+                  </>
+                ) : (
+                  <>
+                    <div className="text-[#888] font-bold uppercase text-[9px] tracking-wider mb-1">Default Values Struct</div>
+                    {st.fields.length === 0 ? <div className="text-[#666]">no fields</div> : st.fields.map((field, i) => (
+                      <div key={i} className="flex justify-between items-center bg-[#111] p-1.5 rounded border border-[#303030]">
+                        <div className="flex items-center gap-2 min-w-0"><div className={`w-3 h-3 rounded-full shrink-0 ${componentFieldDotColor(field.type)}`} /><span className="text-white truncate">{field.name}</span></div>
+                        <span className="text-[#888] text-[10px] bg-[#222] px-1.5 rounded shrink-0">{previewValue(field)} ({field.type})</span>
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
             </div>
           )}
         </div>
-
         <div className="w-80 bg-[#1a1a1a] border border-[#303030] rounded flex flex-col shadow-xl flex-shrink-0">
           <div className="h-8 bg-[#252526] flex items-center justify-between px-3 border-b border-[#303030] text-white font-medium">
             Live JSON Output
@@ -1682,52 +1846,98 @@ function ComponentView(props: { path: string; keyboardLocked: boolean }) {
         </div>
       </div>
 
-      {/* Right panel: Component Metadata + Schema / Fields */}
+      {/* Right: metadata + shape editor */}
       <aside className="w-72 bg-[#1e1e1e] border-l border-[#303030] flex flex-col flex-shrink-0 shadow-xl">
-        <div className="flex-1 flex flex-col border-b border-[#303030] min-h-[40%]">
+        <div className="flex-1 flex flex-col border-b border-[#303030] min-h-[35%]">
           <div className="h-8 bg-[#252526] flex items-center px-3 border-b border-[#303030] text-white font-medium select-none">Component Metadata</div>
           <div className="flex-1 overflow-y-auto p-3 space-y-3">
             <div className="space-y-1">
               <span className="text-[#888] text-[10px] uppercase font-bold tracking-wide">Label</span>
-              <input type="text" className="w-full engine-input px-2 py-1.5 rounded text-white text-xs" value={label} disabled={props.keyboardLocked}
-                onChange={(e) => setLabelValue(e.target.value)} />
+              <input type="text" className="w-full engine-input px-2 py-1.5 rounded text-white text-xs" value={st?.label ?? ""} disabled={props.keyboardLocked || !st} onChange={(e) => commit({ label: e.target.value })} />
             </div>
             <div className="space-y-1">
               <span className="text-[#888] text-[10px] uppercase font-bold tracking-wide">ID (Internal)</span>
-              <input type="text" className="w-full engine-input px-2 py-1.5 rounded text-[#aaa] text-xs font-mono opacity-70 cursor-not-allowed" value={id} readOnly title="Auto-generated on creation" />
+              <input type="text" className="w-full engine-input px-2 py-1.5 rounded text-[#aaa] text-xs font-mono opacity-70 cursor-not-allowed" value={st?.id ?? ""} readOnly title="Auto-generated on creation" />
+            </div>
+            <div className="space-y-1">
+              <span className="text-[#888] text-[10px] uppercase font-bold tracking-wide">Kind</span>
+              <select className="w-full engine-input px-2 py-1.5 rounded text-white text-xs" value={st?.kind ?? "struct"} disabled={props.keyboardLocked || !st} onChange={(e) => changeKind(e.target.value as ComponentEditKind)}>
+                <option value="struct">Struct</option>
+                <option value="scalar">Scalar</option>
+                <option value="enum">Enum</option>
+              </select>
             </div>
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col min-h-[50%]">
-          <div className="h-8 bg-[#252526] flex items-center px-3 border-b border-[#303030] text-white font-medium select-none justify-between">
-            Schema / Fields
-            <i className="ph ph-plus text-[#888] hover:text-white cursor-pointer" title="Add Field" onClick={addField} />
-          </div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-2">
-            {fields.map((field, index) => (
-              <div key={index} className="bg-[#252526] rounded border border-[#303030] p-2 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <i className="ph ph-dots-six-vertical text-[#888]" />
-                    <input type="text" className="w-20 bg-black border border-[#444] text-white px-1 text-xs rounded focus:border-[#0070e0] outline-none" value={field.name} disabled={props.keyboardLocked}
-                      onChange={(e) => patchField(index, { name: e.target.value })} />
+        <div className="flex-1 flex flex-col min-h-[45%]">
+          {st?.kind === "enum" ? (
+            <>
+              <div className="h-8 bg-[#252526] flex items-center px-3 border-b border-[#303030] text-white font-medium select-none justify-between">
+                Enum Values
+                <i className="ph ph-plus text-[#888] hover:text-white cursor-pointer" title="Add value" onClick={() => commit({ values: [...st.values, `value${st.values.length + 1}`] })} />
+              </div>
+              <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                {st.values.map((v, i) => (
+                  <div key={i} className="flex items-center gap-2 bg-[#252526] rounded border border-[#303030] p-2">
+                    <input type="radio" className="accent-[#0070e0]" title="Default" checked={st.enumDefault === v} disabled={props.keyboardLocked} onChange={() => commit({ enumDefault: v })} />
+                    <input type="text" className="flex-1 min-w-0 bg-black border border-[#444] text-white px-1 py-0.5 text-xs rounded focus:border-[#0070e0] outline-none" value={v} disabled={props.keyboardLocked}
+                      onChange={(e) => { const values = st.values.map((x, xi) => xi === i ? e.target.value : x); commit({ values, enumDefault: st.enumDefault === v ? e.target.value : st.enumDefault }); }} />
+                    <i className="ph ph-trash text-[#f87171] hover:text-red-400 cursor-pointer" title="Remove" onClick={() => { if (!props.keyboardLocked) commit({ values: st.values.filter((_, xi) => xi !== i) }); }} />
                   </div>
-                  <i className="ph ph-trash text-[#f87171] hover:text-red-400 cursor-pointer" title="Remove field" onClick={() => { if (!props.keyboardLocked) removeField(index); }} />
-                </div>
-                <div className="flex gap-2 items-center">
-                  <select className="flex-1 engine-input px-1 py-1 rounded text-white text-xs cursor-pointer" value={field.type} disabled={props.keyboardLocked}
-                    onChange={(e) => { const type = e.target.value as ComponentFieldType; patchField(index, { type, value: defaultForComponentType(type) }); }}>
-                    {COMPONENT_FIELD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                ))}
+                {st.values.length === 0 && <div className="text-[#666] p-2">no values</div>}
+              </div>
+            </>
+          ) : st?.kind === "scalar" ? (
+            <>
+              <div className="h-8 bg-[#252526] flex items-center px-3 border-b border-[#303030] text-white font-medium select-none">Value</div>
+              <div className="flex-1 overflow-y-auto p-3 space-y-3">
+                <div className="space-y-1">
+                  <span className="text-[#888] text-[10px] uppercase font-bold tracking-wide">Type</span>
+                  <select className="w-full engine-input px-2 py-1.5 rounded text-white text-xs" value={st.scalarType} disabled={props.keyboardLocked}
+                    onChange={(e) => { const type = e.target.value as ComponentFieldType; commit({ scalarType: type, scalarValue: defaultForComponentType(type) }); }}>
+                    {COMPONENT_FIELD_TYPES.filter((t) => t !== "Vector2").map((t) => <option key={t} value={t}>{t}</option>)}
                   </select>
-                  {renderValueInput(field, index)}
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[#888] text-[10px] uppercase font-bold tracking-wide">Default</span>
+                  {valueInput(st.scalarType, st.scalarValue, (next) => commit({ scalarValue: next }))}
                 </div>
               </div>
-            ))}
-            <button className="w-full py-1.5 mt-2 bg-[#2d2d2d] hover:bg-[#3a3a3a] border border-[#303030] rounded text-white transition-colors flex justify-center items-center gap-2 disabled:opacity-40" disabled={props.keyboardLocked} onClick={addField}>
-              <i className="ph ph-plus" /> Add Property
-            </button>
-          </div>
+            </>
+          ) : st ? (
+            <>
+              <div className="h-8 bg-[#252526] flex items-center px-3 border-b border-[#303030] text-white font-medium select-none justify-between">
+                Schema / Fields
+                <i className="ph ph-plus text-[#888] hover:text-white cursor-pointer" title="Add Field" onClick={() => commit({ fields: [...st.fields, { name: `field${st.fields.length + 1}`, type: "Float", value: 0 }] })} />
+              </div>
+              <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                {st.fields.map((field, index) => (
+                  <div key={index} className="bg-[#252526] rounded border border-[#303030] p-2 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <i className="ph ph-dots-six-vertical text-[#888]" />
+                        <input type="text" className="w-20 bg-black border border-[#444] text-white px-1 text-xs rounded focus:border-[#0070e0] outline-none" value={field.name} disabled={props.keyboardLocked}
+                          onChange={(e) => commit({ fields: st.fields.map((f, i) => i === index ? { ...f, name: e.target.value } : f) })} />
+                      </div>
+                      <i className="ph ph-trash text-[#f87171] hover:text-red-400 cursor-pointer" title="Remove field" onClick={() => { if (!props.keyboardLocked) commit({ fields: st.fields.filter((_, i) => i !== index) }); }} />
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      <select className="flex-1 engine-input px-1 py-1 rounded text-white text-xs" value={field.type} disabled={props.keyboardLocked}
+                        onChange={(e) => { const type = e.target.value as ComponentFieldType; commit({ fields: st.fields.map((f, i) => i === index ? { ...f, type, value: defaultForComponentType(type) } : f) }); }}>
+                        {COMPONENT_FIELD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                      {valueInput(field.type, field.value, (next) => commit({ fields: st.fields.map((f, i) => i === index ? { ...f, value: next } : f) }), true)}
+                    </div>
+                  </div>
+                ))}
+                <button className="w-full py-1.5 mt-2 bg-[#2d2d2d] hover:bg-[#3a3a3a] border border-[#303030] rounded text-white transition-colors flex justify-center items-center gap-2 disabled:opacity-40" disabled={props.keyboardLocked} onClick={() => commit({ fields: [...st.fields, { name: `field${st.fields.length + 1}`, type: "Float", value: 0 }] })}>
+                  <i className="ph ph-plus" /> Add Property
+                </button>
+              </div>
+            </>
+          ) : null}
         </div>
       </aside>
     </div>
@@ -1996,6 +2206,7 @@ function BlueprintView(props: { path: string; keyboardLocked: boolean }) {
   };
 
   const filteredLibrary = GRAPH_NODE_LIBRARY.filter((spec) => `${spec.label} ${spec.type}`.toLowerCase().includes(paletteQuery.trim().toLowerCase()));
+  const componentDefs: ComponentDefinition[] = getComponentDefinitions();
 
   return (
     <div className="absolute inset-0 z-40 flex pointer-events-auto text-xs">
@@ -2112,10 +2323,37 @@ function BlueprintView(props: { path: string; keyboardLocked: boolean }) {
                     </div>
                     {spec && spec.fields.length > 0 && (
                       <div className="px-2 pb-2 space-y-1.5">
-                        {spec.fields.map((field) => (
+                        {spec.fields.map((field) => {
+                          const selectCls = "flex-1 min-w-0 bg-[#000] border border-[#303030] text-[9px] px-1 py-0.5 rounded text-[#ccc]";
+                          const targetDef = componentDefs.find((d) => d.id === String(node.data?.component ?? ""));
+                          const isComponentField = field.name === "component";
+                          const isEnumValueField = node.type === "SetComponent" && field.name === "value" && targetDef?.kind === "enum" && (targetDef.values?.length ?? 0) > 0;
+                          return (
                           <div key={field.name} className="flex items-center gap-1.5">
                             <span className="text-[#888] w-14 truncate">{field.label}</span>
-                            {field.type === "boolean" ? (
+                            {isComponentField ? (
+                              <select
+                                className={selectCls}
+                                value={String(node.data?.component ?? "")}
+                                disabled={props.keyboardLocked}
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onChange={(event) => updateNodeData(node.id, field.name, event.target.value, field.type)}
+                              >
+                                <option value="">—</option>
+                                {componentDefs.map((d) => <option key={d.id} value={d.id}>{d.id}</option>)}
+                                {Boolean(node.data?.component) && !componentDefs.some((d) => d.id === node.data?.component) && <option value={String(node.data?.component)}>{String(node.data?.component)}</option>}
+                              </select>
+                            ) : isEnumValueField ? (
+                              <select
+                                className={selectCls}
+                                value={String(node.data?.value ?? "")}
+                                disabled={props.keyboardLocked}
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onChange={(event) => updateNodeData(node.id, field.name, event.target.value, field.type)}
+                              >
+                                {(targetDef?.values ?? []).map((v) => <option key={v} value={v}>{v}</option>)}
+                              </select>
+                            ) : field.type === "boolean" ? (
                               <input
                                 type="checkbox"
                                 className="accent-[#0070e0]"
@@ -2135,7 +2373,8 @@ function BlueprintView(props: { path: string; keyboardLocked: boolean }) {
                               />
                             )}
                           </div>
-                        ))}
+                        );
+                        })}
                       </div>
                     )}
                   </div>

@@ -441,16 +441,49 @@ export async function loadGraphDefinition(name: string): Promise<GraphDefinition
   const cached = graphCache.get(name);
   if (cached) return cached;
 
-  const pending = fetch(`/api/content/file?path=${encodeURIComponent(`systems/${name}`)}`)
-    .then(async (res) => {
+  const pending = resolveGraphPath(name)
+    .then(async (path) => {
+      const res = await fetch(`/api/content/file?path=${encodeURIComponent(path)}`);
       if (!res.ok) return null;
-      const raw = await res.json();
-      return parseGraphDefinition(raw);
+      return parseGraphDefinition(await res.json());
     })
     .catch(() => null);
 
   graphCache.set(name, pending);
   return pending;
+}
+
+type GraphTreeNode = { name?: string; path: string; kind?: string; children?: GraphTreeNode[] };
+
+// Resolve a stored system identifier to a content path. Explicit paths (containing "/") are used
+// directly; a bare name is looked up across the whole content tree (a graph asset in any folder),
+// falling back to the legacy `systems/<name>` location.
+async function resolveGraphPath(name: string): Promise<string> {
+  if (name.includes("/")) return name;
+  try {
+    const res = await fetch("/api/content/tree");
+    if (res.ok) {
+      const match = findGraphPathByName(await res.json() as GraphTreeNode[], name);
+      if (match) return match;
+    }
+  } catch {
+    // ignore; fall through to legacy location
+  }
+  return `systems/${name}`;
+}
+
+function findGraphPathByName(nodes: GraphTreeNode[], name: string): string | null {
+  for (const node of nodes) {
+    if (node.kind === "graph") {
+      const base = node.path.split("/").filter(Boolean).at(-1);
+      if (base === name || node.name === name) return node.path;
+    }
+    if (node.children?.length) {
+      const found = findGraphPathByName(node.children, name);
+      if (found) return found;
+    }
+  }
+  return null;
 }
 
 export async function createGraphSystem(world: DemoGameWorld, graphOrName: string | GraphDefinition) {

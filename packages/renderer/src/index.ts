@@ -151,6 +151,11 @@ export function createRenderSystem(
   return () => {
     for (const [e, spriteRef] of spriteStore) {
       const { sprite, offset, anchor } = spriteRef;
+      // Skip/purge destroyed sprites (e.g. left over from a previous world after engine.destroy()).
+      if (!sprite || sprite.destroyed || !sprite.anchor) {
+        spriteStore.delete(e);
+        continue;
+      }
       if (!sprite.parent) stage.addChild(sprite);
       const t = transformStore.get(e);
       if (!t) continue;
@@ -186,6 +191,7 @@ export type EngineApplication = {
   start: () => void;
   stop: () => void;
   destroy: () => void;
+  installSystems: () => void;
 };
 
 export async function createEngineApplication(options: EngineApplicationOptions): Promise<EngineApplication> {
@@ -193,8 +199,11 @@ export async function createEngineApplication(options: EngineApplicationOptions)
   await app.init(options.pixi);
   options.mount.appendChild(app.canvas);
 
-  options.world.addSystem("sprite-animation", createSpriteAnimationSystem());
-  options.world.addSystem("render", createRenderSystem(app.stage));
+  const installSystems = () => {
+    options.world.addSystem("sprite-animation", createSpriteAnimationSystem());
+    options.world.addSystem("render", createRenderSystem(app.stage));
+  };
+  installSystems();
 
   let frame = 0;
   let last = performance.now();
@@ -219,6 +228,7 @@ export async function createEngineApplication(options: EngineApplicationOptions)
   return {
     app,
     tick,
+    installSystems,
     start() {
       if (frame) return;
       last = performance.now();

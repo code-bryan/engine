@@ -92,10 +92,15 @@ export type RuntimeDebuggerOptions<TWorld extends DebuggerWorld = DebuggerWorld>
   onDeleteContent?: (path: string, kind: ContentTreeNode["kind"]) => void;
   initialContentDrawerOpen?: boolean;
   onContentDrawerToggled?: (open: boolean) => void;
+  initialOpenWorlds?: string[];
+  onOpenWorldsChanged?: (paths: string[]) => void;
+  onAddSystem?: (name: string) => void;
+  onRemoveSystem?: (name: string) => void;
 };
 
 export type DebugEditor<TWorld extends DebuggerWorld = DebuggerWorld> = {
   world: TWorld;
+  setActiveSystems: (names: string[]) => void;
   destroy: () => void;
 };
 
@@ -154,8 +159,10 @@ export type DebugState = {
   inspectorQuery: string;
   openDropdown: string | undefined;
   contentDrawerOpen: boolean;
+  openWorlds: string[];
   openDocs: Array<{ path: string; kind: "graph" | "component" }>;
   activeDoc: string | null;
+  sceneSelected: boolean;
   snapGrid: boolean;
   snapGridSize: number;
   snapRotate: boolean;

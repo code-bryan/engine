@@ -20,6 +20,8 @@ export type DebugEditorPlayback = {
   onCreateGraph?: (path: string) => void;
   onImportContent?: (path: string, value: unknown) => void;
   onDeleteContent?: (path: string, kind: "folder" | "world" | "prefab" | "component" | "graph" | "file") => void;
+  onAddSystem?: (name: string) => void;
+  onRemoveSystem?: (name: string) => void;
 };
 
 export type DebugEditorOptions = DebugEditorPlayback & {
@@ -28,6 +30,8 @@ export type DebugEditorOptions = DebugEditorPlayback & {
   activeSystems?: string[];
   initialContentDrawerOpen?: boolean;
   onContentDrawerToggled?: (open: boolean) => void;
+  initialOpenWorlds?: string[];
+  onOpenWorldsChanged?: (paths: string[]) => void;
 };
 
 export function attachDebugEditor(world: GameWorld, engine: EngineApplication, options: DebugEditorOptions) {
@@ -48,11 +52,15 @@ export function attachDebugEditor(world: GameWorld, engine: EngineApplication, o
     onCreateGraph: playback.onCreateGraph,
     onImportContent: playback.onImportContent,
     onDeleteContent: playback.onDeleteContent,
+    onAddSystem: playback.onAddSystem,
+    onRemoveSystem: playback.onRemoveSystem,
     contentTree: options.contentTree,
     activeWorld: options.activeWorld,
     activeSystems: options.activeSystems,
     initialContentDrawerOpen: options.initialContentDrawerOpen,
     onContentDrawerToggled: options.onContentDrawerToggled,
+    initialOpenWorlds: options.initialOpenWorlds,
+    onOpenWorldsChanged: options.onOpenWorldsChanged,
     onOpenLevel: playback.onOpenLevel ? () => {
       const input = document.createElement("input");
       input.type = "file";

@@ -101,6 +101,11 @@ export class World {
     if (entry) entry.enabled = enabled;
   }
 
+  clearSystems() {
+    this.systemEntries = [];
+    this.systems = [];
+  }
+
   onDebugEvent(listener: WorldDebugListener) {
     this.debugListeners.add(listener);
     return () => this.debugListeners.delete(listener);

@@ -1,0 +1,17 @@
+{
+  "version": 3,
+  "name": "prueba",
+  "entrypoint": "8f695c66-e5f9-4293-b0d7-4cd37d408e3c",
+  "variables": [],
+  "nodes": [
+    {
+      "id": "906b1052-2f1d-4db0-b7ae-816328203304",
+      "type": "OnUpdate",
+      "position": {
+        "x": 76,
+        "y": 86
+      }
+    }
+  ],
+  "edges": []
+}

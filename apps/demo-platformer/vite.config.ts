@@ -133,7 +133,7 @@ async function readContentTree(root: string, base = ""): Promise<ContentTreeNode
       } satisfies ContentTreeNode;
     }
     if (entry.isFile() && entry.name.endsWith(".json")) {
-      const kind = path.startsWith("worlds/")
+      const folderKind = path.startsWith("worlds/")
         ? "world"
         : path.startsWith("prefabs/")
           ? "prefab"
@@ -142,6 +142,19 @@ async function readContentTree(root: string, base = ""): Promise<ContentTreeNode
             : path.startsWith("systems/")
               ? "graph"
               : "file";
+      // A graph/system asset can live in any folder — detect it by shape so it isn't
+      // misclassified as a plain "file" outside systems/.
+      let kind: ContentTreeNode["kind"] = folderKind;
+      if (kind === "file") {
+        try {
+          const parsed = JSON.parse(await readFile(abs, "utf8"));
+          if (parsed && Array.isArray(parsed.nodes) && Array.isArray(parsed.edges) && typeof parsed.entrypoint === "string") {
+            kind = "graph";
+          }
+        } catch {
+          // not JSON we can read; leave as "file"
+        }
+      }
       return {
         name: entry.name.replace(/\.json$/, ""),
         path: path.replace(/\.json$/, ""),

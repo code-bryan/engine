@@ -2,5 +2,7 @@
   "version": 1,
   "id": "facing",
   "label": "Facing",
+  "kind": "enum",
+  "values": ["left", "right"],
   "defaultValue": "right"
 }

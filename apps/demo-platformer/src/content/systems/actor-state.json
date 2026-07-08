@@ -27,8 +27,8 @@
       "id": "4865a1d7-6b49-4a2a-970c-9165fb24e05d",
       "type": "GetComponent",
       "position": {
-        "x": 464,
-        "y": 140
+        "x": 391,
+        "y": 135
       },
       "data": {
         "component": "velocity"
