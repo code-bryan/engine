@@ -757,6 +757,22 @@ export function ensureDebuggerStyles() {
       color: #a1a1aa;
       font-size: 11px;
     }
+    .debugger-graph-zoom-controls {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      background: rgba(24, 24, 27, 0.65);
+    }
+    .debugger-graph-zoom-controls .debugger-content-action {
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+    }
     .debugger-graph-meta {
       display: flex;
       flex-wrap: wrap;
@@ -789,10 +805,22 @@ export function ensureDebuggerStyles() {
     }
     .debugger-graph-canvas__scroll {
       min-height: 0;
-      overflow: auto;
+      overflow: hidden;
       border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 12px;
       background: linear-gradient(180deg, rgba(24, 24, 27, 0.92), rgba(9, 9, 11, 0.98));
+      display: flex;
+    }
+    .debugger-graph-canvas__viewport {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      touch-action: none;
+      cursor: grab;
+    }
+    .debugger-graph-canvas__viewport:active {
+      cursor: grabbing;
     }
     .debugger-graph-canvas {
       position: relative;
@@ -801,6 +829,7 @@ export function ensureDebuggerStyles() {
         linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
         linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
       background-size: 28px 28px;
+      transform-origin: top left;
     }
     .debugger-graph-canvas__edges {
       position: absolute;
@@ -1497,6 +1526,252 @@ export function ensureDebuggerStyles() {
     .debugger-worlds-create__error {
       font-size: 10px;
       color: #f87171;
+    }
+    .app-shell--debug {
+      background:
+        radial-gradient(circle at top, rgba(59, 130, 246, 0.10), transparent 32%),
+        linear-gradient(180deg, #0a0d12 0%, #090b10 100%);
+    }
+    .debugger-root {
+      background:
+        linear-gradient(180deg, rgba(15, 23, 42, 0.16), rgba(15, 23, 42, 0.04)),
+        radial-gradient(circle at 20% 0%, rgba(96, 165, 250, 0.08), transparent 30%);
+    }
+    .debugger-viewport-hud {
+      top: 84px;
+      left: 22px;
+      border-radius: 999px;
+      background: rgba(3, 6, 14, 0.74);
+      border-color: rgba(148, 163, 184, 0.18);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+    }
+    .debugger-layout {
+      grid-template-columns: minmax(0, 1fr) 372px;
+      grid-template-rows: 72px minmax(0, 1fr);
+      grid-template-areas:
+        "top top"
+        "stage right";
+      gap: 12px;
+      padding: 12px;
+    }
+    .debugger-layout--playing .debugger-toolbar {
+      border-color: rgba(96, 165, 250, 0.22);
+    }
+    .debugger-stage {
+      grid-area: stage;
+      min-width: 0;
+      min-height: 0;
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      border-radius: 22px;
+      background:
+        linear-gradient(180deg, rgba(15, 23, 42, 0.18), rgba(2, 6, 23, 0.04)),
+        radial-gradient(circle at top left, rgba(96, 165, 250, 0.06), transparent 26%);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.05),
+        0 30px 60px rgba(0, 0, 0, 0.35);
+      overflow: hidden;
+      position: relative;
+    }
+    .debugger-stage::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      opacity: 0.16;
+      pointer-events: none;
+      mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.5), transparent 92%);
+    }
+    .debugger-toolbar {
+      grid-template-columns: minmax(180px, 240px) minmax(0, 1fr) auto auto;
+      gap: 14px;
+      padding: 12px 16px;
+      border-radius: 20px;
+      border-color: rgba(148, 163, 184, 0.14);
+      background: linear-gradient(180deg, rgba(15, 18, 28, 0.96), rgba(9, 11, 17, 0.92));
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.04),
+        0 20px 50px rgba(0, 0, 0, 0.4);
+    }
+    .debugger-toolbar__brand {
+      display: grid;
+      gap: 2px;
+      align-content: center;
+      min-width: 0;
+    }
+    .debugger-toolbar__eyebrow {
+      color: #7c8aa5;
+      font-size: 10px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+    .debugger-toolbar__title {
+      color: #f8fafc;
+      font-size: 14px;
+      line-height: 1.1;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .debugger-toolbar__status {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      color: #94a3b8;
+      font-size: 11px;
+    }
+    .debugger-toolbar__status span {
+      padding: 3px 8px;
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .debugger-toolbar__left {
+      flex-wrap: wrap;
+    }
+    .debugger-panel--right {
+      grid-area: right;
+      grid-template-rows: minmax(0, 1fr);
+      align-content: start;
+      background: linear-gradient(180deg, rgba(13, 17, 24, 0.95), rgba(8, 11, 16, 0.92));
+      border-color: rgba(148, 163, 184, 0.14);
+    }
+    .debugger-panel--right > * {
+      min-height: 0;
+    }
+    .debugger-section--debug {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 10px;
+      min-height: 0;
+    }
+    .debugger-drawer {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      height: min(48vh, 560px);
+      z-index: 40;
+      display: grid;
+      grid-template-rows: 54px minmax(0, 1fr);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      border-radius: 22px 22px 18px 18px;
+      background: linear-gradient(180deg, rgba(10, 13, 20, 0.97), rgba(6, 8, 13, 0.96));
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.04),
+        0 30px 80px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(24px);
+      transform: translateY(calc(100% - 54px));
+      transition: transform 180ms ease;
+      overflow: hidden;
+      pointer-events: auto;
+    }
+    .debugger-drawer.is-open {
+      transform: translateY(0);
+    }
+    .debugger-drawer__chrome {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+      background: linear-gradient(180deg, rgba(17, 24, 39, 0.96), rgba(10, 13, 20, 0.96));
+    }
+    .debugger-drawer__toggle {
+      height: 32px;
+      padding: 0 12px;
+      border: 1px solid rgba(96, 165, 250, 0.18);
+      border-radius: 10px;
+      background: rgba(37, 99, 235, 0.12);
+      color: #dbeafe;
+      cursor: pointer;
+      font: inherit;
+      font-size: 12px;
+    }
+    .debugger-drawer__toggle:hover {
+      background: rgba(37, 99, 235, 0.2);
+    }
+    .debugger-drawer__tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .debugger-drawer__tab {
+      height: 30px;
+      padding: 0 12px;
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.02);
+      color: #94a3b8;
+      cursor: pointer;
+      font: inherit;
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .debugger-drawer__tab:hover {
+      color: #e2e8f0;
+      border-color: rgba(148, 163, 184, 0.2);
+    }
+    .debugger-drawer__tab.is-active {
+      border-color: rgba(96, 165, 250, 0.26);
+      background: rgba(37, 99, 235, 0.16);
+      color: #bfdbfe;
+    }
+    .debugger-drawer__body {
+      min-height: 0;
+      padding: 12px;
+      overflow: auto;
+    }
+    .debugger-drawer-panel {
+      min-height: 100%;
+    }
+    .debugger-drawer-panel--systems {
+      display: grid;
+      min-height: 100%;
+    }
+    .debugger-drawer-panel__grid {
+      display: grid;
+      grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+      gap: 12px;
+      min-height: 100%;
+    }
+    .debugger-drawer-panel--snapshots,
+    .debugger-drawer-panel--log {
+      display: grid;
+      align-content: start;
+      gap: 10px;
+    }
+    .debugger-drawer-panel--log {
+      grid-template-rows: auto minmax(0, 1fr);
+      min-height: 100%;
+    }
+    .debugger-drawer-panel--log .debugger-log {
+      min-height: 0;
+    }
+    .debugger-drawer-panel--snapshots .debugger-snapshot-list {
+      max-width: 640px;
+    }
+    .debugger-drawer-panel--systems .debugger-sidepanels {
+      align-content: start;
+    }
+    .debugger-drawer-panel--systems .debugger-section--grow {
+      min-height: 0;
+    }
+    .debugger-drawer-panel--systems .debugger-systems {
+      max-height: none;
+    }
+    .debugger-input:disabled,
+    .debugger-field__input:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .debugger-content-action:disabled,
+    .debugger-drawer__toggle:disabled,
+    .debugger-drawer__tab:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
     }
   `;
   document.head.appendChild(style);

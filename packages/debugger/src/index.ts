@@ -508,6 +508,8 @@ export function attachRuntimeDebugger<TWorld extends DebuggerWorld>(
   };
 
   const handleWindowKeyDown = (event: KeyboardEvent) => {
+    if (options.playback?.getState?.() === "playing") return;
+
     const target = event.target;
     if (
       target instanceof HTMLInputElement

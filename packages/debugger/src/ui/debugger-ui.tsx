@@ -26,9 +26,11 @@ import {
   X,
 } from "lucide-react";
 import { createPortal } from "react-dom";
-import { useEffect, useLayoutEffect, useRef, useState, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction, type WheelEvent as ReactWheelEvent } from "react";
 import { GRAPH_NODE_LIBRARY, type GraphDefinition, type GraphNodeDefinition, type GraphNodeSpec, type GraphVariableDefinition } from "@engine/runtime";
 import type { ContentTreeNode, EditorToolMode } from "../shared/types";
+
+const GRAPH_ZOOM_SENSITIVITY = 2.5;
 
 export type DebuggerStatusCardView = {
   title: string;
@@ -78,6 +80,8 @@ export type DebuggerLogEntryView = {
   text: string;
   count: number;
 };
+
+type BottomDrawerTab = "content" | "systems" | "snapshots" | "logs";
 
 export type DebuggerUiProps = {
   fps: string;
@@ -138,10 +142,19 @@ export type DebuggerUiProps = {
 export function DebuggerUi(props: DebuggerUiProps) {
   const selectedEntityRef = useRef<HTMLButtonElement | null>(null);
   const [cameraTuningOpen, setCameraTuningOpen] = useState(false);
+  const [drawerTab, setDrawerTab] = useState<BottomDrawerTab>("content");
+  const isPlaying = props.playbackState === "playing";
+  const selectedEntity = props.entities.find((entity) => entity.selected);
 
   useEffect(() => {
     selectedEntityRef.current?.scrollIntoView({ block: "nearest", behavior: "instant" });
   }, [props.entities]);
+
+  useEffect(() => {
+    if (!isPlaying) return;
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active.closest(".debugger-root")) active.blur();
+  }, [isPlaying]);
 
   useEffect(() => {
     if (!cameraTuningOpen) return;
@@ -166,8 +179,16 @@ export function DebuggerUi(props: DebuggerUiProps) {
           <strong className="debugger-viewport-hud__value debugger-viewport-hud__value--ms">{props.frameMs}</strong>
         </div>
       </div>
-      <div className="debugger-layout" onClickCapture={props.onCloseMenus}>
+      <div className={`debugger-layout${isPlaying ? " debugger-layout--playing" : ""}`} onClickCapture={props.onCloseMenus}>
         <header className="debugger-toolbar">
+          <div className="debugger-toolbar__brand">
+            <span className="debugger-toolbar__eyebrow">Engine Editor</span>
+            <strong className="debugger-toolbar__title">{isPlaying ? "Play Mode" : "Edit Mode"}</strong>
+            <div className="debugger-toolbar__status">
+              <span>{props.zoomLabel}</span>
+              <span>{props.cameraLocked ? "camera locked" : "camera free"}</span>
+            </div>
+          </div>
           <div className="debugger-toolbar__left">
             <div className={`debugger-dropdown${props.debugMenuOpen ? " is-open" : ""}`} data-dropdown-root onClick={(event) => event.stopPropagation()}>
               <button className="debugger-dropdown__trigger" onClick={props.onToggleDebugMenu}>
@@ -259,140 +280,258 @@ export function DebuggerUi(props: DebuggerUiProps) {
             </div>
           </div>
         </header>
-        <aside className="debugger-panel debugger-panel--left">
-          <div className="debugger-sidepanels">
-            {props.statusCards.map((card) => <RuntimeCard key={card.title} title={card.title} fields={card.fields} />)}
-          </div>
-          <section className="debugger-section">
-            <div className="debugger-snapshot-header">
-              <div className="debugger-section__title" style={{ marginBottom: 0 }}>Snapshots</div>
-              <button className="debugger-snapshot-save" onClick={props.onSaveSnapshot}>Save</button>
-            </div>
-            <div className="debugger-snapshot-list">
-              {props.snapshots.length === 0 ? <span style={{ color: "#52525b", fontSize: 11 }}>none saved</span> : props.snapshots.map((snap) => (
-                <div className="debugger-snapshot-row" key={snap.index}>
-                  <span className="debugger-snapshot-row__label">frame {snap.frame}</span>
-                  <span>{snap.entityCount} entities</span>
-                  <button className="debugger-snapshot-restore" onClick={() => props.onRestoreSnapshot(snap.index)}>Restore</button>
-                </div>
-              ))}
-            </div>
-          </section>
-          <section className="debugger-section debugger-section--grow">
-            <div className="debugger-section__title">Systems</div>
-            <div className="debugger-systems">
-              {props.systems.length === 0 ? (
-                <div className="debugger-card"><div className="debugger-field"><span>systems</span><strong>waiting for frame</strong></div></div>
-              ) : props.systems.map((system) => (
-                <div className={`debugger-card debugger-system${system.enabled ? "" : " debugger-system--disabled"}`} key={system.index}>
-                  <div className="debugger-field">
-                    <button className="debugger-system__toggle" onClick={() => props.onToggleSystem(system.index)} title={system.enabled ? "Disable system" : "Enable system"}>
-                      {system.enabled ? "●" : "○"}
-                    </button>
-                    <span className="debugger-system__label">{system.label}</span>
-                    <strong className="debugger-system__timing">{system.timing}</strong>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        </aside>
+        <main className="debugger-stage" aria-hidden="true" />
         <aside className="debugger-panel debugger-panel--right">
-          <section className="debugger-section debugger-section--entities">
-            <div className="debugger-section__title">Entities</div>
-            <input
-              className="debugger-input"
-              placeholder="search entity or tag"
-              value={props.entityQuery}
-              onChange={(event) => props.onEntityQueryChange(event.target.value)}
-            />
-            <div className="debugger-entity-list">
-              {props.entities.map((entity) => (
-                <button
-                  key={entity.entity}
-                  ref={entity.selected ? selectedEntityRef : null}
-                  className={`debugger-entity${entity.selected ? " is-selected" : ""}`}
-                  onClick={() => props.onSelectEntity(entity.entity)}
-                >
-                  <span>{entity.title}</span>
-                  <span className="debugger-pill">{entity.tag}</span>
-                </button>
-              ))}
-            </div>
-          </section>
-          <section className="debugger-section debugger-section--inspector">
-            <div className="debugger-section__title">Inspector</div>
-            <input
-              className="debugger-input"
-              placeholder="filter fields…"
-              value={props.inspectorQuery}
-              onChange={(event) => props.onInspectorQueryChange(event.target.value)}
-            />
-            <div className="debugger-inspector">
-              {props.inspectorCards.map((card) => (
-                <div className={`debugger-card${card.collapsed ? " debugger-card--collapsed" : ""}`} key={card.id}>
-                  <div className="debugger-card__header">
-                    <span className="debugger-card__title">{card.title}</span>
-                    <button className="debugger-card__collapse" onClick={() => props.onToggleComponentCollapse(card.id)}>
-                      {card.collapsed ? "▸" : "▾"}
-                    </button>
+          {isPlaying ? (
+            <section className="debugger-section debugger-section--debug">
+              <div className="debugger-section__title">Debug System</div>
+              <div className="debugger-sidepanels">
+                <RuntimeCard
+                  title="Runtime"
+                  fields={[
+                    { label: "FPS", value: props.fps },
+                    { label: "Frame", value: `${props.frameMs} ms` },
+                    { label: "Playback", value: props.playbackState },
+                    { label: "Camera", value: props.cameraLocked ? "locked" : "free" },
+                    { label: "Selection", value: selectedEntity ? `#${selectedEntity.entity} ${selectedEntity.title}` : "none" },
+                  ]}
+                />
+                {props.statusCards.map((card) => <RuntimeCard key={card.title} title={card.title} fields={card.fields} />)}
+                <section className="debugger-section debugger-section--grow">
+                  <div className="debugger-section__title">Systems</div>
+                  <div className="debugger-systems">
+                    {props.systems.length === 0 ? (
+                      <div className="debugger-card"><div className="debugger-field"><span>systems</span><strong>waiting for frame</strong></div></div>
+                    ) : props.systems.map((system) => (
+                      <div className={`debugger-card debugger-system${system.enabled ? "" : " debugger-system--disabled"}`} key={system.index}>
+                        <div className="debugger-field">
+                          <button className="debugger-system__toggle" onClick={() => props.onToggleSystem(system.index)} title={system.enabled ? "Disable system" : "Enable system"}>
+                            {system.enabled ? "●" : "○"}
+                          </button>
+                          <span className="debugger-system__label">{system.label}</span>
+                          <strong className="debugger-system__timing">{system.timing}</strong>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  {card.collapsed ? null : card.fields.map((field, index) => (
-                    <InspectorField
-                      key={`${card.id}-${field.label}-${index}`}
-                      field={field}
-                      onEdit={props.onInspectorEdit}
-                      onSelectEntity={props.onSelectEntity}
-                    />
+                </section>
+              </div>
+            </section>
+          ) : (
+            <>
+              <section className="debugger-section debugger-section--entities">
+                <div className="debugger-section__title">Entities</div>
+                <input
+                  className="debugger-input"
+                  placeholder="search entity or tag"
+                  value={props.entityQuery}
+                  onChange={(event) => props.onEntityQueryChange(event.target.value)}
+                />
+                <div className="debugger-entity-list">
+                  {props.entities.map((entity) => (
+                    <button
+                      key={entity.entity}
+                      ref={entity.selected ? selectedEntityRef : null}
+                      className={`debugger-entity${entity.selected ? " is-selected" : ""}`}
+                      onClick={() => props.onSelectEntity(entity.entity)}
+                    >
+                      <span>{entity.title}</span>
+                      <span className="debugger-pill">{entity.tag}</span>
+                    </button>
                   ))}
                 </div>
+              </section>
+              <section className="debugger-section debugger-section--inspector">
+                <div className="debugger-section__title">Inspector</div>
+                <input
+                  className="debugger-input"
+                  placeholder="filter fields…"
+                  value={props.inspectorQuery}
+                  onChange={(event) => props.onInspectorQueryChange(event.target.value)}
+                />
+                <div className="debugger-inspector">
+                  {props.inspectorCards.map((card) => (
+                    <div className={`debugger-card${card.collapsed ? " debugger-card--collapsed" : ""}`} key={card.id}>
+                      <div className="debugger-card__header">
+                        <span className="debugger-card__title">{card.title}</span>
+                        <button className="debugger-card__collapse" onClick={() => props.onToggleComponentCollapse(card.id)}>
+                          {card.collapsed ? "▸" : "▾"}
+                        </button>
+                      </div>
+                      {card.collapsed ? null : card.fields.map((field, index) => (
+                        <InspectorField
+                          key={`${card.id}-${field.label}-${index}`}
+                          field={field}
+                          onEdit={props.onInspectorEdit}
+                          onSelectEntity={props.onSelectEntity}
+                        />
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </>
+          )}
+        </aside>
+        <section className={`debugger-drawer${props.contentDrawerOpen ? " is-open" : ""}`}>
+          <div className="debugger-drawer__chrome">
+            <button className="debugger-drawer__toggle" onClick={props.onToggleContentDrawer}>
+              {props.contentDrawerOpen ? "Collapse Drawer" : "Open Drawer"}
+            </button>
+            <div className="debugger-drawer__tabs" role="tablist" aria-label="Bottom drawer tabs">
+              {[
+                { id: "content" as const, label: "Content" },
+                { id: "systems" as const, label: "Systems" },
+                { id: "snapshots" as const, label: "Snapshots" },
+                { id: "logs" as const, label: "Logs" },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  className={`debugger-drawer__tab${drawerTab === tab.id ? " is-active" : ""}`}
+                  onClick={() => setDrawerTab(tab.id)}
+                  role="tab"
+                  aria-selected={drawerTab === tab.id}
+                >
+                  {tab.label}
+                </button>
               ))}
             </div>
-          </section>
-        </aside>
-        <section className={`debugger-panel debugger-panel--bottom${props.contentDrawerOpen ? " debugger-panel--bottom--content-open" : ""}`}>
-          {props.contentDrawerOpen && (
-            <ContentBrowser
-              tree={props.contentTree}
-              activeWorld={props.activeWorld}
-              activeSystems={props.activeSystems}
-              onLoadWorld={props.onLoadWorld}
-              onCreateFolder={props.onCreateFolder}
-              onCreateWorld={props.onCreateWorld}
-            />
-          )}
-          <section className="debugger-section debugger-section--grow debugger-section--log">
-            <div className="debugger-log-header">
-              <div className="debugger-section__title">Event Log</div>
-              <div className="debugger-log-controls">
-                {props.logFilters.map((filter) => (
-                  <button
-                    key={filter.cat}
-                    className={`debugger-log-chip${filter.active ? " is-active" : ""}`}
-                    onClick={() => props.onToggleLogFilter(filter.cat)}
-                  >
-                    {filter.cat}
-                  </button>
-                ))}
-                <button className={`debugger-log-chip debugger-log-chip--pause${props.logPaused ? " is-active" : ""}`} onClick={props.onToggleLogPause}>
-                  {props.logPaused ? "resume" : "pause"}
-                </button>
-              </div>
-            </div>
-            <div className="debugger-log">
-              {props.logs.length === 0
-                ? <span className="debugger-log__empty">{props.logPaused ? "paused" : "no events"}</span>
-                : props.logs.map((entry, index) => (
-                  <div className={`debugger-log__entry debugger-log__entry--${entry.cat}`} key={`${entry.cat}-${index}-${entry.text}`}>
-                    {entry.text}
-                    {entry.count > 1 ? <span className="debugger-log__count">×{entry.count}</span> : null}
-                  </div>
-                ))}
-            </div>
-          </section>
+          </div>
+          <div className="debugger-drawer__body">
+            {drawerTab === "content" ? (
+              <ContentBrowser
+                tree={props.contentTree}
+                activeWorld={props.activeWorld}
+                activeSystems={props.activeSystems}
+                onLoadWorld={props.onLoadWorld}
+                onCreateFolder={props.onCreateFolder}
+                onCreateWorld={props.onCreateWorld}
+                onCreateComponent={props.onCreateComponent}
+                keyboardLocked={isPlaying}
+              />
+            ) : drawerTab === "systems" ? (
+              <SystemsDrawer
+                statusCards={props.statusCards}
+                systems={props.systems}
+                onToggleSystem={props.onToggleSystem}
+              />
+            ) : drawerTab === "snapshots" ? (
+              <SnapshotsDrawer
+                snapshots={props.snapshots}
+                onSaveSnapshot={props.onSaveSnapshot}
+                onRestoreSnapshot={props.onRestoreSnapshot}
+              />
+            ) : (
+              <EventLogDrawer
+                logs={props.logs}
+                logFilters={props.logFilters}
+                logPaused={props.logPaused}
+                onToggleLogFilter={props.onToggleLogFilter}
+                onToggleLogPause={props.onToggleLogPause}
+              />
+            )}
+          </div>
         </section>
       </div>
     </>
+  );
+}
+
+function SystemsDrawer(props: {
+  statusCards: DebuggerStatusCardView[];
+  systems: DebuggerSystemView[];
+  onToggleSystem: (index: number) => void;
+}) {
+  return (
+    <section className="debugger-drawer-panel debugger-drawer-panel--systems">
+      <div className="debugger-drawer-panel__grid">
+        <div className="debugger-sidepanels">
+          {props.statusCards.map((card) => <RuntimeCard key={card.title} title={card.title} fields={card.fields} />)}
+        </div>
+        <section className="debugger-section debugger-section--grow">
+          <div className="debugger-section__title">Systems</div>
+          <div className="debugger-systems">
+            {props.systems.length === 0 ? (
+              <div className="debugger-card"><div className="debugger-field"><span>systems</span><strong>waiting for frame</strong></div></div>
+            ) : props.systems.map((system) => (
+              <div className={`debugger-card debugger-system${system.enabled ? "" : " debugger-system--disabled"}`} key={system.index}>
+                <div className="debugger-field">
+                  <button className="debugger-system__toggle" onClick={() => props.onToggleSystem(system.index)} title={system.enabled ? "Disable system" : "Enable system"}>
+                    {system.enabled ? "●" : "○"}
+                  </button>
+                  <span className="debugger-system__label">{system.label}</span>
+                  <strong className="debugger-system__timing">{system.timing}</strong>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    </section>
+  );
+}
+
+function SnapshotsDrawer(props: {
+  snapshots: DebuggerSnapshotView[];
+  onSaveSnapshot: () => void;
+  onRestoreSnapshot: (index: number) => void;
+}) {
+  return (
+    <section className="debugger-drawer-panel debugger-drawer-panel--snapshots">
+      <div className="debugger-snapshot-header">
+        <div className="debugger-section__title" style={{ marginBottom: 0 }}>Snapshots</div>
+        <button className="debugger-snapshot-save" onClick={props.onSaveSnapshot}>Save</button>
+      </div>
+      <div className="debugger-snapshot-list">
+        {props.snapshots.length === 0 ? <span style={{ color: "#52525b", fontSize: 11 }}>none saved</span> : props.snapshots.map((snap) => (
+          <div className="debugger-snapshot-row" key={snap.index}>
+            <span className="debugger-snapshot-row__label">frame {snap.frame}</span>
+            <span>{snap.entityCount} entities</span>
+            <button className="debugger-snapshot-restore" onClick={() => props.onRestoreSnapshot(snap.index)}>Restore</button>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function EventLogDrawer(props: {
+  logs: DebuggerLogEntryView[];
+  logFilters: Array<{ cat: string; active: boolean }>;
+  logPaused: boolean;
+  onToggleLogFilter: (cat: string) => void;
+  onToggleLogPause: () => void;
+}) {
+  return (
+    <section className="debugger-drawer-panel debugger-drawer-panel--log">
+      <div className="debugger-log-header">
+        <div className="debugger-section__title">Event Log</div>
+        <div className="debugger-log-controls">
+          {props.logFilters.map((filter) => (
+            <button
+              key={filter.cat}
+              className={`debugger-log-chip${filter.active ? " is-active" : ""}`}
+              onClick={() => props.onToggleLogFilter(filter.cat)}
+            >
+              {filter.cat}
+            </button>
+          ))}
+          <button className={`debugger-log-chip debugger-log-chip--pause${props.logPaused ? " is-active" : ""}`} onClick={props.onToggleLogPause}>
+            {props.logPaused ? "resume" : "pause"}
+          </button>
+        </div>
+      </div>
+      <div className="debugger-log">
+        {props.logs.length === 0
+          ? <span className="debugger-log__empty">{props.logPaused ? "paused" : "no events"}</span>
+          : props.logs.map((entry, index) => (
+            <div className={`debugger-log__entry debugger-log__entry--${entry.cat}`} key={`${entry.cat}-${index}-${entry.text}`}>
+              {entry.text}
+              {entry.count > 1 ? <span className="debugger-log__count">×{entry.count}</span> : null}
+            </div>
+          ))}
+      </div>
+    </section>
   );
 }
 
@@ -404,6 +543,7 @@ function ContentBrowser(props: {
   onCreateFolder?: (path: string) => void;
   onCreateWorld: (path: string) => void;
   onCreateComponent?: (path: string) => void;
+  keyboardLocked: boolean;
 }) {
   const [selectedFolderPath, setSelectedFolderPath] = useState("");
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set([""]));
@@ -518,19 +658,19 @@ function ContentBrowser(props: {
         </div>
         <div className="debugger-content-actions">
           {props.onCreateFolder && (
-            <button className="debugger-content-action" onClick={() => startCreate("folder")} title="New Folder" aria-label="New Folder">
+            <button className="debugger-content-action" onClick={() => startCreate("folder")} title="New Folder" aria-label="New Folder" disabled={props.keyboardLocked}>
               <FolderPlus size={13} strokeWidth={2} />
             </button>
           )}
           {canCreateComponent && (
-            <button className="debugger-content-action" onClick={() => startCreate("component")} title="New Component" aria-label="New Component">
+            <button className="debugger-content-action" onClick={() => startCreate("component")} title="New Component" aria-label="New Component" disabled={props.keyboardLocked}>
               <Puzzle size={13} strokeWidth={2} />
             </button>
           )}
-          <button className="debugger-content-action" onClick={() => startCreate("world")} title="New World" aria-label="New World">
+          <button className="debugger-content-action" onClick={() => startCreate("world")} title="New World" aria-label="New World" disabled={props.keyboardLocked}>
             <FilePlus2 size={13} strokeWidth={2} />
           </button>
-          <button className="debugger-content-action" onClick={() => setSearch("")} title="Clear search" aria-label="Clear search">
+          <button className="debugger-content-action" onClick={() => setSearch("")} title="Clear search" aria-label="Clear search" disabled={props.keyboardLocked}>
             <RefreshCw size={13} strokeWidth={2} />
           </button>
         </div>
@@ -541,6 +681,7 @@ function ContentBrowser(props: {
           className="debugger-input debugger-content-search__input"
           placeholder="search content"
           value={search}
+          disabled={props.keyboardLocked}
           onChange={(event) => setSearch(event.target.value)}
         />
       </div>
@@ -551,6 +692,7 @@ function ContentBrowser(props: {
             autoFocus
             placeholder={createKind === "folder" ? "folder name…" : createKind === "component" ? "component name…" : "world name…"}
             value={createName}
+            disabled={props.keyboardLocked}
             onChange={(event) => setCreateName(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") confirmCreate();
@@ -574,7 +716,7 @@ function ContentBrowser(props: {
               <X size={12} strokeWidth={2.5} />
             </button>
           </div>
-          {currentChildren.some((node) => node.name === createName.trim()) && createName.trim() && (
+          {currentChildren.some((node) => node.name === createName.trim()) && createName.trim() && !props.keyboardLocked && (
             <span className="debugger-content-create__error">already exists</span>
           )}
         </div>
@@ -630,11 +772,12 @@ function ContentBrowser(props: {
           </div>
         </section>
       </div>
-      {openGraphName && createPortal(
-        <GraphDialog
+        {openGraphName && createPortal(
+          <GraphDialog
           graph={openGraph}
           loading={openGraphLoading}
           error={openGraphError}
+          keyboardLocked={props.keyboardLocked}
           onClose={() => setOpenGraphName(undefined)}
           onChange={(nextGraph) => setOpenGraph(nextGraph)}
           onSave={(nextGraph) => {
@@ -904,6 +1047,7 @@ function GraphDialog(props: {
   graph: GraphAsset | null;
   loading: boolean;
   error?: string;
+  keyboardLocked: boolean;
   onClose: () => void;
   onChange: (graph: GraphAsset) => void;
   onSave: (graph: GraphAsset) => void;
@@ -911,20 +1055,29 @@ function GraphDialog(props: {
   const [graph, setGraph] = useState<GraphAsset | null>(props.graph);
   const graphRef = useRef<GraphAsset | null>(props.graph);
   const [bounds, setBounds] = useState(() => props.graph ? computeGraphBounds(props.graph) : { x: 0, y: 0, width: 960, height: 540 });
+  const viewportRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const portRefs = useRef(new Map<string, HTMLSpanElement>());
   const [portPoints, setPortPoints] = useState<Record<string, { x: number; y: number }>>({});
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>(props.graph?.entrypoint);
   const [selectedEdgeKey, setSelectedEdgeKey] = useState<string | undefined>();
+  const [graphView, setGraphView] = useState(() => ({ x: 0, y: 0, zoom: 1 }));
+  const graphViewRef = useRef(graphView);
   const nodeMap = new Map(graph?.nodes.map((node) => [node.id, node]) ?? []);
   const selectedNode = selectedNodeId ? graph?.nodes.find((node) => node.id === selectedNodeId) : undefined;
   const selectedEdge = selectedEdgeKey && graph ? graph.edges.find((edge) => edgeKey(edge) === selectedEdgeKey) : undefined;
+  const panState = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    viewX: number;
+    viewY: number;
+  } | null>(null);
   const dragState = useRef<{
     nodeId: string;
     pointerId: number;
     sourceGraph: GraphAsset;
-    startX: number;
-    startY: number;
+    startPoint: { x: number; y: number };
   } | null>(null);
 
   useEffect(() => {
@@ -936,18 +1089,33 @@ function GraphDialog(props: {
   }, [props.graph]);
 
   useLayoutEffect(() => {
-    const canvas = canvasRef.current;
+    const viewport = viewportRef.current;
     const currentGraph = graphRef.current;
-    if (!canvas || !currentGraph) return;
+    if (!viewport || !currentGraph) return;
+    const rect = viewport.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    setGraphView(fitGraphView(rect.width, rect.height, bounds));
+  }, [bounds]);
+
+  useEffect(() => {
+    graphViewRef.current = graphView;
+  }, [graphView]);
+
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current;
+    const viewport = viewportRef.current;
+    const currentGraph = graphRef.current;
+    if (!canvas || !currentGraph || !viewport) return;
 
     const measure = () => {
-      const canvasRect = canvas.getBoundingClientRect();
+      const viewportRect = viewport.getBoundingClientRect();
+      const { x: viewX, y: viewY, zoom } = graphViewRef.current;
       const next: Record<string, { x: number; y: number }> = {};
       for (const [key, element] of portRefs.current) {
         const rect = element.getBoundingClientRect();
         next[key] = {
-          x: rect.left - canvasRect.left + rect.width / 2,
-          y: rect.top - canvasRect.top + rect.height / 2,
+          x: (rect.left - viewportRect.left + rect.width / 2 - viewX) / zoom,
+          y: (rect.top - viewportRect.top + rect.height / 2 - viewY) / zoom,
         };
       }
       setPortPoints(next);
@@ -962,16 +1130,30 @@ function GraphDialog(props: {
       cancelAnimationFrame(raf);
       resizeObserver.disconnect();
     };
-  }, [graph, bounds]);
+  }, [graph, bounds, graphView]);
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
+      const pan = panState.current;
+      if (pan && event.pointerId === pan.pointerId) {
+        const deltaX = event.clientX - pan.startX;
+        const deltaY = event.clientY - pan.startY;
+        setGraphView({
+          x: pan.viewX + deltaX,
+          y: pan.viewY + deltaY,
+          zoom: graphViewRef.current.zoom,
+        });
+        return;
+      }
+
       const drag = dragState.current;
       const currentGraph = graphRef.current;
       if (!drag || !currentGraph || event.pointerId !== drag.pointerId) return;
 
-      const deltaX = event.clientX - drag.startX;
-      const deltaY = event.clientY - drag.startY;
+      const currentPoint = toGraphPoint(viewportRef.current, graphViewRef.current, event.clientX, event.clientY);
+      if (!currentPoint) return;
+      const deltaX = currentPoint.x - drag.startPoint.x;
+      const deltaY = currentPoint.y - drag.startPoint.y;
       const nextGraph = moveGraphNode(drag.sourceGraph, drag.nodeId, deltaX, deltaY);
       graphRef.current = nextGraph;
       setGraph(nextGraph);
@@ -979,6 +1161,12 @@ function GraphDialog(props: {
     };
 
     const finishDrag = (event: PointerEvent) => {
+      const pan = panState.current;
+      if (pan && event.pointerId === pan.pointerId) {
+        panState.current = null;
+        return;
+      }
+
       const drag = dragState.current;
       if (!drag || event.pointerId !== drag.pointerId) return;
       dragState.current = null;
@@ -996,16 +1184,74 @@ function GraphDialog(props: {
     };
   }, [props.onChange, props.onSave]);
 
+  const handleGraphPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const currentGraph = graphRef.current;
+    const target = event.target;
+    if (!currentGraph || !(target instanceof Element)) return;
+    if (target.closest(".debugger-graph-node, .debugger-graph-node *")) return;
+    if (!(event.button === 1 || (event.button === 0 && (event.altKey || event.metaKey)))) return;
+
+    event.preventDefault();
+    panState.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      viewX: graphViewRef.current.x,
+      viewY: graphViewRef.current.y,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handleGraphWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
+    if (event.deltaY === 0) return;
+    event.preventDefault();
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    const rect = viewport.getBoundingClientRect();
+    const cx = event.clientX - rect.left;
+    const cy = event.clientY - rect.top;
+    const wx = (cx - graphViewRef.current.x) / graphViewRef.current.zoom;
+    const wy = (cy - graphViewRef.current.y) / graphViewRef.current.zoom;
+    const delta = event.deltaY * (event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? 240 : 1);
+    const speed = Math.pow(GRAPH_ZOOM_SENSITIVITY, 1.2);
+    const factor = Math.exp(-delta * 0.0015 * speed);
+    const nextZoom = clamp(graphViewRef.current.zoom * factor, 0.2, 3);
+
+    setGraphView({
+      x: cx - wx * nextZoom,
+      y: cy - wy * nextZoom,
+      zoom: nextZoom,
+    });
+  };
+
+  const zoomGraph = (factor: number, focus?: { x: number; y: number }) => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const rect = viewport.getBoundingClientRect();
+    const cx = focus?.x ?? rect.width / 2;
+    const cy = focus?.y ?? rect.height / 2;
+    const wx = (cx - graphViewRef.current.x) / graphViewRef.current.zoom;
+    const wy = (cy - graphViewRef.current.y) / graphViewRef.current.zoom;
+    const nextZoom = clamp(graphViewRef.current.zoom * factor, 0.2, 3);
+    setGraphView({
+      x: cx - wx * nextZoom,
+      y: cy - wy * nextZoom,
+      zoom: nextZoom,
+    });
+  };
+
   const beginDrag = (event: ReactPointerEvent<HTMLDivElement>, nodeId: string) => {
     const currentGraph = graphRef.current;
     if (!currentGraph) return;
+    const startPoint = toGraphPoint(viewportRef.current, graphViewRef.current, event.clientX, event.clientY);
+    if (!startPoint) return;
     setSelectedNodeId(nodeId);
     dragState.current = {
       nodeId,
       pointerId: event.pointerId,
       sourceGraph: currentGraph,
-      startX: event.clientX,
-      startY: event.clientY,
+      startPoint,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
     event.preventDefault();
@@ -1100,9 +1346,25 @@ function GraphDialog(props: {
               {graph ? graph.name : "loading..."}
             </div>
           </div>
-          <button className="debugger-content-action" onClick={props.onClose} aria-label="Close graph dialog">
-            <X size={13} strokeWidth={2.5} />
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div className="debugger-graph-zoom-controls">
+              <button className="debugger-content-action" onClick={() => zoomGraph(1 / 1.18)} aria-label="Zoom out">
+                <Minus size={13} strokeWidth={2.5} />
+              </button>
+              <button className="debugger-content-action" onClick={() => setGraphView(fitGraphView(viewportRef.current?.clientWidth ?? 1400, viewportRef.current?.clientHeight ?? 900, bounds))} aria-label="Fit graph">
+                <ScanSearch size={13} strokeWidth={2.5} />
+              </button>
+              <button className="debugger-content-action" onClick={() => zoomGraph(1.18)} aria-label="Zoom in">
+                <Plus size={13} strokeWidth={2.5} />
+              </button>
+              <button className="debugger-content-action" onClick={() => setGraphView(fitGraphView(viewportRef.current?.clientWidth ?? 1400, viewportRef.current?.clientHeight ?? 900, bounds))} aria-label="Reset graph view">
+                <LocateFixed size={13} strokeWidth={2.5} />
+              </button>
+            </div>
+            <button className="debugger-content-action" onClick={props.onClose} aria-label="Close graph dialog">
+              <X size={13} strokeWidth={2.5} />
+            </button>
+          </div>
         </div>
         {props.loading && <div className="debugger-content-empty">loading graph…</div>}
         {props.error && <div className="debugger-content-empty">{props.error}</div>}
@@ -1116,6 +1378,7 @@ function GraphDialog(props: {
                     key={spec.type}
                     className="debugger-content-action"
                     style={{ justifyContent: "space-between", width: "100%", padding: "8px 10px", display: "flex" }}
+                    disabled={props.keyboardLocked}
                     onClick={() => addNode(spec)}
                   >
                     <span>{spec.label}</span>
@@ -1127,18 +1390,19 @@ function GraphDialog(props: {
               <div style={{ display: "grid", gap: 8 }}>
                 {graph.variables.length === 0 ? <div className="debugger-content-empty">no variables</div> : graph.variables.map((variable, index) => (
                   <div key={`${variable.name}-${index}`} className="debugger-graph-variable">
-                    <input className="debugger-input" value={variable.name} onChange={(event) => updateVariable(index, { name: event.target.value })} />
+                    <input className="debugger-input" value={variable.name} disabled={props.keyboardLocked} onChange={(event) => updateVariable(index, { name: event.target.value })} />
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                      <select className="debugger-input" value={variable.scope} onChange={(event) => updateVariable(index, { scope: event.target.value as GraphVariableDefinition["scope"] })}>
+                      <select className="debugger-input" value={variable.scope} disabled={props.keyboardLocked} onChange={(event) => updateVariable(index, { scope: event.target.value as GraphVariableDefinition["scope"] })}>
                         <option value="private">private</option>
                         <option value="public">public</option>
                       </select>
-                      <input className="debugger-input" value={variable.type} onChange={(event) => updateVariable(index, { type: event.target.value })} />
+                      <input className="debugger-input" value={variable.type} disabled={props.keyboardLocked} onChange={(event) => updateVariable(index, { type: event.target.value })} />
                     </div>
                     <textarea
                       className="debugger-input"
                       rows={3}
                       value={formatJsonValue(variable.default)}
+                      disabled={props.keyboardLocked}
                       onChange={(event) => updateVariable(index, { default: parseJsonInput(event.target.value, variable.default) })}
                     />
                   </div>
@@ -1154,7 +1418,21 @@ function GraphDialog(props: {
               </div>
               {typeof graph.metadata?.description === "string" && <div className="debugger-graph-description">{graph.metadata.description}</div>}
               <div className="debugger-graph-canvas__scroll">
-                <div ref={canvasRef} className="debugger-graph-canvas" style={{ width: `${bounds.width}px`, height: `${bounds.height}px` }}>
+                <div
+                  ref={viewportRef}
+                  className="debugger-graph-canvas__viewport"
+                  onPointerDown={handleGraphPointerDown}
+                  onWheel={handleGraphWheel}
+                >
+                  <div
+                    ref={canvasRef}
+                    className="debugger-graph-canvas"
+                    style={{
+                      width: `${bounds.width}px`,
+                      height: `${bounds.height}px`,
+                      transform: `translate(${graphView.x}px, ${graphView.y}px) scale(${graphView.zoom})`,
+                    }}
+                  >
                   <svg className="debugger-graph-canvas__edges" width={bounds.width} height={bounds.height} viewBox={`0 0 ${bounds.width} ${bounds.height}`}>
                     <defs>
                       <marker id="graph-edge-end" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
@@ -1194,139 +1472,141 @@ function GraphDialog(props: {
                       );
                     })}
                   </svg>
-                  {graph.nodes.map((node) => {
-                    const spec = GRAPH_NODE_LIBRARY.find((entry) => entry.type === node.type);
-                    const isSelected = node.id === selectedNodeId;
-                    return (
-                      <div
-                        key={node.id}
-                        className={`debugger-graph-node${node.id === graph.entrypoint ? " is-entrypoint" : ""}${isSelected ? " is-selected" : ""}`}
-                        onPointerDown={(event) => beginDrag(event, node.id)}
-                        onClick={() => setSelectedNodeId(node.id)}
-                        style={{
-                          left: `${node.position.x - bounds.x}px`,
-                          top: `${node.position.y - bounds.y}px`,
-                        }}
-                      >
-                        <div className="debugger-graph-node__title-row">
-                          <div>
-                            <div className="debugger-graph-node__title">{spec?.label ?? node.type}</div>
-                            <div className="debugger-graph-node__type">{node.id}</div>
-                          </div>
+                    {graph.nodes.map((node) => {
+                      const spec = GRAPH_NODE_LIBRARY.find((entry) => entry.type === node.type);
+                      const isSelected = node.id === selectedNodeId;
+                      return (
+                        <div
+                          key={node.id}
+                          className={`debugger-graph-node${node.id === graph.entrypoint ? " is-entrypoint" : ""}${isSelected ? " is-selected" : ""}`}
+                          onPointerDown={(event) => beginDrag(event, node.id)}
+                          onClick={() => setSelectedNodeId(node.id)}
+                          style={{
+                            left: `${node.position.x - bounds.x}px`,
+                            top: `${node.position.y - bounds.y}px`,
+                          }}
+                        >
+                          <div className="debugger-graph-node__title-row">
+                            <div>
+                              <div className="debugger-graph-node__title">{spec?.label ?? node.type}</div>
+                              <div className="debugger-graph-node__type">{node.id}</div>
+                            </div>
                           <button
                             className="debugger-graph-node__delete"
                             title="Delete node"
                             aria-label="Delete node"
+                            disabled={props.keyboardLocked}
                             onPointerDown={(event) => event.stopPropagation()}
                             onClick={(event) => {
                               event.stopPropagation();
                               deleteNode(node.id);
                             }}
-                          >
-                            <Trash2 size={11} strokeWidth={2.5} />
-                          </button>
-                        </div>
-                        <div className="debugger-graph-node__flow-row">
-                          <div className="debugger-graph-node__flow-slot debugger-graph-node__flow-slot--input">
-                            {spec?.inputs.filter((port) => port.kind === "flow").map((port) => (
-                              <span
-                                key={`${node.id}-in-${port.name}`}
-                                className="debugger-graph-port debugger-graph-port--input debugger-graph-port--flow"
-                                data-port-direction="in"
-                                data-port-kind={port.kind}
-                              >
+                            >
+                              <Trash2 size={11} strokeWidth={2.5} />
+                            </button>
+                          </div>
+                          <div className="debugger-graph-node__flow-row">
+                            <div className="debugger-graph-node__flow-slot debugger-graph-node__flow-slot--input">
+                              {spec?.inputs.filter((port) => port.kind === "flow").map((port) => (
                                 <span
-                                  className="debugger-graph-port__anchor"
-                                  ref={(element) => {
-                                    const key = `${node.id}:input:${port.name}`;
-                                    if (element) portRefs.current.set(key, element);
-                                    else portRefs.current.delete(key);
-                                  }}
+                                  key={`${node.id}-in-${port.name}`}
+                                  className="debugger-graph-port debugger-graph-port--input debugger-graph-port--flow"
+                                  data-port-direction="in"
+                                  data-port-kind={port.kind}
                                 >
-                                  <ChevronRight size={10} strokeWidth={2.6} className="debugger-graph-port__icon" />
+                                  <span
+                                    className="debugger-graph-port__anchor"
+                                    ref={(element) => {
+                                      const key = `${node.id}:input:${port.name}`;
+                                      if (element) portRefs.current.set(key, element);
+                                      else portRefs.current.delete(key);
+                                    }}
+                                  >
+                                    <ChevronRight size={10} strokeWidth={2.6} className="debugger-graph-port__icon" />
+                                  </span>
+                                  <span className="debugger-graph-port__label">{port.label ?? port.name}</span>
                                 </span>
-                                <span className="debugger-graph-port__label">{port.label ?? port.name}</span>
-                              </span>
-                            ))}
-                          </div>
-                          <div className="debugger-graph-node__flow-slot debugger-graph-node__flow-slot--output">
-                            {spec?.outputs.filter((port) => port.kind === "flow").map((port) => (
-                              <span
-                                key={`${node.id}-out-${port.name}`}
-                                className="debugger-graph-port debugger-graph-port--output debugger-graph-port--flow"
-                                data-port-direction="out"
-                                data-port-kind={port.kind}
-                              >
-                                <span className="debugger-graph-port__label">{port.label ?? port.name}</span>
+                              ))}
+                            </div>
+                            <div className="debugger-graph-node__flow-slot debugger-graph-node__flow-slot--output">
+                              {spec?.outputs.filter((port) => port.kind === "flow").map((port) => (
                                 <span
-                                  className="debugger-graph-port__anchor"
-                                  ref={(element) => {
-                                    const key = `${node.id}:output:${port.name}`;
-                                    if (element) portRefs.current.set(key, element);
-                                    else portRefs.current.delete(key);
-                                  }}
+                                  key={`${node.id}-out-${port.name}`}
+                                  className="debugger-graph-port debugger-graph-port--output debugger-graph-port--flow"
+                                  data-port-direction="out"
+                                  data-port-kind={port.kind}
                                 >
-                                  <ChevronRight size={10} strokeWidth={2.6} className="debugger-graph-port__icon" />
+                                  <span className="debugger-graph-port__label">{port.label ?? port.name}</span>
+                                  <span
+                                    className="debugger-graph-port__anchor"
+                                    ref={(element) => {
+                                      const key = `${node.id}:output:${port.name}`;
+                                      if (element) portRefs.current.set(key, element);
+                                      else portRefs.current.delete(key);
+                                    }}
+                                  >
+                                    <ChevronRight size={10} strokeWidth={2.6} className="debugger-graph-port__icon" />
+                                  </span>
                                 </span>
-                              </span>
-                            ))}
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                        <div className="debugger-graph-node__ports">
-                          <div className="debugger-graph-node__ports-col">
-                            {spec?.inputs.filter((port) => port.kind !== "flow").map((port) => (
-                              <span
-                                key={`${node.id}-in-${port.name}`}
-                                className="debugger-graph-port debugger-graph-port--input"
-                                data-port-direction="in"
-                                data-port-kind={port.kind}
-                              >
+                          <div className="debugger-graph-node__ports">
+                            <div className="debugger-graph-node__ports-col">
+                              {spec?.inputs.filter((port) => port.kind !== "flow").map((port) => (
                                 <span
-                                  className="debugger-graph-port__anchor"
-                                  ref={(element) => {
-                                    const key = `${node.id}:input:${port.name}`;
-                                    if (element) portRefs.current.set(key, element);
-                                    else portRefs.current.delete(key);
-                                  }}
-                                />
-                                <span className="debugger-graph-port__label">{port.label ?? port.name}</span>
-                              </span>
-                            ))}
-                          </div>
-                          <div className="debugger-graph-node__ports-col debugger-graph-node__ports-col--right">
-                            {spec?.outputs.filter((port) => port.kind !== "flow").map((port) => (
-                              <span
-                                key={`${node.id}-out-${port.name}`}
-                                className="debugger-graph-port debugger-graph-port--output"
-                                data-port-direction="out"
-                                data-port-kind={port.kind}
-                              >
-                                <span className="debugger-graph-port__label">{port.label ?? port.name}</span>
+                                  key={`${node.id}-in-${port.name}`}
+                                  className="debugger-graph-port debugger-graph-port--input"
+                                  data-port-direction="in"
+                                  data-port-kind={port.kind}
+                                >
+                                  <span
+                                    className="debugger-graph-port__anchor"
+                                    ref={(element) => {
+                                      const key = `${node.id}:input:${port.name}`;
+                                      if (element) portRefs.current.set(key, element);
+                                      else portRefs.current.delete(key);
+                                    }}
+                                  />
+                                  <span className="debugger-graph-port__label">{port.label ?? port.name}</span>
+                                </span>
+                              ))}
+                            </div>
+                            <div className="debugger-graph-node__ports-col debugger-graph-node__ports-col--right">
+                              {spec?.outputs.filter((port) => port.kind !== "flow").map((port) => (
                                 <span
-                                  className="debugger-graph-port__anchor"
-                                  ref={(element) => {
-                                    const key = `${node.id}:output:${port.name}`;
-                                    if (element) portRefs.current.set(key, element);
-                                    else portRefs.current.delete(key);
-                                  }}
-                                />
-                              </span>
-                            ))}
+                                  key={`${node.id}-out-${port.name}`}
+                                  className="debugger-graph-port debugger-graph-port--output"
+                                  data-port-direction="out"
+                                  data-port-kind={port.kind}
+                                >
+                                  <span className="debugger-graph-port__label">{port.label ?? port.name}</span>
+                                  <span
+                                    className="debugger-graph-port__anchor"
+                                    ref={(element) => {
+                                      const key = `${node.id}:output:${port.name}`;
+                                      if (element) portRefs.current.set(key, element);
+                                      else portRefs.current.delete(key);
+                                    }}
+                                  />
+                                </span>
+                              ))}
+                            </div>
                           </div>
+                          {node.data && Object.keys(node.data).length > 0 && (
+                            <div className="debugger-graph-node__data">
+                              {Object.entries(node.data).map(([key, value]) => (
+                                <div key={key} className="debugger-graph-node__row">
+                                  <span>{key}</span>
+                                  <strong>{formatGraphValue(value)}</strong>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                        {node.data && Object.keys(node.data).length > 0 && (
-                          <div className="debugger-graph-node__data">
-                            {Object.entries(node.data).map(([key, value]) => (
-                              <div key={key} className="debugger-graph-node__row">
-                                <span>{key}</span>
-                                <strong>{formatGraphValue(value)}</strong>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </section>
@@ -1341,16 +1621,17 @@ function GraphDialog(props: {
                   <div className="debugger-graph-description" style={{ marginBottom: 8 }}>{selectedNode.type}</div>
                   <div style={{ display: "grid", gap: 8 }}>
                     <div className="debugger-field"><span>UUID</span><strong>{selectedNode.id}</strong></div>
-                    {GRAPH_NODE_LIBRARY.find((spec) => spec.type === selectedNode.type)?.fields.map((field) => (
-                      <label key={field.name} className="debugger-field debugger-field--editable">
-                        <span>{field.label}</span>
-                        <input
-                          className="debugger-field__input"
-                          value={formatEditableValue(selectedNode.data?.[field.name], field.type)}
-                          onChange={(event) => updateNodeData(selectedNode.id, field.name, event.target.value, field.type)}
-                        />
-                      </label>
-                    ))}
+                      {GRAPH_NODE_LIBRARY.find((spec) => spec.type === selectedNode.type)?.fields.map((field) => (
+                        <label key={field.name} className="debugger-field debugger-field--editable">
+                          <span>{field.label}</span>
+                          <input
+                            className="debugger-field__input"
+                            value={formatEditableValue(selectedNode.data?.[field.name], field.type)}
+                            disabled={props.keyboardLocked}
+                            onChange={(event) => updateNodeData(selectedNode.id, field.name, event.target.value, field.type)}
+                          />
+                        </label>
+                      ))}
                     <div className="debugger-field">
                       <span>Ports</span>
                       <strong>{describeNodePorts(selectedNode.type)}</strong>
@@ -1393,6 +1674,7 @@ function GraphDialog(props: {
                           className="debugger-graph-connection__delete"
                           aria-label="Delete connection"
                           title="Delete connection"
+                          disabled={props.keyboardLocked}
                           onPointerDown={(event) => event.stopPropagation()}
                           onClick={(event) => {
                             event.stopPropagation();
@@ -1493,6 +1775,35 @@ function moveGraphNode(graph: GraphAsset, nodeId: string, deltaX: number, deltaY
   };
 }
 
+function fitGraphView(viewportWidth: number, viewportHeight: number, bounds: { x: number; y: number; width: number; height: number }) {
+  const padding = 56;
+  const usableWidth = Math.max(1, viewportWidth - padding * 2);
+  const usableHeight = Math.max(1, viewportHeight - padding * 2);
+  const zoom = clamp(Math.min(usableWidth / bounds.width, usableHeight / bounds.height), 0.2, 2);
+  return {
+    zoom,
+    x: (viewportWidth - bounds.width * zoom) / 2,
+    y: (viewportHeight - bounds.height * zoom) / 2,
+  };
+}
+
+function toGraphPoint(
+  viewport: HTMLDivElement | null,
+  graphView: { x: number; y: number; zoom: number },
+  clientX: number,
+  clientY: number,
+) {
+  if (!viewport) return null;
+  const rect = viewport.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return null;
+  const x = clientX - rect.left;
+  const y = clientY - rect.top;
+  return {
+    x: (x - graphView.x) / graphView.zoom,
+    y: (y - graphView.y) / graphView.zoom,
+  };
+}
+
 function computeGraphBounds(graph: GraphAsset) {
   const padX = 112;
   const padY = 96;
@@ -1520,6 +1831,10 @@ function computeGraphBounds(graph: GraphAsset) {
     width: Math.max(1400, maxX - minX + padX * 2),
     height: Math.max(900, maxY - minY + padY * 2),
   };
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function getGraphNodeCenter(node: GraphAsset["nodes"][number], bounds: { x: number; y: number }) {
