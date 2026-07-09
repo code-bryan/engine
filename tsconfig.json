@@ -11,7 +11,7 @@
     "baseUrl": ".",
     "paths": {
       "@engine/ecs-core": ["packages/ecs-core/src/index.ts"],
-      "@engine/debugger": ["packages/debugger/src/index.ts"],
+      "@engine/editor": ["packages/editor/src/index.ts"],
       "@engine/renderer": ["packages/renderer/src/index.ts"],
       "@engine/loader": ["packages/loader/src/index.ts"],
       "@engine/input": ["packages/input/src/index.ts"],

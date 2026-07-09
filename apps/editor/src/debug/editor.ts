@@ -1,4 +1,4 @@
-import { attachRuntimeDebugger, createStoreInspector, type ContentTreeNode, type DebugEditorField, type DebuggerWorld } from "@engine/debugger";
+import { attachEditor, createStoreInspector, type ContentTreeNode, type DebugEditorField, type DebuggerWorld } from "@engine/editor";
 import { getComponentDefinitions, getComponentStore, type ComponentDefinition } from "@engine/runtime";
 import type { ComponentStore, Entity } from "@engine/ecs-core";
 import { keyboard, pointer } from "@engine/input";
@@ -11,7 +11,7 @@ export type DebugEditorPlayback = {
   onStop: () => void;
   onStep: () => void;
   getState: () => "playing" | "paused" | "stopped";
-  onWorldEdited?: (world: GameWorld) => void;
+  onSaveWorld?: (world: GameWorld) => void;
   onOpenLevel?: (data: unknown) => void;
   onLoadWorld?: (name: string) => void;
   onCreateWorld?: (name: string) => void;
@@ -43,9 +43,9 @@ export type DebugEditorOptions = DebugEditorPlayback & {
 
 export function attachDebugEditor(world: GameWorld, engine: EngineApplication, options: DebugEditorOptions) {
   const playback = options;
-  return attachRuntimeDebugger(world, engine, {
+  return attachEditor(world, engine, {
     playback,
-    onWorldEdited: playback.onWorldEdited,
+    onSaveWorld: playback.onSaveWorld,
     onLoadWorld: playback.onLoadWorld,
     onCreateWorld: playback.onCreateWorld,
     onCreateFolder: playback.onCreateFolder,

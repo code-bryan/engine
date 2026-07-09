@@ -1,4 +1,4 @@
-import { captureWorldSnapshot, restoreWorldSnapshot } from "@engine/debugger";
+import { captureWorldSnapshot, restoreWorldSnapshot } from "@engine/editor";
 import {
   initializeDemoRuntime,
   fetchContentTree,
@@ -136,7 +136,7 @@ async function materializeInto(name: string, override?: DemoWorldData) {
 // Rebuild only the world's systems in place (correct order), keeping entities/engine.
 async function reloadSystems(next: string[]) {
   activeWorldSystems = next;
-  saveWorldDefinition(worldName, serializeWorld(gameWorld, next));
+  // In-memory only; the change is persisted on the next explicit save (⌘/Ctrl+S).
   gameWorld.clearSystems();
   await bootstrapDemoSystems(gameWorld, next);
   engine?.installSystems();
@@ -184,6 +184,8 @@ async function boot(startPlaying: boolean) {
   debuggerEditor = attachDebugEditor(gameWorld, engine, {
     onPlay() {
       if (!engine) return;
+      // Capture the pre-play authored state (incl. unsaved edits) so Stop restores it.
+      if (playbackState === "stopped") authoredSnapshot = captureWorldSnapshot(gameWorld);
       playbackState = "playing";
       engine.start();
     },
@@ -194,12 +196,14 @@ async function boot(startPlaying: boolean) {
     },
     onStep() {
       if (!engine) return;
+      if (playbackState === "stopped") authoredSnapshot = captureWorldSnapshot(gameWorld);
       if (playbackState === "playing") engine.stop();
       playbackState = "paused";
       engine.tick(1 / 60);
     },
     onStop() {
       if (!engine) return;
+      if (playbackState === "stopped") return; // nothing to revert; keep unsaved edits
       playbackState = "stopped";
       engine.stop();
       if (authoredSnapshot) restoreWorldSnapshot(gameWorld, authoredSnapshot);
@@ -208,9 +212,9 @@ async function boot(startPlaying: boolean) {
     getState() {
       return playbackState;
     },
-    onWorldEdited(editedWorld) {
-      saveWorldDefinition(worldName, serializeWorld(editedWorld, activeWorldSystems));
-      authoredSnapshot = captureWorldSnapshot(editedWorld);
+    onSaveWorld(editedWorld) {
+      // Explicit save (⌘/Ctrl+S) — the only place in-editor world changes hit disk.
+      void saveWorldDefinition(worldName, serializeWorld(editedWorld, activeWorldSystems));
     },
     onOpenLevel(data) {
       const level = parseDemoWorldData(data);

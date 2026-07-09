@@ -1,5 +1,5 @@
 {
-  "name": "@engine/editor",
+  "name": "@engine/editor-app",
   "type": "module",
   "version": "0.0.0",
   "private": true,
@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@engine/ecs-core": "workspace:*",
-    "@engine/debugger": "workspace:*",
+    "@engine/editor": "workspace:*",
     "@engine/runtime": "workspace:*",
     "@engine/renderer": "workspace:*",
     "@engine/loader": "workspace:*",

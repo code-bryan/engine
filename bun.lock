@@ -19,12 +19,12 @@
         "vite": "^8.1.3",
       },
     },
-    "apps/demo-platformer": {
-      "name": "@engine/demo-platformer",
+    "apps/editor": {
+      "name": "@engine/editor-app",
       "version": "0.0.0",
       "dependencies": {
-        "@engine/debugger": "workspace:*",
         "@engine/ecs-core": "workspace:*",
+        "@engine/editor": "workspace:*",
         "@engine/input": "workspace:*",
         "@engine/loader": "workspace:*",
         "@engine/physics": "workspace:*",
@@ -32,13 +32,23 @@
         "@engine/runtime": "workspace:*",
       },
     },
-    "packages/debugger": {
-      "name": "@engine/debugger",
+    "packages/cli": {
+      "name": "@engine/cli",
       "version": "0.0.0",
+      "bin": {
+        "engine": "./src/index.ts",
+      },
     },
     "packages/ecs-core": {
       "name": "@engine/ecs-core",
       "version": "0.0.0",
+    },
+    "packages/editor": {
+      "name": "@engine/editor",
+      "version": "0.0.0",
+      "dependencies": {
+        "@engine/runtime": "workspace:*",
+      },
     },
     "packages/input": {
       "name": "@engine/input",
@@ -61,6 +71,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@engine/ecs-core": "workspace:*",
+        "@engine/input": "workspace:*",
         "@engine/physics": "workspace:*",
         "@engine/renderer": "workspace:*",
       },
@@ -73,11 +84,13 @@
 
     "@emnapi/wasi-threads": ["@emnapi/wasi-threads@1.2.2", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-c95qOXkHdydNKhscBTebqEC1CVAZpyqOfVfBzQ1qgzyl3gfeldUjIggDbIZgDKsHLgnsM+igH7TJ/eAasaVuMA=="],
 
-    "@engine/debugger": ["@engine/debugger@workspace:packages/debugger"],
-
-    "@engine/demo-platformer": ["@engine/demo-platformer@workspace:apps/demo-platformer"],
+    "@engine/cli": ["@engine/cli@workspace:packages/cli"],
 
     "@engine/ecs-core": ["@engine/ecs-core@workspace:packages/ecs-core"],
+
+    "@engine/editor": ["@engine/editor@workspace:packages/editor"],
+
+    "@engine/editor-app": ["@engine/editor-app@workspace:apps/editor"],
 
     "@engine/input": ["@engine/input@workspace:packages/input"],
 
