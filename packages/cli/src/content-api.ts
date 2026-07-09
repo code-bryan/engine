@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { type IncomingMessage, type ServerResponse } from "node:http";
 import { dirname, join, relative, resolve } from "node:path";
 
@@ -97,6 +97,33 @@ export function createContentApiMiddleware(getContentDir: () => string | null) {
           res.statusCode = 400;
           res.end(JSON.stringify({ error: error instanceof Error ? error.message : "invalid path" }));
         });
+      return;
+    }
+
+    if (req.method === "POST" && pathName === "/api/content/rename") {
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk: Buffer) => chunks.push(chunk));
+      req.on("end", () => {
+        let body: { from?: unknown; to?: unknown; kind?: unknown };
+        try {
+          body = JSON.parse(Buffer.concat(chunks).toString("utf-8"));
+        } catch {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ error: "invalid JSON" }));
+          return;
+        }
+        const from = typeof body.from === "string" ? body.from : "";
+        const to = typeof body.to === "string" ? body.to : "";
+        renameContentPath(contentDir, from, to, body.kind === "folder")
+          .then(() => {
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ ok: true }));
+          })
+          .catch((error) => {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: error instanceof Error ? error.message : "invalid path" }));
+          });
+      });
       return;
     }
 
@@ -239,6 +266,13 @@ function serveJsonFile(root: string, relPath: string, req: IncomingMessage, res:
       });
     return;
   }
+}
+
+async function renameContentPath(root: string, from: string, to: string, isFolder: boolean) {
+  const src = isFolder ? resolveContentPath(root, normalizeContentPath(from)) : resolveJsonFilePath(root, from);
+  const dst = isFolder ? resolveContentPath(root, normalizeContentPath(to)) : resolveJsonFilePath(root, to);
+  await mkdir(dirname(dst), { recursive: true });
+  await rename(src, dst);
 }
 
 async function deleteContentPath(root: string, relPath: string, isFolder: boolean) {

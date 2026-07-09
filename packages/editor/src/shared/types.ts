@@ -68,6 +68,14 @@ export type ContentTreeNode = {
   children?: ContentTreeNode[];
 };
 
+// A user-defined quick-access collection of content items, persisted in the
+// project manifest. Tapping a bookmark filters the browser to its members.
+export type ContentBookmark = {
+  id: string;
+  name: string;
+  items: string[];
+};
+
 export type RuntimeDebuggerOptions<TWorld extends DebuggerWorld = DebuggerWorld> = {
   getEntityTitle?: (world: TWorld, entity: Entity) => string;
   sections?: DebugEditorSection<TWorld>[];
@@ -92,6 +100,9 @@ export type RuntimeDebuggerOptions<TWorld extends DebuggerWorld = DebuggerWorld>
   onCreateGraph?: (path: string) => void;
   onImportContent?: (path: string, value: unknown) => void;
   onDeleteContent?: (path: string, kind: ContentTreeNode["kind"]) => void;
+  onRename?: (from: string, to: string, kind: ContentTreeNode["kind"]) => void;
+  bookmarks?: ContentBookmark[];
+  onBookmarksChange?: (bookmarks: ContentBookmark[]) => void;
   initialContentDrawerOpen?: boolean;
   onContentDrawerToggled?: (open: boolean) => void;
   initialOpenWorlds?: string[];
@@ -110,7 +121,9 @@ export type DebugEditor<TWorld extends DebuggerWorld = DebuggerWorld> = {
   world: TWorld;
   setActiveSystems: (names: string[]) => void;
   setContentTree: (tree: ContentTreeNode[]) => void;
+  setBookmarks: (bookmarks: ContentBookmark[]) => void;
   setActiveWorld: (name: string, opts?: { activeSystems?: string[]; contentTree?: ContentTreeNode[] }) => void;
+  renameContent: (from: string, to: string) => void;
   destroy: () => void;
 };
 

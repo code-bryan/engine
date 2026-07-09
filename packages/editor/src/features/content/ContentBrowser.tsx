@@ -1,11 +1,11 @@
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState, type ChangeEvent, type PointerEvent as ReactPointerEvent } from "react";
-import type { ContentTreeNode } from "../../shared/types";
-import { CONTENT_MENU_ITEM } from "../../shell/ui-kit";
-import { breadcrumbPaths, findContentFolder, joinContentPath } from "./paths";
+import type { ContentBookmark, ContentTreeNode } from "../../shared/types";
+import { ContextMenu, ContextMenuItem, ContextMenuSeparator, ContextMenuSub } from "../../shell/ContextMenu";
+import { breadcrumbPaths, findContentFolder, joinContentPath, parentContentPath } from "./paths";
 import { fetchContentFile } from "./api";
 import { contentTypeBarColor, renderContentIcon } from "./icons";
-import { ContentCreateDialog, ContentImportDialog, ContentPreviewDialog, DeleteContentDialog } from "./dialogs";
+import { BookmarkNameDialog, ContentCreateDialog, ContentImportDialog, ContentPreviewDialog, DeleteContentDialog, RenameContentDialog } from "./dialogs";
 
 export type ContentBrowserProps = {
   tree: ContentTreeNode[];
@@ -19,6 +19,9 @@ export type ContentBrowserProps = {
   onCreateGraph?: (path: string) => void;
   onImportContent?: (path: string, value: unknown) => void;
   onDeleteContent?: (path: string, kind: ContentTreeNode["kind"]) => void;
+  onRename?: (from: string, to: string, kind: ContentTreeNode["kind"]) => void;
+  bookmarks?: ContentBookmark[];
+  onBookmarksChange?: (bookmarks: ContentBookmark[]) => void;
   onOpenDoc: (path: string, kind: "graph" | "component") => void;
   keyboardLocked: boolean;
 };
@@ -36,6 +39,13 @@ export function ContentBrowser(props: ContentBrowserProps) {
   const [importError, setImportError] = useState<string | undefined>();
   const [importBusy, setImportBusy] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ContentTreeNode | null>(null);
+  const [renameTarget, setRenameTarget] = useState<ContentTreeNode | null>(null);
+  const [renameName, setRenameName] = useState("");
+  const [bookmarks, setBookmarks] = useState<ContentBookmark[]>(() => props.bookmarks ?? []);
+  const [activeBookmarkId, setActiveBookmarkId] = useState<string | null>(null);
+  // New-bookmark name dialog. `seedItem` (when set) is added to the fresh bookmark.
+  const [bookmarkDialog, setBookmarkDialog] = useState<{ seedItem?: string } | null>(null);
+  const [bookmarkDialogName, setBookmarkDialogName] = useState("");
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -58,31 +68,65 @@ export function ContentBrowser(props: ContentBrowserProps) {
 
   const currentFolder = findContentFolder(props.tree, selectedFolderPath);
   const currentChildren = currentFolder?.children ?? props.tree;
-  const filteredChildren = search.trim()
-    ? currentChildren.filter((node) => `${node.name} ${node.path}`.toLowerCase().includes(search.trim().toLowerCase()))
-    : currentChildren;
+  const searchTerm = search.trim().toLowerCase();
+  const activeBookmark = bookmarks.find((bookmark) => bookmark.id === activeBookmarkId) ?? null;
+  // Bookmark active → its member items, gathered across the whole project.
+  // Otherwise a text search recurses into the current folder's subtree; a plain
+  // view shows only the direct children.
+  const listing: ContentTreeNode[] = activeBookmark
+    ? flattenTree(props.tree).filter((node) => activeBookmark.items.includes(node.path))
+    : searchTerm
+      ? flattenTree(currentChildren)
+      : currentChildren;
+  const filteredChildren = searchTerm
+    ? listing.filter((node) => `${node.name} ${node.path}`.toLowerCase().includes(searchTerm))
+    : listing;
   const currentBreadcrumbs = breadcrumbPaths(selectedFolderPath);
   const activeSystems = new Set(props.activeSystems ?? []);
 
+  // Adopt bookmarks pushed from the host (e.g. after a rename remaps item paths).
+  // Local edits keep the same `props.bookmarks` reference, so this won't clobber them.
   useEffect(() => {
-    if (!contextMenu) return;
+    setBookmarks(props.bookmarks ?? []);
+  }, [props.bookmarks]);
 
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!(event.target instanceof Element)) return;
-      if (event.target.closest("[data-content-context-menu]")) return;
-      setContextMenu(null);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setContextMenu(null);
-    };
+  const updateBookmarks = (next: ContentBookmark[]) => {
+    setBookmarks(next);
+    props.onBookmarksChange?.(next);
+  };
 
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
+  const addItemToBookmark = (bookmarkId: string, itemPath: string) => {
+    updateBookmarks(bookmarks.map((bookmark) =>
+      bookmark.id === bookmarkId && !bookmark.items.includes(itemPath)
+        ? { ...bookmark, items: [...bookmark.items, itemPath] }
+        : bookmark,
+    ));
+    setContextMenu(null);
+  };
+
+  const removeBookmark = (id: string) => {
+    updateBookmarks(bookmarks.filter((bookmark) => bookmark.id !== id));
+    if (activeBookmarkId === id) setActiveBookmarkId(null);
+  };
+
+  const openNewBookmarkDialog = (seedItem?: string) => {
+    setContextMenu(null);
+    setBookmarkDialogName("");
+    setBookmarkDialog({ seedItem });
+  };
+
+  const confirmNewBookmark = () => {
+    const name = bookmarkDialogName.trim();
+    if (!name) return;
+    const bookmark: ContentBookmark = {
+      id: crypto.randomUUID(),
+      name,
+      items: bookmarkDialog?.seedItem ? [bookmarkDialog.seedItem] : [],
     };
-  }, [contextMenu]);
+    updateBookmarks([...bookmarks, bookmark]);
+    setBookmarkDialog(null);
+    setBookmarkDialogName("");
+  };
 
   useEffect(() => {
     if (!previewPath) {
@@ -157,9 +201,16 @@ export function ContentBrowser(props: ContentBrowserProps) {
     setCreateName("");
   };
 
+  // Navigating the folder tree always exits any active bookmark filter.
+  const goToFolder = (path: string) => {
+    setActiveBookmarkId(null);
+    setSelectedFolderPath(path);
+  };
+
   const openNode = (node: ContentTreeNode) => {
     setSelectedItemPath(node.path);
     if (node.kind === "folder") {
+      setActiveBookmarkId(null);
       setSelectedFolderPath(node.path);
       setExpandedFolders((prev) => new Set(prev).add(node.path));
       return;
@@ -188,6 +239,25 @@ export function ContentBrowser(props: ContentBrowserProps) {
   const deleteNode = (node: ContentTreeNode) => {
     setContextMenu(null);
     setDeleteTarget(node);
+  };
+
+  const beginRename = (node: ContentTreeNode) => {
+    setContextMenu(null);
+    setRenameTarget(node);
+    setRenameName(node.name);
+  };
+
+  const confirmRename = () => {
+    if (!renameTarget || !props.onRename) return;
+    const name = renameName.trim();
+    if (!name || name === renameTarget.name) return;
+    const nextPath = joinContentPath(parentContentPath(renameTarget.path), name);
+    if (selectedItemPath === renameTarget.path) setSelectedItemPath(nextPath);
+    if (previewPath === renameTarget.path) setPreviewPath(undefined);
+    if (renameTarget.kind === "folder" && selectedFolderPath === renameTarget.path) setSelectedFolderPath(nextPath);
+    props.onRename(renameTarget.path, nextPath, renameTarget.kind);
+    setRenameTarget(null);
+    setRenameName("");
   };
 
   const handleImportChange = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -245,28 +315,40 @@ export function ContentBrowser(props: ContentBrowserProps) {
       {/* Left: Folder Tree */}
       <div className="w-48 border-r border-[#303030] bg-[#1a1a1a] p-2 overflow-y-auto flex-shrink-0">
         <button
-          className={`w-full flex items-center pr-2 py-1 rounded cursor-pointer text-left transition-colors ${selectedFolderPath === "" ? "bg-[#2d2d2d] text-white" : "text-[#ccc] hover:bg-[#2d2d2d]"}`}
+          className={`w-full flex items-center pr-2 py-1 rounded cursor-pointer text-left transition-colors ${selectedFolderPath === "" && !activeBookmark ? "bg-[#2d2d2d] text-white" : "text-[#ccc] hover:bg-[#2d2d2d]"}`}
           style={{ paddingLeft: "8px" }}
-          onClick={() => setSelectedFolderPath("")}
+          onClick={() => goToFolder("")}
         >
           <span className="w-3 flex justify-center text-[#888]"><i className="ph ph-caret-down text-[10px]" /></span>
           <span className="mr-2 text-[#0070e0]"><i className="ph-fill ph-folder-open" /></span>
           <span className="truncate">Content</span>
         </button>
         <div style={{ paddingLeft: "8px" }}>
-          {renderFolderTree(props.tree, selectedFolderPath, expandedFolders, setExpandedFolders, setSelectedFolderPath, props.onOpenWorld)}
+          {renderFolderTree(props.tree, selectedFolderPath, expandedFolders, setExpandedFolders, goToFolder, props.onOpenWorld, openContextMenu)}
         </div>
       </div>
       {/* Right: Asset area */}
       <div className="flex-1 bg-[#1e1e1e] flex flex-col min-w-0">
         <div className="h-8 border-b border-[#303030] flex items-center px-3 gap-2 text-[#888] flex-shrink-0">
-          <i className="ph ph-house cursor-pointer hover:text-white" onClick={() => setSelectedFolderPath("")} />
-          {currentBreadcrumbs.map((crumb, index) => (
+          <i className="ph ph-house cursor-pointer hover:text-white" onClick={() => goToFolder("")} />
+          {activeBookmark ? (
+            <span className="flex items-center gap-2">
+              <i className="ph ph-caret-right text-[10px]" />
+              <span className="text-[#ccc] font-medium flex items-center gap-1">
+                <i className="ph-fill ph-bookmark-simple text-[#0070e0]" />
+                {activeBookmark.name}
+                <span className="text-[#666]">· {activeBookmark.items.length} item{activeBookmark.items.length === 1 ? "" : "s"}</span>
+              </span>
+              <button className="text-[#666] hover:text-white ml-1" onClick={() => setActiveBookmarkId(null)} title="Clear bookmark">
+                <i className="ph ph-x text-[10px]" />
+              </button>
+            </span>
+          ) : currentBreadcrumbs.map((crumb, index) => (
             <span key={crumb.path || "root"} className="flex items-center gap-2">
               <i className="ph ph-caret-right text-[10px]" />
               <button
                 className={index === currentBreadcrumbs.length - 1 ? "text-[#ccc] font-medium" : "hover:text-white hover:underline"}
-                onClick={() => setSelectedFolderPath(crumb.path)}
+                onClick={() => goToFolder(crumb.path)}
               >
                 {crumb.label}
               </button>
@@ -295,12 +377,39 @@ export function ContentBrowser(props: ContentBrowserProps) {
             </button>
           </div>
         </div>
+        <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-[#303030] flex-shrink-0 text-[11px] flex-wrap">
+          <span className="text-[#666] mr-1 flex items-center gap-1"><i className="ph ph-bookmark-simple" /> Bookmarks</span>
+          {bookmarks.length === 0 ? (
+            <span className="text-[#555] italic">none — right-click an asset to add one</span>
+          ) : bookmarks.map((bookmark) => {
+            const active = activeBookmarkId === bookmark.id;
+            return (
+              <button
+                key={bookmark.id}
+                className={`group flex items-center gap-1 px-2 py-0.5 rounded border transition-colors ${active ? "bg-[#0070e0] border-[#0070e0] text-white" : "bg-[#2a2a2a] border-[#303030] text-[#ccc] hover:border-[#0070e0]"}`}
+                onClick={() => setActiveBookmarkId(active ? null : bookmark.id)}
+                title={`${bookmark.name} · ${bookmark.items.length} item${bookmark.items.length === 1 ? "" : "s"}`}
+              >
+                <i className={`ph-fill ph-bookmark-simple ${active ? "text-white" : "text-[#888]"}`} />
+                {bookmark.name}
+                <span
+                  role="button"
+                  aria-label={`Delete bookmark ${bookmark.name}`}
+                  className={`ml-0.5 rounded-full px-0.5 opacity-0 group-hover:opacity-100 ${active ? "hover:bg-white/20" : "hover:bg-[#444] hover:text-white"}`}
+                  onClick={(event) => { event.stopPropagation(); removeBookmark(bookmark.id); }}
+                >
+                  <i className="ph ph-x text-[10px]" />
+                </span>
+              </button>
+            );
+          })}
+        </div>
         <div
           className="flex-1 p-4 grid grid-cols-[repeat(auto-fill,minmax(84px,1fr))] gap-4 overflow-y-auto content-start"
           onContextMenu={(event) => openContextMenu(event)}
         >
           {filteredChildren.length === 0 ? (
-            <div className="col-span-full text-[#666] py-6 text-center">{search.trim() ? "no matches" : "empty folder"}</div>
+            <div className="col-span-full text-[#666] py-6 text-center">{search.trim() ? "no matches" : activeBookmark ? "bookmark is empty" : "empty folder"}</div>
           ) : filteredChildren.map((node) => {
             const isSelected = selectedItemPath === node.path || (node.kind === "world" && node.path === props.activeWorld);
             const isActiveWorld = node.kind === "world" && node.path === props.activeWorld;
@@ -328,54 +437,84 @@ export function ContentBrowser(props: ContentBrowserProps) {
           })}
         </div>
       </div>
-      {contextMenu && createPortal(
-        <div
-          className="fixed z-[60] w-52 bg-[#1e1e1e] border border-[#303030] rounded shadow-2xl py-1 text-xs"
-          data-content-context-menu
-          style={{
-            left: `${Math.max(8, Math.min(contextMenu.x, window.innerWidth - 232))}px`,
-            top: `${Math.max(8, Math.min(contextMenu.y, window.innerHeight - 260))}px`,
-          }}
-          onClick={(event) => event.stopPropagation()}
-          onContextMenu={(event) => event.preventDefault()}
-        >
-          <button className={CONTENT_MENU_ITEM} onClick={() => triggerImport(contextFolderPath)} disabled={!props.onImportContent || props.keyboardLocked}>
-            Import
-          </button>
+      {contextMenu && (
+        <ContextMenu x={contextMenu.x} y={contextMenu.y} onClose={() => setContextMenu(null)}>
           {contextMenu.item && (
-            <button className={CONTENT_MENU_ITEM} onClick={() => activateNode(contextMenu.item!)}>
+            <ContextMenuItem
+              icon={<i className={`ph ${contextMenu.item.kind === "folder" ? "ph-folder-open" : "ph-arrow-square-out"} text-[#888]`} />}
+              onClick={() => activateNode(contextMenu.item!)}
+            >
               {contextMenu.item.kind === "folder" ? "Enter folder" : contextMenu.item.kind === "world" ? "Load world" : contextMenu.item.kind === "graph" ? "Open system" : "Open file"}
-            </button>
+            </ContextMenuItem>
           )}
-          <div className="h-px my-1 bg-[#303030]" />
-          <button className={CONTENT_MENU_ITEM} onClick={() => beginCreate("folder", contextFolderPath)} disabled={!props.onCreateFolder || props.keyboardLocked}>
+          {contextMenu.item && (
+            <ContextMenuItem
+              icon={<i className="ph ph-pencil-simple text-[#888]" />}
+              onClick={() => beginRename(contextMenu.item!)}
+              disabled={!props.onRename || props.keyboardLocked}
+            >
+              Rename
+            </ContextMenuItem>
+          )}
+          {contextMenu.item && (
+            <ContextMenuSub label="Add to" icon={<i className="ph ph-bookmark-simple text-[#888]" />}>
+              <div className="px-3 py-1 text-[10px] uppercase tracking-wide text-[#666]">Bookmarks</div>
+              {bookmarks.length === 0 ? (
+                <div className="px-3 py-1.5 text-[#555] italic">none yet</div>
+              ) : bookmarks.map((bookmark) => {
+                const already = bookmark.items.includes(contextMenu.item!.path);
+                return (
+                  <ContextMenuItem
+                    key={bookmark.id}
+                    icon={<i className="ph-fill ph-bookmark-simple text-[#888]" />}
+                    onClick={() => addItemToBookmark(bookmark.id, contextMenu.item!.path)}
+                    disabled={already}
+                    trailing={already ? <i className="ph ph-check text-[10px] ml-auto text-[#0070e0]" /> : undefined}
+                  >
+                    <span className="truncate">{bookmark.name}</span>
+                  </ContextMenuItem>
+                );
+              })}
+              <ContextMenuSeparator />
+              <ContextMenuItem icon={<i className="ph ph-plus text-[#888]" />} onClick={() => openNewBookmarkDialog(contextMenu.item!.path)}>
+                New bookmark…
+              </ContextMenuItem>
+            </ContextMenuSub>
+          )}
+          <ContextMenuSeparator />
+          <ContextMenuItem icon={<i className="ph ph-download-simple text-[#888]" />} onClick={() => triggerImport(contextFolderPath)} disabled={!props.onImportContent || props.keyboardLocked}>
+            Import
+          </ContextMenuItem>
+          <ContextMenuItem icon={<i className="ph ph-folder-plus text-[#888]" />} onClick={() => beginCreate("folder", contextFolderPath)} disabled={!props.onCreateFolder || props.keyboardLocked}>
             New Folder
-          </button>
-          <button className={CONTENT_MENU_ITEM} onClick={() => beginCreate("world", contextFolderPath)} disabled={props.keyboardLocked}>
+          </ContextMenuItem>
+          <ContextMenuItem icon={<i className="ph ph-globe-hemisphere-west text-[#888]" />} onClick={() => beginCreate("world", contextFolderPath)} disabled={props.keyboardLocked}>
             New World
-          </button>
-          <button className={CONTENT_MENU_ITEM} onClick={() => beginCreate("component", contextFolderPath)} disabled={!props.onCreateComponent || props.keyboardLocked}>
+          </ContextMenuItem>
+          <ContextMenuItem icon={<i className="ph ph-puzzle-piece text-[#888]" />} onClick={() => beginCreate("component", contextFolderPath)} disabled={!props.onCreateComponent || props.keyboardLocked}>
             New Component
-          </button>
-          <button className={CONTENT_MENU_ITEM} onClick={() => beginCreate("prefab", contextFolderPath)} disabled={!props.onCreatePrefab || props.keyboardLocked}>
+          </ContextMenuItem>
+          <ContextMenuItem icon={<i className="ph ph-cube text-[#888]" />} onClick={() => beginCreate("prefab", contextFolderPath)} disabled={!props.onCreatePrefab || props.keyboardLocked}>
             New Prefab
-          </button>
-          <button className={CONTENT_MENU_ITEM} onClick={() => beginCreate("graph", contextFolderPath)} disabled={!props.onCreateGraph || props.keyboardLocked}>
+          </ContextMenuItem>
+          <ContextMenuItem icon={<i className="ph ph-graph text-[#888]" />} onClick={() => beginCreate("graph", contextFolderPath)} disabled={!props.onCreateGraph || props.keyboardLocked}>
             New System
-          </button>
-          <div className="h-px my-1 bg-[#303030]" />
-          <button
-            className={CONTENT_MENU_ITEM}
-            onClick={() => {
-              if (contextMenu.item) deleteNode(contextMenu.item);
-              else setContextMenu(null);
-            }}
+          </ContextMenuItem>
+          {!contextMenu.item && (
+            <ContextMenuItem icon={<i className="ph ph-bookmark-simple text-[#888]" />} onClick={() => openNewBookmarkDialog()}>
+              New bookmark
+            </ContextMenuItem>
+          )}
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            icon={<i className="ph ph-trash" />}
+            danger
+            onClick={() => { if (contextMenu.item) deleteNode(contextMenu.item); else setContextMenu(null); }}
             disabled={!contextMenu.item || !props.onDeleteContent || props.keyboardLocked}
           >
             Delete
-          </button>
-        </div>,
-        document.body,
+          </ContextMenuItem>
+        </ContextMenu>
       )}
       {createKind && createPortal(
         <ContentCreateDialog
@@ -444,6 +583,34 @@ export function ContentBrowser(props: ContentBrowserProps) {
         />,
         document.body,
       )}
+      {renameTarget && createPortal(
+        <RenameContentDialog
+          node={renameTarget}
+          currentChildren={findContentFolder(props.tree, parentContentPath(renameTarget.path))?.children ?? props.tree}
+          name={renameName}
+          keyboardLocked={props.keyboardLocked}
+          onNameChange={setRenameName}
+          onConfirm={confirmRename}
+          onClose={() => {
+            setRenameTarget(null);
+            setRenameName("");
+          }}
+        />,
+        document.body,
+      )}
+      {bookmarkDialog && createPortal(
+        <BookmarkNameDialog
+          name={bookmarkDialogName}
+          existingNames={bookmarks.map((bookmark) => bookmark.name)}
+          onNameChange={setBookmarkDialogName}
+          onConfirm={confirmNewBookmark}
+          onClose={() => {
+            setBookmarkDialog(null);
+            setBookmarkDialogName("");
+          }}
+        />,
+        document.body,
+      )}
       {previewPath && createPortal(
         <ContentPreviewDialog
           path={previewPath}
@@ -458,6 +625,17 @@ export function ContentBrowser(props: ContentBrowserProps) {
   );
 }
 
+// Depth-first flatten of a content subtree into a single list (folders included),
+// used for recursive search and global bookmark filters.
+function flattenTree(nodes: ContentTreeNode[]): ContentTreeNode[] {
+  const out: ContentTreeNode[] = [];
+  for (const node of nodes) {
+    out.push(node);
+    if (node.children?.length) out.push(...flattenTree(node.children));
+  }
+  return out;
+}
+
 function renderFolderTree(
   nodes: ContentTreeNode[],
   selectedFolderPath: string,
@@ -465,6 +643,7 @@ function renderFolderTree(
   setExpandedFolders: (next: Set<string>) => void,
   setSelectedFolderPath: (path: string) => void,
   onLoadWorld: (name: string) => void,
+  onNodeContextMenu: (event: React.MouseEvent, node: ContentTreeNode) => void,
   depth = 0,
 ) {
   return nodes
@@ -491,15 +670,7 @@ function renderFolderTree(
               }
               onLoadWorld(node.path);
             }}
-            onContextMenu={(event) => {
-              if (!isFolder) return;
-              event.preventDefault();
-              event.stopPropagation();
-              setSelectedFolderPath(node.path);
-              const next = new Set(expandedFolders);
-              next.add(node.path);
-              setExpandedFolders(next);
-            }}
+            onContextMenu={(event) => onNodeContextMenu(event, node)}
           >
             <span className="w-3 flex justify-center text-[#888]">
               {isFolder && hasChildren ? <i className={`ph ph-caret-${isExpanded ? "down" : "right"} text-[10px]`} /> : null}
@@ -510,7 +681,7 @@ function renderFolderTree(
             <span className="truncate">{node.name}</span>
           </button>
           {isFolder && isExpanded && node.children?.length
-            ? renderFolderTree(node.children, selectedFolderPath, expandedFolders, setExpandedFolders, setSelectedFolderPath, onLoadWorld, depth + 1)
+            ? renderFolderTree(node.children, selectedFolderPath, expandedFolders, setExpandedFolders, setSelectedFolderPath, onLoadWorld, onNodeContextMenu, depth + 1)
             : null}
         </div>
       );

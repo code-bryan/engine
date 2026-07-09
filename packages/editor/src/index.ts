@@ -8,6 +8,7 @@ export { createStoreInspector } from "./features/inspector/cards";
 export { captureWorldSnapshot, restoreWorldSnapshot } from "./features/snapshots/snapshots";
 
 export type {
+  ContentBookmark,
   ContentTreeNode,
   DebugEditorField,
   DebugEditorSection,

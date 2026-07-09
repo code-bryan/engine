@@ -5,7 +5,7 @@ import { createContentApiMiddleware } from "./content-api";
 
 const execFileAsync = promisify(execFile);
 import { initProject } from "./init";
-import { loadProject, type ResolvedProject } from "./project";
+import { loadProject, saveProjectBookmarks, saveProjectEntryWorld, type ProjectBookmark, type ResolvedProject } from "./project";
 
 type Next = (err?: unknown) => void;
 
@@ -95,6 +95,42 @@ export function createEditorApi(initialDir?: string) {
       return;
     }
 
+    if (req.method === "POST" && pathName === "/api/project/bookmarks") {
+      if (!active) return sendJson(res, 409, { error: "no project open" });
+      const project = active;
+      readBody(req).then(async (body) => {
+        try {
+          const parsed = JSON.parse(body) as { bookmarks?: unknown };
+          const bookmarks = normalizeBookmarks(parsed.bookmarks);
+          await saveProjectBookmarks(project.root, bookmarks);
+          project.manifest.bookmarks = bookmarks;
+          sendJson(res, 200, { ok: true });
+        } catch (error) {
+          sendJson(res, 400, { error: error instanceof Error ? error.message : "invalid bookmarks" });
+        }
+      });
+      return;
+    }
+
+    if (req.method === "POST" && pathName === "/api/project/entry-world") {
+      if (!active) return sendJson(res, 409, { error: "no project open" });
+      const project = active;
+      readBody(req).then(async (body) => {
+        try {
+          const parsed = JSON.parse(body) as { entryWorld?: unknown };
+          if (typeof parsed.entryWorld !== "string" || !parsed.entryWorld) {
+            return sendJson(res, 400, { error: "missing entryWorld" });
+          }
+          await saveProjectEntryWorld(project.root, parsed.entryWorld);
+          project.manifest.entryWorld = parsed.entryWorld;
+          sendJson(res, 200, { ok: true });
+        } catch (error) {
+          sendJson(res, 400, { error: error instanceof Error ? error.message : "invalid entryWorld" });
+        }
+      });
+      return;
+    }
+
     // Everything else is content — scoped to the active project (or empty).
     contentApi(req, res, next);
   }
@@ -130,6 +166,17 @@ async function pickFolder(create: boolean): Promise<string | null> {
     // Non-zero exit (e.g. the user cancelled the dialog) surfaces as a rejection.
     return null;
   }
+}
+
+function normalizeBookmarks(raw: unknown): ProjectBookmark[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const value = entry as Partial<ProjectBookmark>;
+    if (typeof value.id !== "string" || typeof value.name !== "string") return [];
+    const items = Array.isArray(value.items) ? value.items.filter((item): item is string => typeof item === "string") : [];
+    return [{ id: value.id, name: value.name, items }];
+  });
 }
 
 function parsePath(body: string): string | null {

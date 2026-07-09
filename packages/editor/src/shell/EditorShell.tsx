@@ -8,7 +8,7 @@
 
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
-import type { ContentTreeNode, EditorToolMode } from "../shared/types";
+import type { ContentBookmark, ContentTreeNode, EditorToolMode } from "../shared/types";
 import type {
   DebuggerEntityItemView,
   DebuggerInspectorCardView,
@@ -117,6 +117,9 @@ export type EditorShellProps = {
   onCreateGraph?: (path: string) => void;
   onImportContent?: (path: string, value: unknown) => void;
   onDeleteContent?: (path: string, kind: ContentTreeNode["kind"]) => void;
+  onRename?: (from: string, to: string, kind: ContentTreeNode["kind"]) => void;
+  bookmarks: ContentBookmark[];
+  onBookmarksChange?: (bookmarks: ContentBookmark[]) => void;
   onToggleContentDrawer: () => void;
   projectName: string | null;
   recentProjects: string[];
@@ -609,6 +612,9 @@ export function EditorShell(props: EditorShellProps) {
                     onCreateGraph={props.onCreateGraph}
                     onImportContent={props.onImportContent}
                     onDeleteContent={props.onDeleteContent}
+                    onRename={props.onRename}
+                    bookmarks={props.bookmarks}
+                    onBookmarksChange={props.onBookmarksChange}
                     onOpenDoc={props.onOpenDoc}
                     keyboardLocked={isPlaying}
                   />

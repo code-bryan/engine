@@ -1,4 +1,4 @@
-import { attachEditor, createStoreInspector, type ContentTreeNode, type DebugEditorField, type DebuggerWorld } from "@engine/editor";
+import { attachEditor, createStoreInspector, type ContentBookmark, type ContentTreeNode, type DebugEditorField, type DebuggerWorld } from "@engine/editor";
 import { getComponentDefinitions, getComponentStore, type ComponentDefinition } from "@engine/runtime";
 import type { ComponentStore, Entity } from "@engine/ecs-core";
 import { keyboard, pointer } from "@engine/input";
@@ -21,6 +21,7 @@ export type DebugEditorPlayback = {
   onCreateGraph?: (path: string) => void;
   onImportContent?: (path: string, value: unknown) => void;
   onDeleteContent?: (path: string, kind: "folder" | "world" | "prefab" | "component" | "graph" | "file") => void;
+  onRename?: (from: string, to: string, kind: "folder" | "world" | "prefab" | "component" | "graph" | "file") => void;
   onAddSystem?: (name: string) => void;
   onRemoveSystem?: (name: string) => void;
   onOpenProject?: (path: string) => void;
@@ -30,6 +31,8 @@ export type DebugEditorPlayback = {
 };
 
 export type DebugEditorOptions = DebugEditorPlayback & {
+  bookmarks?: ContentBookmark[];
+  onBookmarksChange?: (bookmarks: ContentBookmark[]) => void;
   contentTree?: ContentTreeNode[];
   activeWorld?: string;
   activeSystems?: string[];
@@ -54,6 +57,9 @@ export function attachDebugEditor(world: GameWorld, engine: EngineApplication, o
     onCreateGraph: playback.onCreateGraph,
     onImportContent: playback.onImportContent,
     onDeleteContent: playback.onDeleteContent,
+    onRename: playback.onRename,
+    bookmarks: options.bookmarks,
+    onBookmarksChange: options.onBookmarksChange,
     onAddSystem: playback.onAddSystem,
     onRemoveSystem: playback.onRemoveSystem,
     onOpenProject: playback.onOpenProject,

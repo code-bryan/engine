@@ -1,4 +1,4 @@
-import { captureWorldSnapshot, restoreWorldSnapshot } from "@engine/editor";
+import { captureWorldSnapshot, restoreWorldSnapshot, type ContentBookmark } from "@engine/editor";
 import {
   initializeDemoRuntime,
   fetchContentTree,
@@ -24,6 +24,7 @@ type ProjectManifest = {
   name: string;
   entryWorld: string;
   systems?: string[];
+  bookmarks?: ContentBookmark[];
 };
 
 // The editor opens whatever project the CLI wired in; the manifest supplies the
@@ -282,6 +283,59 @@ async function boot(startPlaying: boolean) {
       await fetch(`${endpoint}?path=${encodeURIComponent(path)}`, { method: "DELETE" });
       await refreshContent();
     },
+    async onRename(from, to, kind) {
+      await fetch("/api/content/rename", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from, to, kind }),
+      });
+      // Keep the host's open-world/active-world identity in sync with the new
+      // path (covers folder renames that reparent open worlds too), then let the
+      // editor relabel its tabs.
+      openWorldPaths = openWorldPaths.map((path) => remapContentPath(path, from, to));
+      worldName = remapContentPath(worldName, from, to);
+      // Keep project.json's entry world pointing at the renamed world (or a world
+      // moved by a renamed parent folder), so the next boot opens the right one.
+      const nextEntry = remapContentPath(projectManifest.entryWorld, from, to);
+      if (nextEntry !== projectManifest.entryWorld) {
+        projectManifest = { ...projectManifest, entryWorld: nextEntry };
+        void fetch("/api/project/entry-world", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ entryWorld: nextEntry }),
+        });
+      }
+      // Rewrite the renamed path (and anything under a renamed folder) inside any
+      // bookmark that references it, then persist + push the update to the editor.
+      const currentBookmarks = projectManifest.bookmarks ?? [];
+      const affectsBookmarks = currentBookmarks.some((bookmark) =>
+        bookmark.items.some((item) => item === from || item.startsWith(`${from}/`)),
+      );
+      if (affectsBookmarks) {
+        const nextBookmarks = currentBookmarks.map((bookmark) => ({
+          ...bookmark,
+          items: bookmark.items.map((item) => remapContentPath(item, from, to)),
+        }));
+        projectManifest = { ...projectManifest, bookmarks: nextBookmarks };
+        void fetch("/api/project/bookmarks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bookmarks: nextBookmarks }),
+        });
+        debuggerEditor?.setBookmarks(nextBookmarks);
+      }
+      debuggerEditor?.renameContent(from, to);
+      await refreshContent();
+    },
+    bookmarks: projectManifest.bookmarks ?? [],
+    onBookmarksChange(bookmarks) {
+      projectManifest = { ...projectManifest, bookmarks };
+      void fetch("/api/project/bookmarks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookmarks }),
+      });
+    },
     initialContentDrawerOpen: contentDrawerOpen,
     onContentDrawerToggled(open) {
       contentDrawerOpen = open;
@@ -320,6 +374,14 @@ async function saveContentJson(path: string, data: unknown) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data, null, 2),
   });
+}
+
+// Remap a content path after `from` was renamed to `to`, including paths nested
+// under a renamed folder. Returns the path unchanged when unaffected.
+function remapContentPath(path: string, from: string, to: string) {
+  if (path === from) return to;
+  if (path.startsWith(`${from}/`)) return `${to}/${path.slice(from.length + 1)}`;
+  return path;
 }
 
 function toTitleCase(value: string) {

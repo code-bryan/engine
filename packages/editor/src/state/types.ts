@@ -110,6 +110,8 @@ export type EditorAction =
   // world tabs
   | { type: "add-open-world"; path: string }
   | { type: "remove-open-world"; path: string }
+  // path remap after a content rename (updates open world/doc tabs in place)
+  | { type: "rename-path"; from: string; to: string }
   // dirty tracking
   | { type: "set-world-dirty"; dirty: boolean }
   // toasts

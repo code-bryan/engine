@@ -21,6 +21,7 @@ import { renderEditor, type EditorUiActions } from "../shell/view-model";
 import { ensureEditorStyles } from "../styles";
 import { ALL_LOG_CATEGORIES } from "../shared/types";
 import type {
+  ContentBookmark,
   ContentTreeNode,
   DebugEditor,
   DebugInspectorComponent,
@@ -380,25 +381,36 @@ export function attachEditor<TWorld extends DebuggerWorld>(
     try {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
       const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
-      if (method === "POST" && /\/api\/content\/(file|folder)(\?|$)/.test(url)) {
-        const isFolder = url.includes("/api/content/folder");
-        const path = new URL(url, window.location.origin).searchParams.get("path") ?? "";
+      const routeMatch = /\/api\/content\/(file|folder|rename)(\?|$)/.exec(url);
+      if (routeMatch && (method === "POST" || method === "DELETE")) {
+        const route = routeMatch[1];
+        const isFolder = route === "folder";
+        // The rename target lives in the request body, not the query string.
+        let path = "";
+        if (route === "rename") {
+          try {
+            const parsed = JSON.parse(typeof init?.body === "string" ? init.body : "{}");
+            path = typeof parsed.to === "string" ? parsed.to : "";
+          } catch {}
+        } else {
+          path = new URL(url, window.location.origin).searchParams.get("path") ?? "";
+        }
         const name = path.split("/").filter(Boolean).at(-1) ?? "";
+        const title = !response.ok
+          ? method === "DELETE" ? "Delete failed" : route === "rename" ? "Rename failed" : "Save failed"
+          : route === "rename"
+            ? "Renamed"
+            : method === "DELETE"
+              ? isFolder ? "Folder deleted" : "Deleted"
+              : isFolder ? "Folder created" : "Saved";
         store.dispatch({
           type: "add-toast",
-          toast: response.ok
-            ? {
-                kind: "success",
-                title: isFolder ? "Folder created" : "Saved",
-                description: name || undefined,
-                coalesceKey: `${isFolder ? "folder" : "file"}:${path}`,
-              }
-            : {
-                kind: "error",
-                title: "Save failed",
-                description: name || undefined,
-                coalesceKey: `${isFolder ? "folder" : "file"}:${path}`,
-              },
+          toast: {
+            kind: response.ok ? "success" : "error",
+            title,
+            description: name || undefined,
+            coalesceKey: `${route}:${path}`,
+          },
         });
         render();
       }
@@ -554,8 +566,6 @@ export function attachEditor<TWorld extends DebuggerWorld>(
 
   const handleCanvasWheel = (event: WheelEvent) => {
     if (event.deltaY === 0) return;
-    const target = event.target as Element;
-    if (target.closest(".debugger-panel, .debugger-toolbar")) return;
     event.preventDefault();
     const s = getState();
     const camera = wheelZoomCamera(
@@ -592,7 +602,7 @@ export function attachEditor<TWorld extends DebuggerWorld>(
   engine.app.canvas.addEventListener("pointermove", handleCanvasPointerMove);
   engine.app.canvas.addEventListener("pointerup", handleCanvasPointerUp);
   engine.app.canvas.addEventListener("pointerleave", handleCanvasPointerUp);
-  shell.addEventListener("wheel", handleCanvasWheel, { passive: false });
+  engine.app.canvas.addEventListener("wheel", handleCanvasWheel, { passive: false });
 
   render();
 
@@ -604,6 +614,26 @@ export function attachEditor<TWorld extends DebuggerWorld>(
     },
     setContentTree(tree: ContentTreeNode[]) {
       options.contentTree = tree;
+      render();
+    },
+    setBookmarks(bookmarks: ContentBookmark[]) {
+      options.bookmarks = bookmarks;
+      render();
+    },
+    // Sync open world/doc tabs (and the active-world identity) after a content
+    // rename, so a renamed world's tab relabels instead of going stale.
+    renameContent(from: string, to: string) {
+      store.dispatch({ type: "rename-path", from, to });
+      const remap = (path?: string) =>
+        !path
+          ? path
+          : path === from
+            ? to
+            : path.startsWith(`${from}/`)
+              ? `${to}/${path.slice(from.length + 1)}`
+              : path;
+      const nextActive = remap(options.activeWorld);
+      if (nextActive !== options.activeWorld) options.activeWorld = nextActive;
       render();
     },
     setActiveWorld(name: string, opts?: { activeSystems?: string[]; contentTree?: ContentTreeNode[] }) {
@@ -626,7 +656,7 @@ export function attachEditor<TWorld extends DebuggerWorld>(
       engine.app.canvas.removeEventListener("pointermove", handleCanvasPointerMove);
       engine.app.canvas.removeEventListener("pointerup", handleCanvasPointerUp);
       engine.app.canvas.removeEventListener("pointerleave", handleCanvasPointerUp);
-      shell.removeEventListener("wheel", handleCanvasWheel);
+      engine.app.canvas.removeEventListener("wheel", handleCanvasWheel);
       document.removeEventListener("click", handleDocumentClick);
       removeKeyboard();
       reactRoot.unmount();

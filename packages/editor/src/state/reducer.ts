@@ -146,6 +146,22 @@ export function reduce(state: DebugState, action: EditorAction): DebugState {
     case "remove-open-world":
       return { ...state, openWorlds: state.openWorlds.filter((path) => path !== action.path) };
 
+    case "rename-path": {
+      // Remap the renamed path itself and anything nested under it (folder rename).
+      const remap = (path: string) =>
+        path === action.from
+          ? action.to
+          : path.startsWith(`${action.from}/`)
+            ? `${action.to}/${path.slice(action.from.length + 1)}`
+            : path;
+      return {
+        ...state,
+        openWorlds: state.openWorlds.map(remap),
+        openDocs: state.openDocs.map((doc) => ({ ...doc, path: remap(doc.path) })),
+        activeDoc: state.activeDoc ? remap(state.activeDoc) : state.activeDoc,
+      };
+    }
+
     case "frame-start":
       // Silent telemetry: mutate in place.
       state.latestFrame = action.frame;

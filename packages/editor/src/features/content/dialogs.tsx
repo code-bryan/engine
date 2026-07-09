@@ -91,6 +91,110 @@ export function ContentCreateDialog(props: ContentCreateDialogProps) {
   );
 }
 
+export type RenameContentDialogProps = {
+  node: ContentTreeNode;
+  currentChildren: ContentTreeNode[];
+  name: string;
+  keyboardLocked: boolean;
+  onNameChange: (value: string) => void;
+  onConfirm: () => void;
+  onClose: () => void;
+};
+
+export function RenameContentDialog(props: RenameContentDialogProps) {
+  const trimmed = props.name.trim();
+  const collides = trimmed !== props.node.name && props.currentChildren.some((node) => node.name === trimmed);
+  const unchanged = trimmed === props.node.name;
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm text-xs" role="dialog" aria-modal="true" onClick={props.onClose}>
+      <div className="w-[360px] max-w-[90vw] flex flex-col bg-[#1e1e1e] border border-[#303030] rounded-lg shadow-2xl overflow-hidden" onClick={(event) => event.stopPropagation()}>
+        <div className="h-9 bg-[#252526] flex items-center justify-between px-3 border-b border-[#303030]">
+          <div className="flex flex-col">
+            <span className="text-white font-medium capitalize">Rename {props.node.kind}</span>
+            <span className="text-[#888] text-[10px]">{props.node.path || "root"}</span>
+          </div>
+          <button className="text-[#888] hover:text-white transition-colors" onClick={props.onClose} aria-label="Close dialog">
+            <i className="ph ph-x" />
+          </button>
+        </div>
+        <div className="p-3 space-y-2">
+          <label className="flex flex-col gap-1">
+            <span className="text-[#888]">Name</span>
+            <input
+              className="engine-input px-2 py-1 rounded"
+              autoFocus
+              value={props.name}
+              disabled={props.keyboardLocked}
+              onChange={(event) => props.onNameChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && trimmed && !collides && !unchanged) props.onConfirm();
+                if (event.key === "Escape") props.onClose();
+              }}
+            />
+          </label>
+          {collides && trimmed && !props.keyboardLocked ? <div className="text-[#f87171]">already exists</div> : null}
+        </div>
+        <div className="flex justify-end gap-2 p-3 border-t border-[#303030]">
+          <button className={DIALOG_BTN} onClick={props.onClose}>Cancel</button>
+          <button className={DIALOG_BTN_PRIMARY} onClick={props.onConfirm} disabled={!trimmed || collides || unchanged || props.keyboardLocked}>
+            Rename
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+export type BookmarkNameDialogProps = {
+  name: string;
+  existingNames: string[];
+  onNameChange: (value: string) => void;
+  onConfirm: () => void;
+  onClose: () => void;
+};
+
+export function BookmarkNameDialog(props: BookmarkNameDialogProps) {
+  const trimmed = props.name.trim();
+  const collides = props.existingNames.some((existing) => existing === trimmed);
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm text-xs" role="dialog" aria-modal="true" onClick={props.onClose}>
+      <div className="w-[360px] max-w-[90vw] flex flex-col bg-[#1e1e1e] border border-[#303030] rounded-lg shadow-2xl overflow-hidden" onClick={(event) => event.stopPropagation()}>
+        <div className="h-9 bg-[#252526] flex items-center justify-between px-3 border-b border-[#303030]">
+          <span className="text-white font-medium flex items-center gap-1"><i className="ph-fill ph-bookmark-simple text-[#0070e0]" /> New bookmark</span>
+          <button className="text-[#888] hover:text-white transition-colors" onClick={props.onClose} aria-label="Close dialog">
+            <i className="ph ph-x" />
+          </button>
+        </div>
+        <div className="p-3 space-y-2">
+          <label className="flex flex-col gap-1">
+            <span className="text-[#888]">Name</span>
+            <input
+              className="engine-input px-2 py-1 rounded"
+              autoFocus
+              placeholder="e.g. Textures"
+              value={props.name}
+              onChange={(event) => props.onNameChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && trimmed && !collides) props.onConfirm();
+                if (event.key === "Escape") props.onClose();
+              }}
+            />
+          </label>
+          {collides && trimmed ? <div className="text-[#f87171]">already exists</div> : null}
+        </div>
+        <div className="flex justify-end gap-2 p-3 border-t border-[#303030]">
+          <button className={DIALOG_BTN} onClick={props.onClose}>Cancel</button>
+          <button className={DIALOG_BTN_PRIMARY} onClick={props.onConfirm} disabled={!trimmed || collides}>
+            Create
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 export type ContentImportDialogProps = {
   basePath: string;
   file: File | null;
