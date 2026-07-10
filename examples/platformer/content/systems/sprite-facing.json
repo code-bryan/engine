@@ -47,8 +47,8 @@
       "id": "d5535b85-49ef-4a05-bb52-b73e92197ab7",
       "type": "SetComponent",
       "position": {
-        "x": 1505,
-        "y": 348
+        "x": 1589,
+        "y": 75
       },
       "data": {
         "component": "facing"
