@@ -51,6 +51,7 @@ export type EditorUiActions = {
   createFolder: (name: string) => void;
   removeFolder: (name: string) => void;
   moveEntityToFolder: (entity: number, folder?: string) => void;
+  reorderEntity: (entity: number, anchor: OutlineOrderItem | null, folder?: string) => void;
   toggleComponentCollapse: (id: string) => void;
   editInspector: (entity: number, componentId: string, key: string, value: string) => void;
   saveSnapshot: () => void;
@@ -158,6 +159,7 @@ export function renderEditor<TWorld extends DebuggerWorld>(
     onAddFolder: actions.createFolder,
     onRemoveFolder: actions.removeFolder,
     onMoveEntity: actions.moveEntityToFolder,
+    onReorderEntity: actions.reorderEntity,
     folders,
     onToggleComponentCollapse: actions.toggleComponentCollapse,
     onInspectorEdit: actions.editInspector,

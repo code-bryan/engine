@@ -274,6 +274,31 @@ export function attachEditor<TWorld extends DebuggerWorld>(
       markWorldDirty();
       render();
     },
+    // Reorder an entity to the slot before `anchor` (or the end when anchor is
+    // null). `folder` sets membership: undefined = top-level/loose, else nested in
+    // that folder — so this handles both between-folder and within-folder drops.
+    reorderEntity(entity, anchor, folder) {
+      if (options.playback?.getState?.() === "playing") return;
+      // Dropping into the gap right before itself is a no-op.
+      if (anchor && anchor.kind === "entity" && anchor.entity === entity) return;
+      const from = worldOrder.findIndex((item) => item.kind === "entity" && item.entity === entity);
+      if (from === -1) return;
+      if (folder) entityFolders.set(entity, folder);
+      else entityFolders.delete(entity);
+      const [item] = worldOrder.splice(from, 1);
+      let to = worldOrder.length;
+      if (anchor) {
+        const index = worldOrder.findIndex((it) =>
+          anchor.kind === "folder"
+            ? it.kind === "folder" && it.name === anchor.name
+            : it.kind === "entity" && it.entity === anchor.entity,
+        );
+        if (index !== -1) to = index;
+      }
+      worldOrder.splice(to, 0, item);
+      markWorldDirty();
+      render();
+    },
     addSystem(name) { options.onAddSystem?.(name); markWorldDirty(); render(); },
     removeSystem(name) { options.onRemoveSystem?.(name); markWorldDirty(); render(); },
     openProject(path) { options.onOpenProject?.(path); },

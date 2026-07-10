@@ -7,9 +7,36 @@
     "sprite-facing",
     "restart-on-enemy-touch"
   ],
-  "entities": [
+  "elements": [
     {
+      "type": "entity",
+      "position": 0,
+      "folder": "enemy",
+      "name": "Testing",
+      "components": {
+        "transform": {
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "rotation": 0,
+          "size": {
+            "x": 0,
+            "y": 0
+          }
+        }
+      }
+    },
+    {
+      "type": "folder",
+      "name": "player",
+      "position": 1
+    },
+    {
+      "type": "entity",
+      "position": 2,
       "extends": "player",
+      "folder": "player",
       "components": {
         "transform": {
           "position": {
@@ -25,11 +52,18 @@
         "actor-state": "idle",
         "facing": "right",
         "speed": 96
-      },
-      "folder": "player"
+      }
     },
     {
+      "type": "folder",
+      "name": "enemy",
+      "position": 3
+    },
+    {
+      "type": "entity",
+      "position": 4,
       "extends": "enemy",
+      "folder": "enemy",
       "components": {
         "transform": {
           "position": {
@@ -45,10 +79,12 @@
         "actor-state": "idle",
         "facing": "left",
         "speed": 42
-      },
-      "folder": "enemy"
+      }
     },
     {
+      "type": "entity",
+      "position": 5,
+      "folder": "player",
       "components": {
         "transform": {
           "position": {
@@ -62,10 +98,12 @@
           }
         },
         "tag": "player-spawn"
-      },
-      "folder": "player"
+      }
     },
     {
+      "type": "entity",
+      "position": 6,
+      "folder": "enemy",
       "components": {
         "transform": {
           "position": {
@@ -79,8 +117,12 @@
           }
         },
         "tag": "enemy-spawn"
-      },
-      "folder": "enemy"
+      }
+    },
+    {
+      "type": "folder",
+      "name": "testing",
+      "position": 7
     }
   ]
 }

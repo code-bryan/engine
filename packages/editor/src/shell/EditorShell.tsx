@@ -7,8 +7,8 @@
 // is a component under features/*. Extracted verbatim from the old debugger-ui.
 
 import { createPortal } from "react-dom";
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type DragEvent as ReactDragEvent } from "react";
-import type { ContentBookmark, ContentTreeNode, EditorToolMode, EngineAsset } from "../shared/types";
+import { Fragment, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type DragEvent as ReactDragEvent } from "react";
+import type { ContentBookmark, ContentTreeNode, EditorToolMode, EngineAsset, OutlineOrderItem } from "../shared/types";
 import type {
   DebuggerEntityItemView,
   DebuggerInspectorCardView,
@@ -75,6 +75,7 @@ export type EditorShellProps = {
   onAddFolder: (name: string) => void;
   onRemoveFolder: (name: string) => void;
   onMoveEntity: (entity: number, folder?: string) => void;
+  onReorderEntity: (entity: number, anchor: OutlineOrderItem | null, folder?: string) => void;
   inspectorCards: DebuggerInspectorCardView[];
   snapshots: DebuggerSnapshotView[];
   systems: DebuggerSystemView[];
@@ -173,6 +174,8 @@ export function EditorShell(props: EditorShellProps) {
   const [renameTarget, setRenameTarget] = useState<{ entity: number; value: string } | null>(null);
   const dragEntityRef = useRef<number | null>(null);
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
+  const [dragOverGap, setDragOverGap] = useState<string | null>(null);
+  const [draggingEntity, setDraggingEntity] = useState(false);
   const zoomToastTimerRef = useRef<number | undefined>(undefined);
   const didMountRef = useRef(false);
   const isPlaying = props.playbackState === "playing";
@@ -223,13 +226,28 @@ export function EditorShell(props: EditorShellProps) {
     dragEntityRef.current = entity;
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", String(entity));
+    // Defer the layout change (gaps expanding) to the next tick — mutating the
+    // drag source's layout synchronously inside dragstart cancels the drag in Chrome.
+    setTimeout(() => setDraggingEntity(true), 0);
+  };
+  const endEntityDrag = () => {
+    dragEntityRef.current = null;
+    setDragOverFolder(null);
+    setDragOverGap(null);
+    setDraggingEntity(false);
   };
   // folder === undefined drops to the ungrouped root.
   const handleDropToFolder = (folder?: string) => {
     const entity = dragEntityRef.current;
-    dragEntityRef.current = null;
-    setDragOverFolder(null);
+    endEntityDrag();
     if (entity !== null) props.onMoveEntity(entity, folder);
+  };
+  // Dropped in a gap before `anchor` (or the end when null). `folder` nests the
+  // entity in that folder (within-folder gap); undefined = top-level/loose.
+  const handleDropBefore = (anchor: OutlineOrderItem | null, folder?: string) => {
+    const entity = dragEntityRef.current;
+    endEntityDrag();
+    if (entity !== null) props.onReorderEntity(entity, anchor, folder);
   };
 
   useEffect(() => {
@@ -776,7 +794,7 @@ export function EditorShell(props: EditorShellProps) {
                       ref={entity.selected ? selectedEntityRef : null}
                       draggable={!isPlaying}
                       onDragStart={(event) => handleEntityDragStart(event, entity.entity)}
-                      onDragEnd={() => setDragOverFolder(null)}
+                      onDragEnd={endEntityDrag}
                       className={`w-full flex items-center ${padLeft} pr-3 py-1 cursor-pointer text-left ${entity.selected ? "bg-[#2d2d2d] border-l-2 border-[#0070e0] text-white" : "text-[#ccc] hover:bg-[#2d2d2d]"}`}
                       onClick={() => props.onSelectEntity(entity.entity)}
                       onContextMenu={(event) => openOutlinerMenu(event, { kind: "entity", entity: entity.entity })}
@@ -793,34 +811,66 @@ export function EditorShell(props: EditorShellProps) {
                       return next;
                     });
                   };
+                  // A between-rows drop zone. Dropping here reorders the dragged
+                  // entity to the slot before `anchor` (or the end when null); `folder`
+                  // nests it in that folder, otherwise it lands loose at top level.
+                  // Only occupies space while a drag is in progress.
+                  const renderGap = (id: string, anchor: OutlineOrderItem | null, folder?: string) => (
+                    <div
+                      key={`gap:${id}`}
+                      className={`${draggingEntity ? "h-2" : "h-0"} ${folder ? "ml-12" : ""} ${dragOverGap === id ? "border-t-2 border-[#0070e0]" : ""}`}
+                      onDragOver={(event) => { if (dragEntityRef.current !== null) { event.preventDefault(); event.stopPropagation(); setDragOverGap(id); } }}
+                      onDrop={(event) => { event.preventDefault(); event.stopPropagation(); handleDropBefore(anchor, folder); }}
+                    />
+                  );
                   // Render the ordered outliner tree: folders and loose entities are
-                  // top-level nodes in world-order; foldered entities nest under them.
+                  // top-level nodes in world-order (with reorder gaps between them);
+                  // foldered entities nest under their folder (with their own gaps).
                   return (
                     <>
-                      {props.outline.map((node) => {
-                        if (node.kind === "entity") return renderEntityRow(node.entity, "pl-7");
-                        const collapsed = collapsedEntityFolders.has(node.name);
+                      {props.outline.map((node, index) => {
+                        const anchor: OutlineOrderItem = node.kind === "folder"
+                          ? { kind: "folder", name: node.name }
+                          : { kind: "entity", entity: node.entity.entity };
                         return (
-                          <div
-                            key={`folder:${node.name}`}
-                            className={dragOverFolder === node.name ? "bg-[#0070e0]/10" : ""}
-                            onDragOver={(event) => { if (dragEntityRef.current !== null) { event.preventDefault(); event.stopPropagation(); setDragOverFolder(node.name); } }}
-                            onDrop={(event) => { event.preventDefault(); event.stopPropagation(); handleDropToFolder(node.name); }}
-                          >
-                            <button
-                              className="w-full flex items-center pl-7 pr-3 py-1 cursor-pointer text-left text-[#ccc] hover:bg-[#2d2d2d]"
-                              onClick={() => toggleFolder(node.name)}
-                              onContextMenu={(event) => openOutlinerMenu(event, { kind: "folder", folder: node.name })}
-                            >
-                              <i className={`ph ph-caret-${collapsed ? "right" : "down"} text-[10px] mr-1 text-[#888]`} />
-                              <i className={`ph-fill ph-${collapsed ? "folder" : "folder-open"} text-[#888] mr-2`} />
-                              <span className="truncate flex-1">{node.name}</span>
-                              <span className="text-[10px] text-[#666] ml-2">{node.children.length}</span>
-                            </button>
-                            {collapsed ? null : node.children.map((entity) => renderEntityRow(entity, "pl-12"))}
-                          </div>
+                          <Fragment key={node.kind === "folder" ? `folder:${node.name}` : `entity:${node.entity.entity}`}>
+                            {renderGap(`top:${index}`, anchor)}
+                            {node.kind === "entity" ? renderEntityRow(node.entity, "pl-7") : (() => {
+                              const collapsed = collapsedEntityFolders.has(node.name);
+                              return (
+                                <div
+                                  className={dragOverFolder === node.name ? "bg-[#0070e0]/10" : ""}
+                                  onDragOver={(event) => { if (dragEntityRef.current !== null) { event.preventDefault(); event.stopPropagation(); setDragOverFolder(node.name); } }}
+                                  onDrop={(event) => { event.preventDefault(); event.stopPropagation(); handleDropToFolder(node.name); }}
+                                >
+                                  <button
+                                    className="w-full flex items-center pl-7 pr-3 py-1 cursor-pointer text-left text-[#ccc] hover:bg-[#2d2d2d]"
+                                    onClick={() => toggleFolder(node.name)}
+                                    onContextMenu={(event) => openOutlinerMenu(event, { kind: "folder", folder: node.name })}
+                                  >
+                                    <i className={`ph ph-caret-${collapsed ? "right" : "down"} text-[10px] mr-1 text-[#888]`} />
+                                    <i className={`ph-fill ph-${collapsed ? "folder" : "folder-open"} text-[#888] mr-2`} />
+                                    <span className="truncate flex-1">{node.name}</span>
+                                    <span className="text-[10px] text-[#666] ml-2">{node.children.length}</span>
+                                  </button>
+                                  {collapsed ? null : (
+                                    <>
+                                      {node.children.map((child) => (
+                                        <Fragment key={`child:${child.entity}`}>
+                                          {renderGap(`fold:${node.name}:${child.entity}`, { kind: "entity", entity: child.entity }, node.name)}
+                                          {renderEntityRow(child, "pl-12")}
+                                        </Fragment>
+                                      ))}
+                                      {renderGap(`fold:${node.name}:end`, null, node.name)}
+                                    </>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </Fragment>
                         );
                       })}
+                      {renderGap(`top:${props.outline.length}`, null)}
                     </>
                   );
                 })()}
