@@ -1,5 +1,5 @@
 import { attachEditor, createStoreInspector, type ContentBookmark, type ContentTreeNode, type DebugEditorField, type DebuggerWorld } from "@engine/editor";
-import { getComponentDefinitions, getComponentStore, type ComponentDefinition } from "@engine/runtime";
+import { getComponentDefinitions, getComponentStore, getPremadeAssets, type ComponentDefinition } from "@engine/runtime";
 import type { ComponentStore, Entity } from "@engine/ecs-core";
 import { keyboard, pointer } from "@engine/input";
 import type { EngineApplication } from "@engine/renderer";
@@ -69,6 +69,7 @@ export function attachDebugEditor(world: GameWorld, engine: EngineApplication, o
     projectName: options.projectName,
     recentProjects: options.recentProjects,
     contentTree: options.contentTree,
+    engineAssets: getPremadeAssets(),
     activeWorld: options.activeWorld,
     activeSystems: options.activeSystems,
     initialContentDrawerOpen: options.initialContentDrawerOpen,

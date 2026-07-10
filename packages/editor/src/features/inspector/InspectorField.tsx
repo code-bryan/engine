@@ -13,6 +13,27 @@ export function InspectorField(
 ) {
   const { field } = props;
 
+  // Grouped vector: label above, one input per axis below ([x, y] / [angle]).
+  if (field.axes && field.axes.length > 0 && field.entity !== undefined && field.componentId) {
+    return (
+      <div className="flex flex-col gap-1">
+        <span className="text-[#888]">{field.label}</span>
+        <div className="flex gap-1">
+          {field.axes.map((axis) => (
+            <label className="flex-1 min-w-0 flex items-center gap-1" key={axis.editKey}>
+              <span className="w-3 shrink-0 text-[#666] text-[10px]">{axis.label}</span>
+              <input
+                className="engine-input flex-1 min-w-0 px-2 py-1 rounded text-right"
+                value={axis.value}
+                onChange={(event) => props.onEdit(field.entity!, field.componentId!, axis.editKey, event.target.value)}
+              />
+            </label>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   if (field.editable && field.entity !== undefined && field.componentId && field.editKey) {
     return (
       <label className="flex items-center gap-2">

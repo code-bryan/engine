@@ -1,7 +1,7 @@
 import { getComponentRegistry, type Entity } from "@engine/ecs-core";
-import { transforms, sprites, spriteAnimations, type TransformScale } from "@engine/renderer";
+import { transforms, sprites, spriteAnimations } from "@engine/renderer";
 import type { DemoGameWorld } from "./types";
-import { instantiatePrefab, type PrefabPlacement } from "./prefabs";
+import { instantiatePrefab, coerceTransform, type PrefabPlacement, type PrefabTransform } from "./prefabs";
 
 export type DemoWorldEntity = PrefabPlacement;
 
@@ -87,10 +87,9 @@ export function serializeWorld(world: DemoGameWorld, systems: string[] = []): De
     entities.push({
       prefab,
       transform: {
-        x: transform.x,
-        y: transform.y,
-        rotation: transform.rotation ?? 0,
-        scale: normalizeScale(transform.scale),
+        position: { x: transform.position.x, y: transform.position.y },
+        rotation: transform.rotation,
+        scale: { x: transform.scale.x, y: transform.scale.y },
       },
       components: Object.keys(components).length > 0 ? components : undefined,
     });
@@ -134,11 +133,6 @@ function storageKey(name: string) {
   return `${storageNamespace}.${name}`;
 }
 
-function normalizeScale(scale?: TransformScale) {
-  if (scale === undefined) return { x: 1, y: 1 };
-  return typeof scale === "number" ? { x: scale, y: scale } : scale;
-}
-
 function normalizeWorldEntity(value: unknown): DemoWorldEntity | null {
   if (!value || typeof value !== "object") return null;
   const entity = value as {
@@ -168,41 +162,29 @@ function normalizeWorldEntity(value: unknown): DemoWorldEntity | null {
 
   const prefab = entity.kind;
   const components = normalizeComponents(entity.components);
+  // Speed is a standalone component now; spawn is no longer entity data (it lives
+  // on separate spawn-point entities), so the legacy flat format only carries speed.
   if (prefab === "player") {
-    components.player = {
-      speed: typeof entity.speed === "number" ? entity.speed : 96,
-      spawnX: typeof entity.spawnX === "number" ? entity.spawnX : entity.x,
-      spawnY: typeof entity.spawnY === "number" ? entity.spawnY : entity.y,
-    };
+    components.speed = typeof entity.speed === "number" ? entity.speed : 96;
   }
   if (prefab === "enemy") {
-    components.enemy = {
-      speed: typeof entity.speed === "number" ? entity.speed : 42,
-      spawnX: typeof entity.spawnX === "number" ? entity.spawnX : entity.x,
-      spawnY: typeof entity.spawnY === "number" ? entity.spawnY : entity.y,
-    };
+    components.speed = typeof entity.speed === "number" ? entity.speed : 42;
   }
 
   return {
     prefab,
-    transform: {
-      x: entity.x,
-      y: entity.y,
-      rotation: typeof entity.rotation === "number" ? entity.rotation : 0,
-      scale: typeof entity.scale === "number" ? entity.scale : 1,
-    },
+    transform: normalizeTransform(entity),
     components: Object.keys(components).length > 0 ? components : undefined,
   };
 }
 
-function normalizeTransform(value: unknown): DemoWorldEntity["transform"] {
+function normalizeTransform(value: unknown): PrefabTransform | undefined {
   if (!value || typeof value !== "object") return undefined;
-  const transform = value as Partial<NonNullable<DemoWorldEntity["transform"]>>;
+  const parts = coerceTransform(value);
   return {
-    x: typeof transform.x === "number" ? transform.x : 0,
-    y: typeof transform.y === "number" ? transform.y : 0,
-    rotation: typeof transform.rotation === "number" ? transform.rotation : 0,
-    scale: normalizeScale(transform.scale),
+    position: parts.position ?? { x: 0, y: 0 },
+    rotation: parts.rotation ?? 0,
+    scale: parts.scale ?? { x: 1, y: 1 },
   };
 }
 

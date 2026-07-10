@@ -230,6 +230,17 @@ export function attachEditor<TWorld extends DebuggerWorld>(
     toggleComponentCollapse(id) { store.dispatch({ type: "toggle-component-collapse", id }); render(); },
     editInspector(entity, componentId, key, value) {
       applyInspectorEdit(world, componentInspectorMap, entity, componentId, key, value);
+      // A transform edit must be pushed into the physics body too, otherwise the
+      // next tick overwrites the transform back from the (stale) body. Then tick
+      // once so the render system repositions the sprite for the new values.
+      if (componentId === "transform") {
+        const transform = transforms.get(entity);
+        if (transform) {
+          world.physics.reset(entity, { x: transform.position.x, y: transform.position.y }, { x: 0, y: 0 });
+          world.physics.setAngle(entity, transform.rotation);
+        }
+      }
+      engine.tick(0);
       markWorldDirty();
       render();
     },
@@ -314,7 +325,7 @@ export function attachEditor<TWorld extends DebuggerWorld>(
       const t = transforms.get(s.lockTarget);
       if (t) {
         const rect = renderer.getViewportRect();
-        camera = { zoom: camera.zoom, x: rect.left + rect.width / 2 - t.x * camera.zoom, y: rect.top + rect.height / 2 - t.y * camera.zoom };
+        camera = { zoom: camera.zoom, x: rect.left + rect.width / 2 - t.position.x * camera.zoom, y: rect.top + rect.height / 2 - t.position.y * camera.zoom };
         store.dispatch({ type: "set-camera", camera });
       }
     }
@@ -478,8 +489,8 @@ export function attachEditor<TWorld extends DebuggerWorld>(
           gizmoDrag = {
             hit: gizmoHit,
             startWorld: worldPt,
-            startPosition: { x: transform.x, y: transform.y },
-            startRotation: transform.rotation ?? 0,
+            startPosition: { x: transform.position.x, y: transform.position.y },
+            startRotation: transform.rotation,
             startScale: normalizeScale(transform.scale),
           };
           didDrag = false;
@@ -496,7 +507,7 @@ export function attachEditor<TWorld extends DebuggerWorld>(
         if (transform) {
           store.dispatch({ type: "select-entity", entity: picked });
           store.dispatch({ type: "set-lock", target: undefined });
-          entityDrag = { entity: picked, offsetX: worldPt.x - transform.x, offsetY: worldPt.y - transform.y };
+          entityDrag = { entity: picked, offsetX: worldPt.x - transform.position.x, offsetY: worldPt.y - transform.position.y };
           didDrag = false;
           suppressCanvasClick = false;
           renderer.canvas.setPointerCapture(event.pointerId);
@@ -531,8 +542,8 @@ export function attachEditor<TWorld extends DebuggerWorld>(
       const nextY = s.snapGrid ? snapToGrid(worldPt.y - entityDrag.offsetY, s.snapGridSize) : worldPt.y - entityDrag.offsetY;
       const transform = transforms.get(entityDrag.entity);
       if (transform) {
-        transform.x = nextX;
-        transform.y = nextY;
+        transform.position.x = nextX;
+        transform.position.y = nextY;
       }
       world.physics.reset(entityDrag.entity, { x: nextX, y: nextY }, { x: 0, y: 0 });
       engine.tick(0);

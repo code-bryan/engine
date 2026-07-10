@@ -1,6 +1,6 @@
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState, type ChangeEvent, type PointerEvent as ReactPointerEvent } from "react";
-import type { ContentBookmark, ContentTreeNode } from "../../shared/types";
+import type { ContentBookmark, ContentTreeNode, EngineAsset } from "../../shared/types";
 import { ContextMenu, ContextMenuItem, ContextMenuSeparator, ContextMenuSub } from "../../shell/ContextMenu";
 import { breadcrumbPaths, findContentFolder, joinContentPath, parentContentPath } from "./paths";
 import { fetchContentFile } from "./api";
@@ -9,6 +9,7 @@ import { BookmarkNameDialog, ContentCreateDialog, ContentImportDialog, ContentPr
 
 export type ContentBrowserProps = {
   tree: ContentTreeNode[];
+  engineAssets?: EngineAsset[];
   activeWorld?: string;
   activeSystems?: string[];
   onOpenWorld: (name: string) => void;
@@ -52,6 +53,10 @@ export function ContentBrowser(props: ContentBrowserProps) {
     folderPath: string;
     item?: ContentTreeNode;
   } | null>(null);
+  // Engine tab: read-only library of premade engine assets. Own expansion state
+  // (root expanded by default) and an in-memory preview — these never touch disk.
+  const [engineExpanded, setEngineExpanded] = useState<Set<string>>(() => new Set(["engine", "engine/component"]));
+  const [enginePreview, setEnginePreview] = useState<{ label: string; value: unknown } | null>(null);
   const [previewPath, setPreviewPath] = useState<string | undefined>();
   const [previewValue, setPreviewValue] = useState<unknown>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -303,6 +308,25 @@ export function ContentBrowser(props: ContentBrowserProps) {
 
   const contextFolderPath = contextMenu?.folderPath ?? selectedFolderPath;
 
+  // Premade assets grouped into the Engine tab's sections; empty sections are
+  // hidden so the tree only shows what actually ships.
+  const engineGroups = (
+    [
+      { kind: "component" as const, label: "Components" },
+      { kind: "system" as const, label: "Systems" },
+      { kind: "prefab" as const, label: "Prefabs" },
+    ]
+  )
+    .map((group) => ({ ...group, items: (props.engineAssets ?? []).filter((asset) => asset.kind === group.kind) }))
+    .filter((group) => group.items.length > 0);
+
+  const toggleEngine = (key: string) => {
+    const next = new Set(engineExpanded);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    setEngineExpanded(next);
+  };
+
   return (
     <div className="flex-1 flex overflow-hidden min-h-0">
       <input
@@ -326,6 +350,55 @@ export function ContentBrowser(props: ContentBrowserProps) {
         <div style={{ paddingLeft: "8px" }}>
           {renderFolderTree(props.tree, selectedFolderPath, expandedFolders, setExpandedFolders, goToFolder, props.onOpenWorld, openContextMenu)}
         </div>
+        {engineGroups.length > 0 ? (
+          <div className="mt-2 pt-2 border-t border-[#303030]">
+            <button
+              className="w-full flex items-center pr-2 py-1 rounded cursor-pointer text-left transition-colors text-[#ccc] hover:bg-[#2d2d2d]"
+              style={{ paddingLeft: "8px" }}
+              onClick={() => toggleEngine("engine")}
+              title="Premade engine assets — usable by id, read-only"
+            >
+              <span className="w-3 flex justify-center text-[#888]"><i className={`ph ph-caret-${engineExpanded.has("engine") ? "down" : "right"} text-[10px]`} /></span>
+              <span className="mr-2 text-[#0070e0]"><i className="ph-fill ph-cube-focus" /></span>
+              <span className="truncate">Engine</span>
+            </button>
+            {engineExpanded.has("engine") ? (
+              <div style={{ paddingLeft: "8px" }}>
+                {engineGroups.map((group) => {
+                  const sectionKey = `engine/${group.kind}`;
+                  const open = engineExpanded.has(sectionKey);
+                  return (
+                    <div key={sectionKey}>
+                      <button
+                        className="w-full flex items-center pr-2 py-1 rounded cursor-pointer text-left transition-colors text-[#ccc] hover:bg-[#2d2d2d]"
+                        style={{ paddingLeft: "22px" }}
+                        onClick={() => toggleEngine(sectionKey)}
+                      >
+                        <span className="w-3 flex justify-center text-[#888]"><i className={`ph ph-caret-${open ? "down" : "right"} text-[10px]`} /></span>
+                        <span className="mr-2 text-[#888]"><i className={`ph-fill ph-${open ? "folder-open" : "folder"}`} /></span>
+                        <span className="truncate">{group.label}</span>
+                        <span className="ml-auto text-[10px] text-[#555]">{group.items.length}</span>
+                      </button>
+                      {open ? group.items.map((asset) => (
+                        <button
+                          key={`${sectionKey}/${asset.id}`}
+                          className="w-full flex items-center pr-2 py-1 rounded cursor-pointer text-left transition-colors text-[#ccc] hover:bg-[#2d2d2d]"
+                          style={{ paddingLeft: "44px" }}
+                          onClick={() => setEnginePreview({ label: `engine · ${group.label.toLowerCase().replace(/s$/, "")} · ${asset.id}`, value: asset.body ?? { id: asset.id, label: asset.label } })}
+                          title={`${asset.label} (${asset.id}) — read-only`}
+                        >
+                          <span className="w-3" />
+                          <span className="mr-2 text-[#666]">{renderContentIcon(asset.kind === "system" ? "graph" : asset.kind)}</span>
+                          <span className="truncate">{asset.label}</span>
+                        </button>
+                      )) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
       {/* Right: Asset area */}
       <div className="flex-1 bg-[#1e1e1e] flex flex-col min-w-0">
@@ -618,6 +691,16 @@ export function ContentBrowser(props: ContentBrowserProps) {
           loading={previewLoading}
           error={previewError}
           onClose={() => setPreviewPath(undefined)}
+        />,
+        document.body,
+      )}
+      {enginePreview && createPortal(
+        <ContentPreviewDialog
+          path={enginePreview.label}
+          value={enginePreview.value}
+          loading={false}
+          error={undefined}
+          onClose={() => setEnginePreview(null)}
         />,
         document.body,
       )}

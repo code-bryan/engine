@@ -50,8 +50,7 @@
         "y": -81
       },
       "data": {
-        "component": "enemy",
-        "field": "speed"
+        "component": "speed"
       }
     },
     {
@@ -64,7 +63,7 @@
     },
     {
       "id": "adc9dba3-edf1-4252-bdbc-e08a9329d70f",
-      "type": "ScaleVector",
+      "type": "Multiply",
       "position": {
         "x": 2454,
         "y": 60
@@ -72,13 +71,10 @@
     },
     {
       "id": "5670eaee-1420-46fa-81a9-61fbe48bb531",
-      "type": "SetComponent",
+      "type": "SetVelocity",
       "position": {
         "x": 2799,
         "y": 58
-      },
-      "data": {
-        "component": "velocity"
       }
     }
   ],
@@ -150,7 +146,7 @@
       },
       "to": {
         "node": "adc9dba3-edf1-4252-bdbc-e08a9329d70f",
-        "port": "scale"
+        "port": "by"
       }
     },
     {
@@ -160,7 +156,7 @@
       },
       "to": {
         "node": "adc9dba3-edf1-4252-bdbc-e08a9329d70f",
-        "port": "vector"
+        "port": "value"
       }
     },
     {
@@ -196,11 +192,11 @@
     {
       "from": {
         "node": "adc9dba3-edf1-4252-bdbc-e08a9329d70f",
-        "port": "vector"
+        "port": "result"
       },
       "to": {
         "node": "5670eaee-1420-46fa-81a9-61fbe48bb531",
-        "port": "value"
+        "port": "velocity"
       }
     }
   ],

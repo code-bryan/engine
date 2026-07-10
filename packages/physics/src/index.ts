@@ -132,6 +132,14 @@ export class Physics {
     this.emitDebug({ type: "body:velocity", entity, velocity: { ...velocity } });
   }
 
+  // Body-owned velocity in world units/sec (inverse of setVelocity's /60). Physics
+  // is the single source of truth for velocity — there is no velocity component.
+  getVelocity(entity: Entity): { x: number; y: number } {
+    const rigidBody = this.rigidBodies.get(entity);
+    if (!rigidBody) return { x: 0, y: 0 };
+    return { x: rigidBody.body.velocity.x * 60, y: rigidBody.body.velocity.y * 60 };
+  }
+
   reset(entity: Entity, position: { x: number; y: number }, velocity = { x: 0, y: 0 }) {
     const rigidBody = this.rigidBodies.get(entity);
     if (!rigidBody) return;
@@ -159,8 +167,8 @@ export class Physics {
         const transform = transforms.get(e);
         if (!transform) continue;
 
-        transform.x = rigidBody.body.position.x - rigidBody.width / 2;
-        transform.y = rigidBody.body.position.y - rigidBody.height / 2;
+        transform.position.x = rigidBody.body.position.x - rigidBody.width / 2;
+        transform.position.y = rigidBody.body.position.y - rigidBody.height / 2;
         transform.rotation = rigidBody.body.angle;
       }
     };

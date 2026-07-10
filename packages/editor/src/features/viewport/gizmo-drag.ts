@@ -2,7 +2,7 @@
 // with grid / rotation / scale snapping. Mutates the live transform and resets
 // the physics body, matching the original inline drag logic.
 
-import { transforms } from "@engine/renderer";
+import { transforms, type Transform } from "@engine/renderer";
 import type { DebuggerWorld } from "../../shared/types";
 import { getEntityEditorBounds, type EditorBounds } from "./bounds";
 import type { GizmoHit } from "./gizmo";
@@ -45,8 +45,8 @@ export function applyGizmoDrag<TWorld extends DebuggerWorld>(
     const rawY = drag.startPosition.y + (worldPt.y - drag.startWorld.y);
     const nextX = snap.grid ? snapToGrid(rawX, snap.gridSize) : rawX;
     const nextY = snap.grid ? snapToGrid(rawY, snap.gridSize) : rawY;
-    transform.x = nextX;
-    transform.y = nextY;
+    transform.position.x = nextX;
+    transform.position.y = nextY;
     world.physics.reset(drag.hit.entity, { x: nextX, y: nextY }, { x: 0, y: 0 });
     return;
   }
@@ -69,7 +69,7 @@ export function applyGizmoDrag<TWorld extends DebuggerWorld>(
 function applyScaleDrag(
   drag: GizmoDrag,
   worldPt: { x: number; y: number },
-  transform: { scale?: number | { x: number; y: number } },
+  transform: Transform,
 ) {
   if (drag.hit.kind !== "scale") return;
   const bounds: EditorBounds = drag.hit.bounds;

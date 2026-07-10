@@ -1,7 +1,11 @@
 import type { Entity, World } from "@engine/ecs-core";
 import type { Physics } from "@engine/physics";
+import type { Transform } from "@engine/components";
 
 export type DebuggerWorld = World & { physics: Physics };
+
+// One editable axis inside a grouped vector field (e.g. x / y of a position).
+export type DebugFieldAxis = { label: string; value: string; editKey: string };
 
 export type DebugEditorField = {
   label: string;
@@ -11,6 +15,10 @@ export type DebugEditorField = {
   editKey?: string;
   selectEntity?: Entity;
   selectEntities?: Entity[];
+  // When set, the field renders as a group: `label` above, one input per axis
+  // below (position/scale → [x, y]; rotation → [angle]). Each axis edits via its
+  // own editKey through the normal edit path.
+  axes?: DebugFieldAxis[];
 };
 
 export type DebugEditorSection<TWorld extends DebuggerWorld = DebuggerWorld> = {
@@ -68,6 +76,16 @@ export type ContentTreeNode = {
   children?: ContentTreeNode[];
 };
 
+// A premade, engine-provided asset shown read-only under the content browser's
+// Engine tab. Usable in worlds by id without importing into the project; `body`
+// is the definition surfaced in preview.
+export type EngineAsset = {
+  kind: "component" | "system" | "prefab";
+  id: string;
+  label: string;
+  body?: unknown;
+};
+
 // A user-defined quick-access collection of content items, persisted in the
 // project manifest. Tapping a bookmark filters the browser to its members.
 export type ContentBookmark = {
@@ -90,6 +108,7 @@ export type RuntimeDebuggerOptions<TWorld extends DebuggerWorld = DebuggerWorld>
   onSaveWorld?: (world: TWorld) => void;
   onOpenLevel?: () => void;
   contentTree?: ContentTreeNode[];
+  engineAssets?: EngineAsset[];
   activeWorld?: string;
   activeSystems?: string[];
   onLoadWorld?: (name: string) => void;
@@ -135,7 +154,7 @@ export type FrameMetric = {
 export type EntitySnapshot = {
   components: Map<string, unknown>;
   physics?: { x: number; y: number; vx: number; vy: number };
-  transform?: { x: number; y: number; rotation?: number; scale?: number | { x: number; y: number } };
+  transform?: Transform;
 };
 
 export type WorldSnapshot = {

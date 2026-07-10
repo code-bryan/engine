@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "name": "player-spawn",
+  "components": [
+    {
+      "component": "tag",
+      "value": "player-spawn"
+    },
+    {
+      "component": "transform",
+      "value": {
+        "rotation": 0,
+        "scale": { "x": 1, "y": 1 }
+      }
+    }
+  ]
+}

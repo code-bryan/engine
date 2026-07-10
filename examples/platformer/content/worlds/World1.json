@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "systems": [
+    "player-control",
+    "enemy-follow",
+    "actor-state",
+    "sprite-facing",
+    "restart-on-enemy-touch"
+  ],
+  "entities": [
+    {
+      "prefab": "player",
+      "transform": {
+        "position": {
+          "x": 0,
+          "y": 80
+        },
+        "rotation": 0,
+        "scale": {
+          "x": 1.1,
+          "y": 1.05
+        }
+      },
+      "components": {
+        "actor-state": "idle",
+        "facing": "right"
+      }
+    },
+    {
+      "prefab": "enemy",
+      "transform": {
+        "position": {
+          "x": 304,
+          "y": 80
+        },
+        "rotation": 0,
+        "scale": {
+          "x": -1,
+          "y": 1
+        }
+      },
+      "components": {
+        "actor-state": "idle",
+        "facing": "left"
+      }
+    },
+    {
+      "prefab": "player-spawn",
+      "transform": {
+        "position": {
+          "x": 32,
+          "y": 64
+        },
+        "rotation": 0,
+        "scale": {
+          "x": 1,
+          "y": 1
+        }
+      }
+    },
+    {
+      "prefab": "enemy-spawn",
+      "transform": {
+        "position": {
+          "x": 220,
+          "y": 64
+        },
+        "rotation": 0,
+        "scale": {
+          "x": 1,
+          "y": 1
+        }
+      }
+    }
+  ]
+}
