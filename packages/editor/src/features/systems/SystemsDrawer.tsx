@@ -1,5 +1,5 @@
 import type { DebuggerStatusCardView, DebuggerSystemView } from "../../shell/view-types";
-import { RuntimeCard } from "../../shell/RuntimeCard";
+import { RuntimeCard } from "../../components/RuntimeCard";
 
 export type SystemsDrawerProps = {
   statusCards: DebuggerStatusCardView[];

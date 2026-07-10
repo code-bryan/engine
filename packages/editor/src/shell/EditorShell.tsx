@@ -26,8 +26,8 @@ import { ProjectPathDialog } from "../features/project/ProjectPathDialog";
 import { StartScreen } from "../features/project/StartScreen";
 import { ComponentView } from "../features/components/ComponentView";
 import { BlueprintView } from "../features/blueprint/BlueprintView";
-import { InspectorField } from "../features/inspector/InspectorField";
-import { Toasts } from "./Toasts";
+import { InspectorField } from "../components/InspectorField";
+import { Toasts } from "../components/Toasts";
 import type { EditorToast } from "../state/types";
 
 type BottomDrawerTab = "content" | "systems" | "snapshots" | "logs";

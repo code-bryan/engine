@@ -1,6 +1,6 @@
 import { createPortal } from "react-dom";
 import type { ContentTreeNode } from "../../shared/types";
-import { DIALOG_BTN, DIALOG_BTN_PRIMARY, DIALOG_BTN_DANGER } from "../../shell/ui-kit";
+import { DIALOG_BTN, DIALOG_BTN_PRIMARY, DIALOG_BTN_DANGER } from "../../components/ui-kit";
 
 export type ContentPreviewDialogProps = {
   path: string;

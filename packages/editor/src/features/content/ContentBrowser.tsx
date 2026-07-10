@@ -1,7 +1,7 @@
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState, type ChangeEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { ContentBookmark, ContentTreeNode, EngineAsset } from "../../shared/types";
-import { ContextMenu, ContextMenuItem, ContextMenuSeparator, ContextMenuSub } from "../../shell/ContextMenu";
+import { ContextMenu, ContextMenuItem, ContextMenuSeparator, ContextMenuSub } from "../../components/ContextMenu";
 import { breadcrumbPaths, findContentFolder, joinContentPath, parentContentPath } from "./paths";
 import { fetchContentFile } from "./api";
 import { contentTypeBarColor, renderContentIcon } from "./icons";

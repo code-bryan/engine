@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { DIALOG_BTN, DIALOG_BTN_PRIMARY } from "../../shell/ui-kit";
+import { DIALOG_BTN, DIALOG_BTN_PRIMARY } from "../../components/ui-kit";
 
 export type ProjectPathDialogProps = {
   mode: "open" | "create";
