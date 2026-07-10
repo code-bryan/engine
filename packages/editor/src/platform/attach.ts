@@ -66,7 +66,7 @@ export function attachEditor<TWorld extends DebuggerWorld>(
     }));
 
   const componentInspectors = [
-    ...createBuiltinInspectorComponents(options.getEntityTitle),
+    ...createBuiltinInspectorComponents(options.getEntityTitle, options.getEntityPrefab),
     ...autoInspectors,
     ...(options.components ?? []),
     ...(options.sections ?? []).map((section, index) => ({

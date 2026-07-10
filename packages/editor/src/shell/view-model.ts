@@ -84,6 +84,10 @@ export function renderEditor<TWorld extends DebuggerWorld>(
   actions: EditorUiActions,
   logCategories: readonly LogCategory[],
 ) {
+  // When the selected entity extends a prefab, highlight that prefab asset in the
+  // content drawer (path is prefabs/<name>).
+  const selectedPrefab = state.selectedEntity !== undefined ? options.getEntityPrefab?.(world, state.selectedEntity) : undefined;
+  const contentHighlightPath = selectedPrefab ? `prefabs/${selectedPrefab}` : undefined;
   root.render(createElement(EditorShell, {
     fps: state.fps.toFixed(1),
     frameMs: state.latestFrameMs.toFixed(2),
@@ -160,6 +164,7 @@ export function renderEditor<TWorld extends DebuggerWorld>(
     contentDrawerOpen: state.contentDrawerOpen,
     contentTree: options.contentTree ?? [],
     engineAssets: options.engineAssets ?? [],
+    contentHighlightPath,
     activeWorld: options.activeWorld,
     activeSystems: options.activeSystems ?? [],
     onLoadWorld: actions.loadWorld,

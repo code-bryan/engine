@@ -1,5 +1,5 @@
 import { attachEditor, createStoreInspector, type ContentBookmark, type ContentTreeNode, type DebugEditorField, type DebuggerWorld } from "@engine/editor";
-import { getComponentDefinitions, getComponentStore, getPremadeAssets, entityFolders, type ComponentDefinition } from "@engine/runtime";
+import { getComponentDefinitions, getComponentStore, getPremadeAssets, entityFolders, entityExtends, type ComponentDefinition } from "@engine/runtime";
 import type { ComponentStore, Entity } from "@engine/ecs-core";
 import { keyboard, pointer } from "@engine/input";
 import type { EngineApplication } from "@engine/renderer";
@@ -123,6 +123,9 @@ export function attachDebugEditor(world: GameWorld, engine: EngineApplication, o
     },
     getEntityFolder(_debugWorld: DebuggerWorld, entity: number) {
       return entityFolders.get(entity);
+    },
+    getEntityPrefab(_debugWorld: DebuggerWorld, entity: number) {
+      return entityExtends.get(entity);
     },
     components: [
       // One inspector per project component definition, derived from its kind/shape.

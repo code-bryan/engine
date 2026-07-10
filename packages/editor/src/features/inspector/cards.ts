@@ -29,16 +29,19 @@ export function createStoreInspector<TValue, TWorld extends DebuggerWorld = Debu
 
 export function createBuiltinInspectorComponents<TWorld extends DebuggerWorld>(
   getEntityTitle?: (world: TWorld, entity: Entity) => string,
+  getEntityPrefab?: (world: TWorld, entity: Entity) => string | undefined,
 ): DebugInspectorComponent<TWorld>[] {
   return [
     {
       id: "entity",
       title: "Entity",
       fields(world, entity) {
+        const prefab = getEntityPrefab?.(world, entity);
         return [
           { label: "Id", value: `#${entity}`, selectEntity: entity },
           { label: "Name", value: getEntityTitle?.(world, entity) ?? entityTitle(world, entity) },
           { label: "Tags", value: world.tags.list(entity).join(", ") || "-" },
+          ...(prefab ? [{ label: "Prefab", value: prefab }] : []),
         ];
       },
     },
@@ -150,17 +153,6 @@ export function buildInspectorCards<TWorld extends DebuggerWorld>(
     });
   }
 
-  const runtimeFields = [{ label: "Details", value: options.getRuntimeDetails?.(world, state.selectedEntity) ?? defaultRuntimeDetails(world, state.selectedEntity) }];
-  const runtimeVisible = runtimeFields.filter((field) => !query || "runtime".includes(query) || field.label.toLowerCase().includes(query));
-  if (!query || runtimeVisible.length > 0) {
-    cards.push({
-      id: "runtime",
-      title: "Runtime",
-      collapsed: false,
-      fields: runtimeVisible.map((field) => ({ ...field, componentId: "runtime", entity: state.selectedEntity! })),
-    });
-  }
-
   return cards;
 }
 
@@ -171,14 +163,4 @@ function entityTitle<TWorld extends DebuggerWorld>(world: TWorld, entity: Entity
 
 function formatNumber(value?: number) {
   return value === undefined ? "-" : value.toFixed(2);
-}
-
-function defaultRuntimeDetails(world: DebuggerWorld, entity: Entity) {
-  const transform = transforms.get(entity);
-  return [
-    `entity=${entity}`,
-    `tags=${world.tags.list(entity).join(",") || "-"}`,
-    `x=${formatNumber(transform?.position.x)}`,
-    `y=${formatNumber(transform?.position.y)}`,
-  ].join(" | ");
 }

@@ -108,6 +108,7 @@ export type EditorShellProps = {
   contentDrawerOpen: boolean;
   contentTree: ContentTreeNode[];
   engineAssets: EngineAsset[];
+  contentHighlightPath?: string;
   activeWorld?: string;
   activeSystems?: string[];
   onLoadWorld: (name: string) => void;
@@ -606,6 +607,7 @@ export function EditorShell(props: EditorShellProps) {
                   <ContentBrowser
                     tree={props.contentTree}
                     engineAssets={props.engineAssets}
+                    highlightPath={props.contentHighlightPath}
                     activeWorld={props.activeWorld}
                     activeSystems={props.activeSystems}
                     onOpenWorld={props.onOpenWorld}
