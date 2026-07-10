@@ -31,6 +31,7 @@ export type DebuggerFieldView = {
   editable?: boolean;
   componentId?: string;
   editKey?: string;
+  options?: string[];
   entity?: number;
   selectEntity?: number;
   selectEntities?: number[];
@@ -43,6 +44,10 @@ export type DebuggerInspectorCardView = {
   title: string;
   collapsed: boolean;
   fields: DebuggerFieldView[];
+  // Whether the component has any fields (drives the collapse chevron — an empty
+  // header isn't collapsible) and whether it can be detached (shows a remove icon).
+  hasFields: boolean;
+  removable: boolean;
 };
 
 export type DebuggerSnapshotView = {

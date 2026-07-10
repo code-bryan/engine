@@ -13,6 +13,9 @@ export type DebugEditorField = {
   secondary?: string;
   editable?: boolean;
   editKey?: string;
+  // When set on an editable field, it renders as a dropdown of these choices
+  // (value must be one of them) instead of a text input.
+  options?: string[];
   selectEntity?: Entity;
   selectEntities?: Entity[];
   // When set, the field renders as a group: `label` above, one input per axis
@@ -31,6 +34,13 @@ export type DebugInspectorComponent<TWorld extends DebuggerWorld = DebuggerWorld
   title: string;
   fields: (world: TWorld, entity: Entity) => DebugEditorField[];
   set?: (world: TWorld, entity: Entity, key: string, value: string) => void;
+  // Whether the entity has this component attached. When true the card's header
+  // shows even if `fields` is empty (Unity-style: attached but no editable props).
+  // Defaults to "has at least one field" when omitted.
+  present?: (world: TWorld, entity: Entity) => boolean;
+  // Detach the component from the entity. When defined the card shows a remove
+  // icon; omit for essential/native components (transform, entity meta).
+  remove?: (world: TWorld, entity: Entity) => void;
 };
 
 export type DebugStoreInspectorOptions<TValue, TWorld extends DebuggerWorld = DebuggerWorld> = {
@@ -131,6 +141,9 @@ export type RuntimeDebuggerOptions<TWorld extends DebuggerWorld = DebuggerWorld>
   onCreateWorld?: (name: string) => void;
   onCreateFolder?: (path: string) => void;
   onCreateComponent?: (path: string) => void;
+  // Called when the component editor saves a definition (path + the built JSON), so
+  // the host can re-register it and refresh the Details inspectors live.
+  onComponentSaved?: (path: string, definition: unknown) => void;
   onCreatePrefab?: (path: string) => void;
   onCreateGraph?: (path: string) => void;
   onImportContent?: (path: string, value: unknown) => void;
@@ -162,6 +175,7 @@ export type DebugEditor<TWorld extends DebuggerWorld = DebuggerWorld> = {
   setContentTree: (tree: ContentTreeNode[]) => void;
   setBookmarks: (bookmarks: ContentBookmark[]) => void;
   setProjectTags: (tags: string[]) => void;
+  setComponents: (components: DebugInspectorComponent<TWorld>[]) => void;
   setActiveWorld: (name: string, opts?: { activeSystems?: string[]; contentTree?: ContentTreeNode[] }) => void;
   renameContent: (from: string, to: string) => void;
   destroy: () => void;

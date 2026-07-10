@@ -48,6 +48,7 @@ export type EditorUiActions = {
   createEntity: (folder?: string) => void;
   removeEntity: (entity: number) => void;
   renameEntity: (entity: number, name: string) => void;
+  removeComponent: (entity: number, componentId: string) => void;
   addEntityTag: (entity: number, tag: string) => void;
   removeEntityTag: (entity: number, tag: string) => void;
   registerTag: (tag: string) => void;
@@ -176,6 +177,7 @@ export function renderEditor<TWorld extends DebuggerWorld>(
     onReorderEntity: actions.reorderEntity,
     folders,
     onToggleComponentCollapse: actions.toggleComponentCollapse,
+    onRemoveComponent: actions.removeComponent,
     onInspectorEdit: actions.editInspector,
     onSaveSnapshot: actions.saveSnapshot,
     onRestoreSnapshot: actions.restoreSnapshot,
@@ -214,6 +216,7 @@ export function renderEditor<TWorld extends DebuggerWorld>(
     onCreateFolder: options.onCreateFolder,
     onCreateWorld: options.onCreateWorld ?? (() => {}),
     onCreateComponent: options.onCreateComponent,
+    onComponentSaved: options.onComponentSaved,
     onCreatePrefab: options.onCreatePrefab,
     onCreateGraph: options.onCreateGraph,
     onImportContent: options.onImportContent,

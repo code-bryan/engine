@@ -13,6 +13,37 @@ export type RigidBody = {
   kind: RigidBodyKind;
   width: number;
   height: number;
+  isTrigger: boolean;
+  mass: number; // 0 = auto (Matter derives from area × density)
+  friction: number;
+  restitution: number;
+  frictionAir: number;
+};
+
+// Plain authoring config for a rigid body — what the editor edits and the world
+// serializes (the Matter body is derived from this).
+export type PhysicsBodyConfig = {
+  kind: RigidBodyKind;
+  width: number;
+  height: number;
+  isTrigger: boolean;
+  mass: number;
+  friction: number;
+  restitution: number;
+  frictionAir: number;
+};
+
+export type SetBodyProps = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  kind?: RigidBodyKind;
+  isTrigger?: boolean;
+  mass?: number;
+  friction?: number;
+  restitution?: number;
+  frictionAir?: number;
 };
 
 export type RigidBodyBoxProps = {
@@ -103,23 +134,43 @@ export class Physics {
     this.rigidBodies.delete(entity);
   }
 
-  setBody(entity: Entity, props: RigidBodyBoxProps & { kind?: RigidBodyKind }) {
+  setBody(entity: Entity, props: SetBodyProps) {
     const kind = props.kind ?? "dynamic";
+    // Trigger (Unity-style sensor) is independent of body type. Legacy callers that
+    // don't pass isTrigger keep the old behavior where "kinematic" meant a sensor.
+    const isTrigger = typeof props.isTrigger === "boolean" ? props.isTrigger : kind === "kinematic";
+
+    const options: Matter.IChamferableBodyDefinition = {
+      isStatic: kind === "static",
+      isSensor: isTrigger,
+      inertia: Infinity,
+    };
+    if (typeof props.friction === "number") options.friction = props.friction;
+    if (typeof props.restitution === "number") options.restitution = props.restitution;
+    if (typeof props.frictionAir === "number") options.frictionAir = props.frictionAir;
+
     // props.x/y is the entity's CENTER (= transform.position).
-    const body = Matter.Bodies.rectangle(
-      props.x,
-      props.y,
-      props.width,
-      props.height,
-      {
-        isStatic: kind === "static",
-        isSensor: kind === "kinematic",
-        inertia: Infinity,
-      },
-    );
+    const body = Matter.Bodies.rectangle(props.x, props.y, props.width, props.height, options);
+    if (kind !== "static" && typeof props.mass === "number" && props.mass > 0) {
+      Matter.Body.setMass(body, props.mass);
+    }
+
+    // An edit re-sets the body; drop the previous one so it isn't orphaned in the world.
+    const existing = this.rigidBodies.get(entity);
+    if (existing) Matter.Composite.remove(this.engine.world, existing.body);
 
     Matter.Composite.add(this.engine.world, body);
-    this.rigidBodies.set(entity, { body, kind, width: props.width, height: props.height });
+    this.rigidBodies.set(entity, {
+      body,
+      kind,
+      width: props.width,
+      height: props.height,
+      isTrigger,
+      mass: props.mass ?? 0,
+      friction: body.friction,
+      restitution: body.restitution,
+      frictionAir: body.frictionAir,
+    });
     this.emitDebug({
       type: "body:set",
       entity,
@@ -129,6 +180,23 @@ export class Physics {
       width: props.width,
       height: props.height,
     });
+  }
+
+  // The authoring config behind an entity's body — what the editor edits and the
+  // world serializes. Undefined when the entity has no body.
+  getBodyConfig(entity: Entity): PhysicsBodyConfig | undefined {
+    const rigidBody = this.rigidBodies.get(entity);
+    if (!rigidBody) return undefined;
+    return {
+      kind: rigidBody.kind,
+      width: rigidBody.width,
+      height: rigidBody.height,
+      isTrigger: rigidBody.isTrigger,
+      mass: rigidBody.mass,
+      friction: rigidBody.friction,
+      restitution: rigidBody.restitution,
+      frictionAir: rigidBody.frictionAir,
+    };
   }
 
   setVelocity(entity: Entity, velocity: { x: number; y: number }) {

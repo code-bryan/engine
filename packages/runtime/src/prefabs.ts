@@ -41,9 +41,25 @@ export type PrefabComponentDefinition =
   | { component: "tag"; value: string | string[] }
   | { component: "transform"; value: PrefabTransform }
   | { component: "physics.body"; value: { kind?: "dynamic" | "kinematic" | "static"; width: number; height: number } }
+  | { component: "physics"; value: PhysicsComponentValue }
   | { component: "sprite"; value: PrefabSpriteDefinition }
   | { component: "sprite.animation"; value: { initial: string; autoplay?: boolean; clips: Record<string, PrefabAnimationClipDefinition> } }
   | { component: string; value: unknown };
+
+// Authoring value for the `physics` component (all optional; sensible defaults
+// applied at instantiate). `bodyType` mirrors the Matter body kind; `isTrigger`
+// is the Unity-style collider/sensor toggle; width/height 0 → derive from the
+// transform size.
+export type PhysicsComponentValue = {
+  bodyType?: "dynamic" | "kinematic" | "static";
+  width?: number;
+  height?: number;
+  mass?: number;
+  isTrigger?: boolean;
+  friction?: number;
+  restitution?: number;
+  frictionAir?: number;
+};
 
 export type PrefabAnimationClipDefinition = {
   sheet: PrefabSpriteSheet;
@@ -94,7 +110,7 @@ export function resetWorldOrder() {
 
 // Special component types are applied before generic ones (transform first so the
 // physics body can anchor to it; sprite before its animation).
-const COMPONENT_APPLY_ORDER = ["transform", "tag", "physics.body", "sprite", "sprite.animation"];
+const COMPONENT_APPLY_ORDER = ["transform", "tag", "physics.body", "physics", "sprite", "sprite.animation"];
 
 export async function instantiateEntity(world: DemoGameWorld, entity: WorldEntity) {
   const base = entity.extends ? await loadPrefabDefinition(entity.extends) : null;
@@ -237,10 +253,14 @@ async function applyComponent(
       return;
     }
     case "physics.body": {
-      const body = value as { kind?: "dynamic" | "kinematic" | "static"; width: number; height: number };
-      const transform = transforms.get(entity) ?? effectiveTransform;
-      const { kind, width, height } = body;
-      world.physics.body[kind ?? "dynamic"].set(entity, { x: transform.position.x, y: transform.position.y, width, height });
+      // Legacy shape → new physics config (kind→bodyType; sensor stays implicit for
+      // kinematic via setBody's fallback, so old prefabs keep their behavior).
+      const body = value as { kind?: "dynamic" | "kinematic" | "static"; width?: number; height?: number };
+      applyPhysics(world, entity, transforms.get(entity) ?? effectiveTransform, { bodyType: body.kind, width: body.width, height: body.height });
+      return;
+    }
+    case "physics": {
+      applyPhysics(world, entity, transforms.get(entity) ?? effectiveTransform, (value ?? {}) as PhysicsComponentValue);
       return;
     }
     case "sprite": {
@@ -271,6 +291,25 @@ async function applyComponent(
       store.set(entity, cloneValue(value));
     }
   }
+}
+
+// Build/rebuild an entity's rigid body from a physics config. Collider size falls
+// back to the transform size (then 16px) when a dimension is 0/absent.
+function applyPhysics(world: DemoGameWorld, entity: Entity, transform: Transform, cfg: PhysicsComponentValue) {
+  const width = cfg.width && cfg.width > 0 ? cfg.width : transform.size.x || 16;
+  const height = cfg.height && cfg.height > 0 ? cfg.height : transform.size.y || 16;
+  world.physics.setBody(entity, {
+    x: transform.position.x,
+    y: transform.position.y,
+    width,
+    height,
+    kind: cfg.bodyType,
+    isTrigger: cfg.isTrigger,
+    mass: cfg.mass,
+    friction: cfg.friction,
+    restitution: cfg.restitution,
+    frictionAir: cfg.frictionAir,
+  });
 }
 
 async function resolveAnimationClips(clips: Record<string, PrefabAnimationClipDefinition>): Promise<Record<string, SpriteAnimationClip>> {

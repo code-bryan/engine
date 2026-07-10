@@ -21,8 +21,8 @@
       "components": {
         "transform": {
           "position": {
-            "x": 82.94086995199655,
-            "y": 127.16707628800098
+            "x": 8,
+            "y": 88
           },
           "rotation": 0,
           "size": {
@@ -31,8 +31,18 @@
           }
         },
         "actor-state": "idle",
-        "facing": "right",
-        "speed": 96
+        "facing": "left",
+        "speed": 96,
+        "physics": {
+          "bodyType": "kinematic",
+          "width": 16,
+          "height": 16,
+          "mass": 0,
+          "isTrigger": true,
+          "friction": 0.1,
+          "restitution": 0,
+          "frictionAir": 0.01
+        }
       }
     },
     {
@@ -48,8 +58,8 @@
       "components": {
         "transform": {
           "position": {
-            "x": 211.80082359852648,
-            "y": 100.19545045456799
+            "x": 312,
+            "y": 88
           },
           "rotation": 0,
           "size": {
@@ -59,7 +69,17 @@
         },
         "actor-state": "idle",
         "facing": "left",
-        "speed": 42
+        "speed": 42,
+        "physics": {
+          "bodyType": "kinematic",
+          "width": 16,
+          "height": 16,
+          "mass": 0,
+          "isTrigger": true,
+          "friction": 0.1,
+          "restitution": 0,
+          "frictionAir": 0.01
+        }
       }
     },
     {

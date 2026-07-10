@@ -2,7 +2,11 @@
   "version": 1,
   "id": "actor-state",
   "label": "Actor State",
+  "editable": false,
   "kind": "enum",
-  "values": ["idle", "walk"],
+  "values": [
+    "idle",
+    "walk"
+  ],
   "defaultValue": "idle"
 }

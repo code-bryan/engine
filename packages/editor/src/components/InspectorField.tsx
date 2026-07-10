@@ -71,6 +71,21 @@ export function InspectorField(
     );
   }
 
+  // Editable dropdown (enum-style choices).
+  if (field.editable && canEdit && field.editKey && field.options && field.options.length > 0) {
+    return (
+      <Row label={field.label}>
+        <select
+          className="engine-input flex-1 min-w-0 px-2 py-1 rounded"
+          value={field.value}
+          onChange={(event) => props.onEdit(field.entity!, field.componentId!, field.editKey!, event.target.value)}
+        >
+          {field.options.map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
+      </Row>
+    );
+  }
+
   // Single editable value.
   if (field.editable && canEdit && field.editKey) {
     return (

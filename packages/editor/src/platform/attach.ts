@@ -65,7 +65,9 @@ export function attachEditor<TWorld extends DebuggerWorld>(
       },
     }));
 
-  const componentInspectors = [
+  // Rebuildable so a hot-reloaded component definition (setComponents) refreshes
+  // the inspector list without a full re-attach.
+  const buildComponentInspectors = (): DebugInspectorComponent<TWorld>[] => [
     ...createBuiltinInspectorComponents(options.getEntityPrefab),
     ...autoInspectors,
     ...(options.components ?? []),
@@ -78,7 +80,8 @@ export function attachEditor<TWorld extends DebuggerWorld>(
       },
     })),
   ];
-  const componentInspectorMap = new Map(componentInspectors.map((component) => [component.id, component]));
+  let componentInspectors = buildComponentInspectors();
+  let componentInspectorMap = new Map(componentInspectors.map((component) => [component.id, component]));
 
   const trackedStoreMap = new Map<string, DebugTrackedStore>();
   for (const e of registry) trackedStoreMap.set(e.label, { label: e.label, store: e.store });
@@ -367,6 +370,13 @@ export function attachEditor<TWorld extends DebuggerWorld>(
           world.physics.setAngle(entity, transform.rotation);
         }
       }
+      engine.tick(0);
+      markWorldDirty();
+      render();
+    },
+    removeComponent(entity, componentId) {
+      if (options.playback?.getState?.() === "playing") return;
+      componentInspectorMap.get(componentId)?.remove?.(world, entity);
       engine.tick(0);
       markWorldDirty();
       render();
@@ -779,6 +789,12 @@ export function attachEditor<TWorld extends DebuggerWorld>(
     },
     setProjectTags(tags: string[]) {
       options.projectTags = tags;
+      render();
+    },
+    setComponents(components) {
+      options.components = components;
+      componentInspectors = buildComponentInspectors();
+      componentInspectorMap = new Map(componentInspectors.map((component) => [component.id, component]));
       render();
     },
     // Sync open world/doc tabs (and the active-world identity) after a content

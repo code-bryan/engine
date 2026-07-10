@@ -2,6 +2,7 @@
   "version": 1,
   "id": "facing",
   "label": "Facing",
+  "editable": false,
   "kind": "enum",
   "values": [
     "left",

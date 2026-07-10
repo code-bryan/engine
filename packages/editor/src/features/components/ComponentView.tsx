@@ -25,9 +25,11 @@ async function saveContentJson(path: string, value: unknown): Promise<void> {
   });
 }
 
-export type ComponentViewProps = { path: string; keyboardLocked: boolean };
+// `definition`, when provided, is rendered directly instead of fetching from disk
+// — used for read-only engine components that have no backing file.
+export type ComponentViewProps = { path: string; keyboardLocked: boolean; definition?: unknown; onSaved?: (path: string, definition: unknown) => void };
 
-export function ComponentView(props: { path: string; keyboardLocked: boolean }) {
+export function ComponentView(props: ComponentViewProps) {
   const [st, setSt] = useState<ComponentEditState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
@@ -37,37 +39,49 @@ export function ComponentView(props: { path: string; keyboardLocked: boolean }) 
     let alive = true;
     setLoading(true);
     setError(undefined);
-    fetchContentFile(props.path)
+    const source = props.definition !== undefined ? Promise.resolve(props.definition) : fetchContentFile(props.path);
+    source
       .then((raw) => {
         if (!alive) return;
         if (!raw || typeof raw !== "object") { setError("component not found"); return; }
-        const parsed = raw as { id?: string; label?: string; kind?: string; values?: unknown; defaultValue?: unknown };
+        const parsed = raw as { id?: string; label?: string; kind?: string; values?: unknown; defaultValue?: unknown; fields?: Record<string, { values?: unknown }>; editable?: unknown };
         const id = typeof parsed.id === "string" ? parsed.id : (props.path.split("/").filter(Boolean).at(-1) ?? "component");
         const label = typeof parsed.label === "string" ? parsed.label : id;
+        const editable = parsed.editable !== false;
         const dv = parsed.defaultValue;
         let next: ComponentEditState;
         if (parsed.kind === "enum" || Array.isArray(parsed.values)) {
           const values = (Array.isArray(parsed.values) ? parsed.values : []).filter((v): v is string => typeof v === "string");
           const enumDefault = typeof dv === "string" && values.includes(dv) ? dv : values[0] ?? "";
-          next = { id, label, kind: "enum", fields: [], scalarType: "String", scalarValue: enumDefault, values, enumDefault };
+          next = { id, label, kind: "enum", fields: [], scalarType: "String", scalarValue: enumDefault, values, enumDefault, editable };
         } else if (dv && typeof dv === "object") {
-          next = { id, label, kind: "struct", fields: Object.entries(dv as Record<string, unknown>).map(([name, value]) => ({ name, type: inferComponentFieldType(value), value })), scalarType: "Float", scalarValue: 0, values: [], enumDefault: "" };
+          const meta = parsed.fields;
+          const fields = Object.entries(dv as Record<string, unknown>).map(([name, value]) => {
+            const choices = meta?.[name]?.values;
+            if (Array.isArray(choices) && choices.every((c) => typeof c === "string") && choices.length > 0) {
+              return { name, type: "Enum" as const, value, values: choices as string[] };
+            }
+            return { name, type: inferComponentFieldType(value), value };
+          });
+          next = { id, label, kind: "struct", fields, scalarType: "Float", scalarValue: 0, values: [], enumDefault: "", editable };
         } else {
           const scalarType = dv === undefined ? "Float" : inferComponentFieldType(dv);
-          next = { id, label, kind: "scalar", fields: [], scalarType: scalarType === "Vector2" ? "String" : scalarType, scalarValue: dv ?? 0, values: [], enumDefault: "" };
+          next = { id, label, kind: "scalar", fields: [], scalarType: scalarType === "Vector2" ? "String" : scalarType, scalarValue: dv ?? 0, values: [], enumDefault: "", editable };
         }
         setSt(next);
       })
       .catch(() => { if (alive) setError("failed to load component"); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [props.path]);
+  }, [props.path, props.definition]);
 
   const commit = (patch: Partial<ComponentEditState>) => {
     setSt((prev) => {
       if (!prev) return prev;
       const next = { ...prev, ...patch };
-      void saveContentJson(props.path, buildComponentDefinition(next));
+      const definition = buildComponentDefinition(next);
+      void saveContentJson(props.path, definition);
+      props.onSaved?.(props.path, definition);
       return next;
     });
   };
@@ -84,8 +98,13 @@ export function ComponentView(props: { path: string; keyboardLocked: boolean }) 
     }
   };
 
-  const valueInput = (type: ComponentFieldType, value: unknown, onChange: (next: unknown) => void, compact = false) => {
+  const valueInput = (type: ComponentFieldType, value: unknown, onChange: (next: unknown) => void, compact = false, choices?: string[]) => {
     const cls = compact ? "engine-input px-1 py-0.5 rounded text-[10px] text-center" : "engine-input px-2 py-1.5 rounded text-white text-xs";
+    if (type === "Enum") return (
+      <select className={`${cls} ${compact ? "w-24" : "w-full"}`} value={String(value ?? "")} disabled={props.keyboardLocked} onChange={(e) => onChange(e.target.value)}>
+        {(choices ?? []).map((choice) => <option key={choice} value={choice}>{choice}</option>)}
+      </select>
+    );
     if (type === "Bool") return <input type="checkbox" className="accent-[#0070e0]" checked={value === true} disabled={props.keyboardLocked} onChange={(e) => onChange(e.target.checked)} />;
     if (type === "String") return <input type="text" className={`${cls} ${compact ? "w-20" : "w-full"}`} value={String(value ?? "")} disabled={props.keyboardLocked} onChange={(e) => onChange(e.target.value)} />;
     if (type === "Vector2") {
@@ -187,6 +206,10 @@ export function ComponentView(props: { path: string; keyboardLocked: boolean }) 
                 <option value="enum">Enum</option>
               </select>
             </div>
+            <label className="flex items-center gap-2 pt-1 cursor-pointer">
+              <input type="checkbox" className="accent-[#0070e0]" checked={st?.editable !== false} disabled={props.keyboardLocked || !st} onChange={(e) => commit({ editable: e.target.checked })} />
+              <span className="text-[#888] text-[10px] uppercase font-bold tracking-wide">Editable in Details</span>
+            </label>
           </div>
         </div>
 
@@ -217,7 +240,7 @@ export function ComponentView(props: { path: string; keyboardLocked: boolean }) 
                   <span className="text-[#888] text-[10px] uppercase font-bold tracking-wide">Type</span>
                   <select className="w-full engine-input px-2 py-1.5 rounded text-white text-xs" value={st.scalarType} disabled={props.keyboardLocked}
                     onChange={(e) => { const type = e.target.value as ComponentFieldType; commit({ scalarType: type, scalarValue: defaultForComponentType(type) }); }}>
-                    {COMPONENT_FIELD_TYPES.filter((t) => t !== "Vector2").map((t) => <option key={t} value={t}>{t}</option>)}
+                    {COMPONENT_FIELD_TYPES.filter((t) => t !== "Vector2" && t !== "Enum").map((t) => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
                 <div className="space-y-1">
@@ -245,11 +268,30 @@ export function ComponentView(props: { path: string; keyboardLocked: boolean }) 
                     </div>
                     <div className="flex gap-2 items-center">
                       <select className="flex-1 engine-input px-1 py-1 rounded text-white text-xs" value={field.type} disabled={props.keyboardLocked}
-                        onChange={(e) => { const type = e.target.value as ComponentFieldType; commit({ fields: st.fields.map((f, i) => i === index ? { ...f, type, value: defaultForComponentType(type) } : f) }); }}>
+                        onChange={(e) => {
+                          const type = e.target.value as ComponentFieldType;
+                          const values = type === "Enum" ? (field.values?.length ? field.values : ["value1"]) : undefined;
+                          const value = type === "Enum" ? (values?.[0] ?? "") : defaultForComponentType(type);
+                          commit({ fields: st.fields.map((f, i) => i === index ? { ...f, type, value, values } : f) });
+                        }}>
                         {COMPONENT_FIELD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                       </select>
-                      {valueInput(field.type, field.value, (next) => commit({ fields: st.fields.map((f, i) => i === index ? { ...f, value: next } : f) }), true)}
+                      {valueInput(field.type, field.value, (next) => commit({ fields: st.fields.map((f, i) => i === index ? { ...f, value: next } : f) }), true, field.values)}
                     </div>
+                    {field.type === "Enum" && (
+                      <input
+                        type="text"
+                        className="w-full bg-black border border-[#444] text-white px-1 py-0.5 text-[10px] rounded focus:border-[#0070e0] outline-none"
+                        placeholder="comma,separated,choices"
+                        value={(field.values ?? []).join(", ")}
+                        disabled={props.keyboardLocked}
+                        onChange={(e) => {
+                          const values = e.target.value.split(",").map((v) => v.trim()).filter((v) => v !== "");
+                          const value = values.includes(String(field.value)) ? field.value : values[0] ?? "";
+                          commit({ fields: st.fields.map((f, i) => i === index ? { ...f, values, value } : f) });
+                        }}
+                      />
+                    )}
                   </div>
                 ))}
                 <button className="w-full py-1.5 mt-2 bg-[#2d2d2d] hover:bg-[#3a3a3a] border border-[#303030] rounded text-white transition-colors flex justify-center items-center gap-2 disabled:opacity-40" disabled={props.keyboardLocked} onClick={() => commit({ fields: [...st.fields, { name: `field${st.fields.length + 1}`, type: "Float", value: 0 }] })}>

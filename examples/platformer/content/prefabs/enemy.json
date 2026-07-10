@@ -14,11 +14,12 @@
       }
     },
     {
-      "component": "physics.body",
+      "component": "physics",
       "value": {
-        "kind": "kinematic",
+        "bodyType": "kinematic",
         "width": 16,
-        "height": 16
+        "height": 16,
+        "isTrigger": true
       }
     },
     {

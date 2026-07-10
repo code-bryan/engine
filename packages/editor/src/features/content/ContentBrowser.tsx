@@ -386,7 +386,9 @@ export function ContentBrowser(props: ContentBrowserProps) {
                           key={`${sectionKey}/${asset.id}`}
                           className="w-full flex items-center pr-2 py-1 rounded cursor-pointer text-left transition-colors text-[#ccc] hover:bg-[#2d2d2d]"
                           style={{ paddingLeft: "44px" }}
-                          onClick={() => setEnginePreview({ label: `engine · ${group.label.toLowerCase().replace(/s$/, "")} · ${asset.id}`, value: asset.body ?? { id: asset.id, label: asset.label } })}
+                          onClick={() => asset.kind === "component"
+                            ? props.onOpenDoc(`engine/${asset.id}`, "component")
+                            : setEnginePreview({ label: `engine · ${group.label.toLowerCase().replace(/s$/, "")} · ${asset.id}`, value: asset.body ?? { id: asset.id, label: asset.label } })}
                           title={`${asset.label} (${asset.id}) — read-only`}
                         >
                           <span className="w-3" />

@@ -27,9 +27,26 @@ const TRANSFORM_ASSET: PremadeAsset = {
   body: { version: 1, id: "transform", label: "Transform", kind: "struct", defaultValue: { position: { x: 0, y: 0 }, rotation: 0, scale: { x: 1, y: 1 } } },
 };
 
+// Physics is a native, engine-owned component (backed by the Matter body, not the
+// generic registry store), listed here for Engine-tab discoverability.
+const PHYSICS_ASSET: PremadeAsset = {
+  kind: "component",
+  id: "physics",
+  label: "Physics",
+  body: {
+    version: 1,
+    id: "physics",
+    label: "Physics",
+    kind: "struct",
+    defaultValue: { bodyType: "dynamic", width: 16, height: 16, mass: 0, isTrigger: false, friction: 0.1, restitution: 0, frictionAir: 0.01 },
+    fields: { bodyType: { values: ["dynamic", "kinematic", "static"] } },
+  },
+};
+
 export function getPremadeAssets(): PremadeAsset[] {
   return [
     TRANSFORM_ASSET,
+    PHYSICS_ASSET,
     ...PREMADE_COMPONENTS.map(({ definition }) => ({ kind: "component" as const, id: definition.id, label: definition.label, body: definition })),
   ];
 }
@@ -99,6 +116,18 @@ export function registerComponentDefinition(definition: ComponentDefinition, sto
   componentDefinitions.set(definition.id, definition);
   componentStores.set(definition.id, registered);
   return registered;
+}
+
+// Replace an already-registered component's definition in place (keeping its
+// store) so an in-editor schema edit takes effect without a reload; registers
+// fresh if the id is new. Throws on an invalid definition.
+export function upsertComponentDefinition(raw: unknown) {
+  const definition = parseComponentDefinition(raw);
+  if (componentStores.has(definition.id)) {
+    componentDefinitions.set(definition.id, definition);
+    return getComponentStore(definition.id);
+  }
+  return registerComponentDefinition(definition);
 }
 
 export async function registerComponentDefinitionFromFile(path: string) {

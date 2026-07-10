@@ -120,6 +120,20 @@ export function serializeWorld(world: DemoGameWorld, systems: string[] = []): De
       const value = store.get(entity);
       if (value !== undefined) components[id] = cloneValue(value);
     }
+    // Physics is derived from the live rigid body (not a registry store).
+    const physics = world.physics?.getBodyConfig(entity);
+    if (physics) {
+      components.physics = {
+        bodyType: physics.kind,
+        width: physics.width,
+        height: physics.height,
+        mass: physics.mass,
+        isTrigger: physics.isTrigger,
+        friction: physics.friction,
+        restitution: physics.restitution,
+        frictionAir: physics.frictionAir,
+      };
+    }
     // A prefab-less entity keeps its tag inline; extends entities inherit tag/sprite/
     // physics from the prefab, so those are not re-emitted (overrides-only).
     if (!extendsPrefab) {

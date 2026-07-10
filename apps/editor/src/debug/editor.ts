@@ -1,5 +1,5 @@
 import { attachEditor, createStoreInspector, type ContentBookmark, type ContentTreeNode, type DebugEditorField, type DebuggerWorld } from "@engine/editor";
-import { getComponentDefinitions, getComponentStore, getPremadeAssets, entityFolders, entityExtends, entityNames, worldOrder, type ComponentDefinition } from "@engine/runtime";
+import { getComponentDefinitions, getComponentStore, getPremadeAssets, upsertComponentDefinition, entityFolders, entityExtends, entityNames, worldOrder, type ComponentDefinition } from "@engine/runtime";
 import type { ComponentStore, Entity } from "@engine/ecs-core";
 import { keyboard, pointer } from "@engine/input";
 import type { EngineApplication } from "@engine/renderer";
@@ -48,8 +48,28 @@ export type DebugEditorOptions = DebugEditorPlayback & {
 
 export function attachDebugEditor(world: GameWorld, engine: EngineApplication, options: DebugEditorOptions) {
   const playback = options;
-  return attachEditor(world, engine, {
+  // Built from the live component registry; rebuilt after a hot-reloaded edit.
+  const buildComponents = () => getComponentDefinitions().map((def) => {
+    const store = getComponentStore<unknown>(def.id);
+    return createStoreInspector<unknown>({
+      id: def.id,
+      title: def.label,
+      store,
+      fields: (value) => componentFields(def, value),
+      set: def.editable === false
+        ? undefined
+        : (value, key, next, _world, entity) => setComponentField(store, value, key, next, entity, def),
+    });
+  });
+
+  let editor: ReturnType<typeof attachEditor>;
+  editor = attachEditor(world, engine, {
     playback,
+    onComponentSaved(_path, definition) {
+      // Re-register the edited definition, then refresh the Details inspectors.
+      try { upsertComponentDefinition(definition); } catch { return; }
+      editor.setComponents(buildComponents());
+    },
     onSaveWorld: playback.onSaveWorld,
     onLoadWorld: playback.onLoadWorld,
     onCreateWorld: playback.onCreateWorld,
@@ -141,22 +161,10 @@ export function attachDebugEditor(world: GameWorld, engine: EngineApplication, o
       // copy so the editor never mutates it directly.
       return worldOrder.map((item) => ({ ...item }));
     },
-    components: [
-      // One inspector per project component definition, derived from its kind/shape.
-      // Struct (object) → editable numeric fields per key; enum → read-only value; scalar → editable value.
-      ...getComponentDefinitions().map((def) => {
-        const store = getComponentStore<unknown>(def.id);
-        return createStoreInspector<unknown>({
-          id: def.id,
-          title: def.label,
-          store,
-          fields: (value) => componentFields(def, value),
-          set: def.kind === "enum" || def.editable === false
-            ? undefined
-            : (value, key, next, _world, entity) => setComponentField(store, value, key, next, entity, def),
-        });
-      }),
-    ],
+    // One inspector per project component definition, derived from its kind/shape.
+    // Struct (object) → editable numeric fields per key; enum → dropdown of its
+    // values; scalar → editable value.
+    components: buildComponents(),
     getRuntimeDetails(debugWorld: DebuggerWorld, entity?: number) {
       if (entity === undefined) return "selection: none";
       const lines = [
@@ -171,6 +179,7 @@ export function attachDebugEditor(world: GameWorld, engine: EngineApplication, o
       return lines.join("\n");
     },
   });
+  return editor;
 }
 
 function formatNumber(value?: number) {
@@ -178,29 +187,32 @@ function formatNumber(value?: number) {
 }
 
 // Rows for one component value. Object → a row per key (numbers editable); primitive → a single value row.
+// Unity-style: a component flagged `editable:false` is hidden entirely (empty →
+// buildInspectorCards drops the card), as is any struct field flagged `editable:false`.
 function componentFields(def: ComponentDefinition, value: unknown): DebugEditorField[] {
-  // Enum is always a single read-only value. Coerce non-string data (e.g. a stale
-  // struct payload) to the default so it never renders as "[object Object]".
+  if (def.editable === false) return [];
+
+  // Enum → a dropdown of its values (read-only text if it declares none).
   if (def.kind === "enum") {
     const display = typeof value === "string" ? value : String(def.defaultValue ?? "-");
-    return [{ label: "Value", value: display }];
+    const editable = (def.values?.length ?? 0) > 0;
+    return [{ label: "Value", value: display, ...(editable ? { editable: true, editKey: "value", options: def.values } : {}) }];
   }
-  const componentEditable = def.editable !== false;
   if (value !== null && typeof value === "object") {
-    return Object.entries(value as Record<string, unknown>).map(([key, val]) => {
-      const numeric = typeof val === "number";
-      const fc = def.fields?.[key];
-      // Per-field editability overrides the component default.
-      const editable = componentEditable && (fc?.editable ?? true);
-      return {
-        label: fc?.label ?? titleize(key),
-        value: numeric ? formatNumber(val as number) : String(val),
-        ...(numeric && editable ? { editable: true, editKey: key } : {}),
-      };
-    });
+    return Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => def.fields?.[key]?.editable !== false) // hide fields explicitly marked non-editable
+      .map(([key, val]) => {
+        const numeric = typeof val === "number";
+        const fc = def.fields?.[key];
+        return {
+          label: fc?.label ?? titleize(key),
+          value: numeric ? formatNumber(val as number) : String(val),
+          ...(numeric ? { editable: true, editKey: key } : {}),
+        };
+      });
   }
-  // Scalar (enum already returned above): editable single value unless disabled.
-  return [{ label: "Value", value: String(value), ...(componentEditable ? { editable: true, editKey: "value" } : {}) }];
+  // Scalar (enum already returned above).
+  return [{ label: "Value", value: String(value), editable: true, editKey: "value" }];
 }
 
 // Clamp/round a numeric edit to the effective constraints (per-field override,
@@ -219,6 +231,11 @@ function constrainNumber(value: number, def: ComponentDefinition, key?: string) 
 
 // Write an edited field back. Object → mutate the numeric key in place; primitive → replace the store entry.
 function setComponentField(store: ComponentStore<unknown>, value: unknown, key: string, next: string, entity: Entity, def: ComponentDefinition) {
+  // Enum: the whole component value is the selected string; only accept declared values.
+  if (def.kind === "enum") {
+    if (def.values?.includes(next)) store.set(entity, next);
+    return;
+  }
   if (value !== null && typeof value === "object") {
     // Guard: a per-field editable:false is never written even if a stale edit arrives.
     if (def.fields?.[key]?.editable === false) return;

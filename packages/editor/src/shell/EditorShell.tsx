@@ -107,6 +107,7 @@ export type EditorShellProps = {
   onInspectorQueryChange: (value: string) => void;
   onSelectEntity: (entity: number) => void;
   onToggleComponentCollapse: (id: string) => void;
+  onRemoveComponent: (entity: number, componentId: string) => void;
   onInspectorEdit: (entity: number, componentId: string, key: string, value: string) => void;
   onSaveSnapshot: () => void;
   onRestoreSnapshot: (index: number) => void;
@@ -144,6 +145,7 @@ export type EditorShellProps = {
   onCreateFolder?: (path: string) => void;
   onCreateWorld: (path: string) => void;
   onCreateComponent?: (path: string) => void;
+  onComponentSaved?: (path: string, definition: unknown) => void;
   onCreatePrefab?: (path: string) => void;
   onCreateGraph?: (path: string) => void;
   onImportContent?: (path: string, value: unknown) => void;
@@ -976,14 +978,28 @@ export function EditorShell(props: EditorShellProps) {
                     )}
                     {selectedEntity && props.inspectorCards.map((card) => (
                       <div className="border-b border-[#303030]" key={card.id}>
-                        <button
-                          className="w-full px-3 py-2 bg-[#252526] flex items-center cursor-pointer select-none text-white hover:bg-[#2a2a2b] text-left"
-                          onClick={() => props.onToggleComponentCollapse(card.id)}
-                        >
-                          <i className={`ph ${card.collapsed ? "ph-caret-right" : "ph-caret-down"} text-[10px] mr-2`} />
-                          {card.title}
-                        </button>
-                        {card.collapsed ? null : (
+                        <div className="w-full px-3 py-2 bg-[#252526] flex items-center select-none text-white hover:bg-[#2a2a2b]">
+                          <button
+                            className="flex-1 flex items-center text-left cursor-pointer disabled:cursor-default"
+                            onClick={() => props.onToggleComponentCollapse(card.id)}
+                            disabled={!card.hasFields}
+                          >
+                            {card.hasFields
+                              ? <i className={`ph ${card.collapsed ? "ph-caret-right" : "ph-caret-down"} text-[10px] mr-2`} />
+                              : <span className="inline-block w-[10px] mr-2" />}
+                            {card.title}
+                          </button>
+                          {card.removable && !isPlaying && (
+                            <button
+                              className="ml-2 text-[#888] hover:text-[#f87171] transition-colors"
+                              title="Remove component"
+                              onClick={() => props.onRemoveComponent(selectedEntity.entity, card.id)}
+                            >
+                              <i className="ph ph-trash text-xs" />
+                            </button>
+                          )}
+                        </div>
+                        {!card.collapsed && card.fields.length > 0 && (
                           <div className="p-3 space-y-2">
                             {card.fields.map((field, index) => (
                               <InspectorField
@@ -1010,14 +1026,22 @@ export function EditorShell(props: EditorShellProps) {
             </div>
           </aside>
 
-          {/* DOC VIEW — overlays the whole workspace (blueprint or component editor) */}
-          {activeDocEntry && (
-            activeDocEntry.kind === "component" ? (
-              <ComponentView key={activeDocEntry.path} path={activeDocEntry.path} keyboardLocked={isPlaying} />
+          {/* DOC VIEW — overlays the whole workspace (blueprint or component editor).
+              An `engine/<id>` path is a premade engine component: rendered read-only
+              from its in-memory definition (no backing file). */}
+          {activeDocEntry && (() => {
+            const engineAsset = activeDocEntry.path.startsWith("engine/")
+              ? props.engineAssets.find((asset) => asset.id === activeDocEntry.path.slice("engine/".length))
+              : undefined;
+            if (engineAsset) {
+              return <ComponentView key={activeDocEntry.path} path={activeDocEntry.path} definition={engineAsset.body} keyboardLocked />;
+            }
+            return activeDocEntry.kind === "component" ? (
+              <ComponentView key={activeDocEntry.path} path={activeDocEntry.path} keyboardLocked={isPlaying} onSaved={props.onComponentSaved} />
             ) : (
               <BlueprintView key={activeDocEntry.path} path={activeDocEntry.path} keyboardLocked={isPlaying} />
-            )
-          )}
+            );
+          })()}
         </div>
       </div>
 
