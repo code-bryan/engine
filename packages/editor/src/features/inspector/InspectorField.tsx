@@ -1,8 +1,30 @@
 // A single row in the entity Details/Inspector panel: an editable input, an
-// entity-reference link (single or list), or a read-only label/value. Verbatim
-// from the original debugger-ui.
+// entity-reference link (single or list), or a read-only label/value.
 
+import { useEffect, useRef, useState } from "react";
 import type { DebuggerFieldView } from "../../shell/view-types";
+
+// An input that keeps its own text while focused so a parent re-render (the editor
+// re-renders on every edit and every ticked frame) can't reset what you're typing.
+// It commits raw text live via onCommit, and re-syncs from the incoming value only
+// when not focused (e.g. a different entity is selected, or the value changes externally).
+function LiveInput(props: { value: string; className: string; onCommit: (value: string) => void }) {
+  const [text, setText] = useState(props.value);
+  const focused = useRef(false);
+  useEffect(() => {
+    if (!focused.current) setText(props.value);
+  }, [props.value]);
+  return (
+    <input
+      className={props.className}
+      value={text}
+      inputMode="decimal"
+      onFocus={() => { focused.current = true; }}
+      onBlur={() => { focused.current = false; setText(props.value); }}
+      onChange={(event) => { setText(event.target.value); props.onCommit(event.target.value); }}
+    />
+  );
+}
 
 export function InspectorField(
   props: {
@@ -22,10 +44,10 @@ export function InspectorField(
           {field.axes.map((axis) => (
             <label className="flex-1 min-w-0 flex items-center gap-1" key={axis.editKey}>
               <span className="w-3 shrink-0 text-[#666] text-[10px]">{axis.label}</span>
-              <input
+              <LiveInput
                 className="engine-input flex-1 min-w-0 px-2 py-1 rounded text-right"
                 value={axis.value}
-                onChange={(event) => props.onEdit(field.entity!, field.componentId!, axis.editKey, event.target.value)}
+                onCommit={(value) => props.onEdit(field.entity!, field.componentId!, axis.editKey, value)}
               />
             </label>
           ))}
@@ -38,10 +60,10 @@ export function InspectorField(
     return (
       <label className="flex items-center gap-2">
         <span className="w-20 shrink-0 text-[#888]">{field.label}</span>
-        <input
+        <LiveInput
           className="engine-input flex-1 px-2 py-1 rounded text-right"
           value={field.value}
-          onChange={(event) => props.onEdit(field.entity!, field.componentId!, field.editKey!, event.target.value)}
+          onCommit={(value) => props.onEdit(field.entity!, field.componentId!, field.editKey!, value)}
         />
       </label>
     );

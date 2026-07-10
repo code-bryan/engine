@@ -1,6 +1,6 @@
 import { type Entity } from "@engine/ecs-core";
 import { keyboard } from "@engine/input";
-import { sprite, transforms } from "@engine/renderer";
+import { sprite, sprites, transforms } from "@engine/renderer";
 import type { DemoGameWorld } from "./types";
 import { tryGetComponentStore } from "./components";
 
@@ -725,7 +725,7 @@ function executeNode(
             x: transform.position.x,
             y: transform.position.y,
             rotation: transform.rotation,
-            scale: transform.scale,
+            size: transform.size,
           }),
         },
       }];
@@ -947,10 +947,18 @@ function executeNode(
       if (typeof facing !== "string") return [context];
       const transform = transforms.get(context.entity);
       if (!transform) return [context];
-      const baseScale = getBaseScale(transform.scale);
-      transform.scale = {
-        x: facing === String(node.data?.left ?? "left") ? -baseScale : baseScale,
-        y: baseScale,
+      // Mirror via the sign of size.x (negative = facing left). The flip needs a
+      // magnitude: use the current size when set, else fall back to the sprite's
+      // native texture size (so "auto" size {0,0} entities still mirror).
+      let base = getBaseScale(transform.size);
+      if (base === 0) {
+        const texture = sprites.get(context.entity)?.sprite.texture;
+        base = texture ? texture.height : 0;
+      }
+      if (base === 0) return [context];
+      transform.size = {
+        x: facing === String(node.data?.left ?? "left") ? -base : base,
+        y: base,
       };
       return [context];
     }

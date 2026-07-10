@@ -10,6 +10,8 @@ import { BookmarkNameDialog, ContentCreateDialog, ContentImportDialog, ContentPr
 export type ContentBrowserProps = {
   tree: ContentTreeNode[];
   engineAssets?: EngineAsset[];
+  // Asset path to highlight (e.g. the prefab the selected entity extends).
+  highlightPath?: string;
   activeWorld?: string;
   activeSystems?: string[];
   onOpenWorld: (name: string) => void;
@@ -486,7 +488,14 @@ export function ContentBrowser(props: ContentBrowserProps) {
           ) : filteredChildren.map((node) => {
             const isSelected = selectedItemPath === node.path || (node.kind === "world" && node.path === props.activeWorld);
             const isActiveWorld = node.kind === "world" && node.path === props.activeWorld;
+            // Dark-yellow highlight when this asset is the prefab the selected entity extends.
+            const isHighlighted = !!props.highlightPath && node.path === props.highlightPath;
             const barColor = contentTypeBarColor(node.kind);
+            const boxClass = isHighlighted
+              ? "border-[#b8860b] bg-[#332d0f]"
+              : isSelected
+                ? "border-[#0070e0] bg-[#333]"
+                : "bg-[#2a2a2a] border-[#444] group-hover:border-[#0070e0] group-hover:bg-[#333]";
             return (
               <button
                 key={node.path}
@@ -498,11 +507,11 @@ export function ContentBrowser(props: ContentBrowserProps) {
                 onContextMenu={(event) => openContextMenu(event, node)}
                 title={node.path || "root"}
               >
-                <div className={`w-16 h-16 rounded flex items-center justify-center mb-1 relative overflow-hidden shadow-md transition-colors border ${isSelected ? "border-[#0070e0] bg-[#333]" : "bg-[#2a2a2a] border-[#444] group-hover:border-[#0070e0] group-hover:bg-[#333]"}`}>
-                  <span className={`text-3xl ${isSelected ? "text-[#0070e0]" : "text-[#aaa]"}`}>{renderContentIcon(node.kind)}</span>
+                <div className={`w-16 h-16 rounded flex items-center justify-center mb-1 relative overflow-hidden shadow-md transition-colors border ${boxClass}`}>
+                  <span className={`text-3xl ${isHighlighted ? "text-[#d4a017]" : isSelected ? "text-[#0070e0]" : "text-[#aaa]"}`}>{renderContentIcon(node.kind)}</span>
                   <div className={`absolute bottom-0 w-full h-1 ${barColor}`} />
                 </div>
-                <span className={`text-center truncate w-full text-[11px] px-1 rounded ${isActiveWorld ? "bg-[#0070e0] text-white" : isSelected ? "text-white" : "text-[#ccc] group-hover:text-white"}`}>
+                <span className={`text-center truncate w-full text-[11px] px-1 rounded ${isActiveWorld ? "bg-[#0070e0] text-white" : isHighlighted ? "text-[#d4a017]" : isSelected ? "text-white" : "text-[#ccc] group-hover:text-white"}`}>
                   {node.name}
                 </span>
               </button>

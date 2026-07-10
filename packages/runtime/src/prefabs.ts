@@ -16,7 +16,7 @@ import type { DemoGameWorld } from "./types";
 export type PrefabTransform = {
   position?: Vector;
   rotation?: number;
-  scale?: Vector;
+  size?: Vector;
 };
 
 export type PrefabSpriteSheet = {
@@ -56,28 +56,56 @@ export type PrefabDefinition = {
   components: PrefabComponentDefinition[];
 };
 
-export type PrefabPlacement = {
-  prefab: string;
-  transform?: PrefabTransform;
-  components?: Record<string, unknown>;
+// A world entity is components-first: a component map that may declare any
+// component inline (tag/transform/physics.body/sprite/sprite.animation + registry
+// components). `extends` optionally inherits a prefab's components as a base, which
+// the inline components then override/extend (Unity-style linked instance).
+export type WorldEntity = {
+  extends?: string;
+  folder?: string;
+  components: Record<string, unknown>;
 };
 
 const prefabCache = new Map<string, Promise<PrefabDefinition | null>>();
 const spriteSheetCache = new Map<string, Promise<Awaited<ReturnType<typeof loadSpriteSheet>>>>();
 
-export async function instantiatePrefab(world: DemoGameWorld, placement: PrefabPlacement) {
-  const definition = await loadPrefabDefinition(placement.prefab);
-  if (!definition) throw new Error(`prefab not found: ${placement.prefab}`);
+// Live-entity → outliner folder path / extended prefab name. Populated at instantiate,
+// read back by serializeWorld and the editor. Cleared per world load (materializeWorld).
+export const entityFolders = new Map<Entity, string>();
+export const entityExtends = new Map<Entity, string>();
 
-  const entity = world.spawn();
+// Special component types are applied before generic ones (transform first so the
+// physics body can anchor to it; sprite before its animation).
+const COMPONENT_APPLY_ORDER = ["transform", "tag", "physics.body", "sprite", "sprite.animation"];
+
+export async function instantiateEntity(world: DemoGameWorld, entity: WorldEntity) {
+  const base = entity.extends ? await loadPrefabDefinition(entity.extends) : null;
+  if (entity.extends && !base) throw new Error(`prefab not found: ${entity.extends}`);
+
+  // Merge: prefab components (base) with the entity's inline components layered on top.
+  const merged: Record<string, unknown> = {};
+  for (const entry of base?.components ?? []) merged[entry.component] = entry.value;
+  for (const [id, value] of Object.entries(entity.components ?? {})) merged[id] = value;
+
+  // Transform field-merges (inline overrides base per field), then defaults.
+  const baseTransform = base?.components.find((c) => c.component === "transform")?.value;
+  const effectiveTransform = mergeTransform(coerceTransform(baseTransform), coerceTransform(entity.components?.transform));
+
+  const spawned = world.spawn();
+  if (entity.folder) entityFolders.set(spawned, entity.folder);
+  if (entity.extends) entityExtends.set(spawned, entity.extends);
   const registry = new Map(getComponentRegistry().map((entry) => [entry.id, entry.store]));
-  const effectiveTransform = resolveTransform(definition, placement);
 
-  for (const entry of definition.components) {
-    await applyPrefabComponent(world, entity, entry, registry, placement, effectiveTransform);
+  const ids = Object.keys(merged);
+  const ordered = [
+    ...COMPONENT_APPLY_ORDER.filter((id) => id in merged),
+    ...ids.filter((id) => !COMPONENT_APPLY_ORDER.includes(id)),
+  ];
+  for (const id of ordered) {
+    await applyComponent(world, spawned, id, merged[id], registry, effectiveTransform);
   }
 
-  return entity;
+  return spawned;
 }
 
 export async function loadPrefabDefinition(name: string): Promise<PrefabDefinition | null> {
@@ -96,35 +124,40 @@ export async function loadPrefabDefinition(name: string): Promise<PrefabDefiniti
     .catch(() => null);
 
   prefabCache.set(name, pending);
+  // Never poison the cache with a transient failure: evict a null result so the
+  // next load retries the fetch (only successful definitions stay cached).
+  void pending.then((def) => {
+    if (!def && prefabCache.get(name) === pending) prefabCache.delete(name);
+  });
   return pending;
 }
 
-function resolveTransform(definition: PrefabDefinition, placement: PrefabPlacement): Transform {
-  const prefabTransform = definition.components.find((component): component is Extract<PrefabComponentDefinition, { component: "transform" }> => component.component === "transform")?.value;
-  const base = coerceTransform(prefabTransform);
-  const over = coerceTransform(placement.transform);
+// Field-level transform merge: `over` (inline) wins per field, else `base` (prefab),
+// else defaults. Lets an entity override just position while inheriting size.
+// `size` defaults to 0 (= auto/native render size).
+function mergeTransform(base: ReturnType<typeof coerceTransform>, over: ReturnType<typeof coerceTransform>): Transform {
   return {
     position: {
       x: over.position?.x ?? base.position?.x ?? 0,
       y: over.position?.y ?? base.position?.y ?? 0,
     },
     rotation: over.rotation ?? base.rotation ?? 0,
-    scale: {
-      x: over.scale?.x ?? base.scale?.x ?? 1,
-      y: over.scale?.y ?? base.scale?.y ?? 1,
+    size: {
+      x: over.size?.x ?? base.size?.x ?? 0,
+      y: over.size?.y ?? base.size?.y ?? 0,
     },
   };
 }
 
-// Read a transform-ish value from prefab/world JSON, tolerating both the nested
-// {position,scale} vectors and the legacy flat {x,y}/numeric-scale layout.
-export function coerceTransform(value: unknown): { position?: Vector; rotation?: number; scale?: Vector } {
+// Read a transform-ish value from prefab/world JSON, tolerating the nested
+// {position,size} vectors and the legacy flat {x,y} layout.
+export function coerceTransform(value: unknown): { position?: Vector; rotation?: number; size?: Vector } {
   if (!value || typeof value !== "object") return {};
   const raw = value as Record<string, unknown>;
   const position = coerceVector(raw.position) ?? coerceVector({ x: raw.x, y: raw.y });
-  const scale = coerceScale(raw.scale);
+  const size = coerceSize(raw.size);
   const rotation = typeof raw.rotation === "number" ? raw.rotation : undefined;
-  return { position, rotation, scale };
+  return { position, rotation, size };
 }
 
 function coerceVector(value: unknown): Vector | undefined {
@@ -134,22 +167,25 @@ function coerceVector(value: unknown): Vector | undefined {
   return { x: raw.x, y: raw.y };
 }
 
-function coerceScale(value: unknown): Vector | undefined {
+function coerceSize(value: unknown): Vector | undefined {
   if (typeof value === "number") return { x: value, y: value };
   return coerceVector(value);
 }
 
-async function applyPrefabComponent(
+// Apply one component (already merged from extends + inline) to a live entity.
+// Special types write their dedicated stores; everything else is a generic registry
+// component. `transform` uses the pre-merged effectiveTransform (its own value is ignored).
+async function applyComponent(
   world: DemoGameWorld,
   entity: Entity,
-  entry: PrefabComponentDefinition,
+  componentId: string,
+  value: unknown,
   registry: Map<string, Map<Entity, unknown>>,
-  placement: PrefabPlacement,
   effectiveTransform: Transform,
 ) {
-  switch (entry.component) {
+  switch (componentId) {
     case "tag": {
-      const tags = Array.isArray(entry.value) ? entry.value : [entry.value];
+      const tags = Array.isArray(value) ? (value as string[]) : [value as string];
       world.tags.add(entity, ...tags);
       return;
     }
@@ -157,19 +193,19 @@ async function applyPrefabComponent(
       transforms.set(entity, {
         position: { ...effectiveTransform.position },
         rotation: effectiveTransform.rotation,
-        scale: { ...effectiveTransform.scale },
+        size: { ...effectiveTransform.size },
       });
       return;
     }
     case "physics.body": {
-      const body = entry.value as Extract<PrefabComponentDefinition, { component: "physics.body" }>["value"];
+      const body = value as { kind?: "dynamic" | "kinematic" | "static"; width: number; height: number };
       const transform = transforms.get(entity) ?? effectiveTransform;
       const { kind, width, height } = body;
       world.physics.body[kind ?? "dynamic"].set(entity, { x: transform.position.x, y: transform.position.y, width, height });
       return;
     }
     case "sprite": {
-      const spriteValue = entry.value as Extract<PrefabComponentDefinition, { component: "sprite" }>["value"];
+      const spriteValue = value as PrefabSpriteDefinition;
       const texture = spriteValue.texture ? await resolveSpriteTexture(spriteValue.texture.sheet, spriteValue.texture.frame ?? 0) : undefined;
       sprite.set(entity, {
         texture,
@@ -180,7 +216,7 @@ async function applyPrefabComponent(
       return;
     }
     case "sprite.animation": {
-      const animation = entry.value as Extract<PrefabComponentDefinition, { component: "sprite.animation" }>["value"];
+      const animation = value as { initial: string; autoplay?: boolean; clips: Record<string, PrefabAnimationClipDefinition> };
       if (!sprites.get(entity)) sprite.set(entity, {});
       const clips = await resolveAnimationClips(animation.clips);
       sprite.animation.set(entity, {
@@ -191,10 +227,9 @@ async function applyPrefabComponent(
       return;
     }
     default: {
-      const store = registry.get(entry.component);
+      const store = registry.get(componentId);
       if (!store) return;
-      const override = placement.components?.[entry.component];
-      store.set(entity, cloneValue(override ?? entry.value));
+      store.set(entity, cloneValue(value));
     }
   }
 }

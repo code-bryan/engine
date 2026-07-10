@@ -12,6 +12,7 @@ export type DebuggerEntityItemView = {
   title: string;
   tag: string;
   selected: boolean;
+  folder?: string;
 };
 
 export type DebuggerFieldView = {

@@ -108,6 +108,7 @@ export type EditorShellProps = {
   contentDrawerOpen: boolean;
   contentTree: ContentTreeNode[];
   engineAssets: EngineAsset[];
+  contentHighlightPath?: string;
   activeWorld?: string;
   activeSystems?: string[];
   onLoadWorld: (name: string) => void;
@@ -134,6 +135,8 @@ export function EditorShell(props: EditorShellProps) {
   const selectedEntityRef = useRef<HTMLButtonElement | null>(null);
   const [stagePortal, setStagePortal] = useState<HTMLElement | null>(null);
   const [cameraTuningOpen, setCameraTuningOpen] = useState(false);
+  // Collapsed outliner folders (default expanded — a folder is collapsed only if present here).
+  const [collapsedEntityFolders, setCollapsedEntityFolders] = useState<Set<string>>(() => new Set());
   const [windowPanel, setWindowPanel] = useState<BottomDrawerTab | null>(null);
   const [windowMenuOpen, setWindowMenuOpen] = useState(false);
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
@@ -604,6 +607,7 @@ export function EditorShell(props: EditorShellProps) {
                   <ContentBrowser
                     tree={props.contentTree}
                     engineAssets={props.engineAssets}
+                    highlightPath={props.contentHighlightPath}
                     activeWorld={props.activeWorld}
                     activeSystems={props.activeSystems}
                     onOpenWorld={props.onOpenWorld}
@@ -650,18 +654,59 @@ export function EditorShell(props: EditorShellProps) {
                   <i className={`ph-fill ph-globe-hemisphere-west mr-2 ${props.sceneSelected ? "text-[#0070e0]" : "text-[#888]"}`} />
                   <span className="truncate">{props.worldName}</span>
                 </button>
-                {props.entities.map((entity) => (
-                  <button
-                    key={entity.entity}
-                    ref={entity.selected ? selectedEntityRef : null}
-                    className={`w-full flex items-center pl-7 pr-3 py-1 cursor-pointer text-left ${entity.selected ? "bg-[#2d2d2d] border-l-2 border-[#0070e0] text-white" : "text-[#ccc] hover:bg-[#2d2d2d]"}`}
-                    onClick={() => props.onSelectEntity(entity.entity)}
-                  >
-                    <i className="ph-fill ph-cube text-[#888] mr-2" />
-                    <span className="truncate flex-1">{entity.title}</span>
-                    <span className="text-[10px] text-[#666] ml-2">{entity.tag}</span>
-                  </button>
-                ))}
+                {(() => {
+                  const renderEntityRow = (entity: DebuggerEntityItemView, padLeft: string) => (
+                    <button
+                      key={entity.entity}
+                      ref={entity.selected ? selectedEntityRef : null}
+                      className={`w-full flex items-center ${padLeft} pr-3 py-1 cursor-pointer text-left ${entity.selected ? "bg-[#2d2d2d] border-l-2 border-[#0070e0] text-white" : "text-[#ccc] hover:bg-[#2d2d2d]"}`}
+                      onClick={() => props.onSelectEntity(entity.entity)}
+                    >
+                      <i className="ph-fill ph-cube text-[#888] mr-2" />
+                      <span className="truncate flex-1">{entity.title}</span>
+                      <span className="text-[10px] text-[#666] ml-2">{entity.tag}</span>
+                    </button>
+                  );
+                  // Group by folder (preserving first-seen order); folderless entities render flat.
+                  const order: string[] = [];
+                  const byFolder = new Map<string, DebuggerEntityItemView[]>();
+                  const loose: DebuggerEntityItemView[] = [];
+                  for (const entity of props.entities) {
+                    if (!entity.folder) { loose.push(entity); continue; }
+                    if (!byFolder.has(entity.folder)) { byFolder.set(entity.folder, []); order.push(entity.folder); }
+                    byFolder.get(entity.folder)!.push(entity);
+                  }
+                  const toggleFolder = (folder: string) => {
+                    setCollapsedEntityFolders((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(folder)) next.delete(folder); else next.add(folder);
+                      return next;
+                    });
+                  };
+                  return (
+                    <>
+                      {order.map((folder) => {
+                        const collapsed = collapsedEntityFolders.has(folder);
+                        const items = byFolder.get(folder)!;
+                        return (
+                          <div key={`folder:${folder}`}>
+                            <button
+                              className="w-full flex items-center pl-7 pr-3 py-1 cursor-pointer text-left text-[#ccc] hover:bg-[#2d2d2d]"
+                              onClick={() => toggleFolder(folder)}
+                            >
+                              <i className={`ph ph-caret-${collapsed ? "right" : "down"} text-[10px] mr-1 text-[#888]`} />
+                              <i className={`ph-fill ph-${collapsed ? "folder" : "folder-open"} text-[#888] mr-2`} />
+                              <span className="truncate flex-1">{folder}</span>
+                              <span className="text-[10px] text-[#666] ml-2">{items.length}</span>
+                            </button>
+                            {collapsed ? null : items.map((entity) => renderEntityRow(entity, "pl-12"))}
+                          </div>
+                        );
+                      })}
+                      {loose.map((entity) => renderEntityRow(entity, "pl-7"))}
+                    </>
+                  );
+                })()}
               </div>
             </div>
 

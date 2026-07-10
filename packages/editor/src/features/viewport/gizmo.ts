@@ -41,8 +41,16 @@ export function buildSelectionOutline<TWorld extends DebuggerWorld>(
   const outlineWidth = 1.5 / Math.max(zoom, 0.1);
   const pivotRadius = 4 / Math.max(zoom, 0.1);
 
+  // Empty entity (no sprite/collider → 0×0 bounds): draw a constant-screen-size
+  // marker box at the pivot instead of a zero-size world rect, like Unity's empties.
+  const markerHalf = 6 / Math.max(zoom, 0.1);
+  const isEmpty = bounds.width === 0 && bounds.height === 0;
+  const box = isEmpty
+    ? { x: bounds.pivotX - markerHalf, y: bounds.pivotY - markerHalf, width: markerHalf * 2, height: markerHalf * 2 }
+    : { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height };
+
   return [
-    { kind: "rect", x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, stroke: { color: SELECT_BLUE, width: outlineWidth, alpha: 0.95 } },
+    { kind: "rect", x: box.x, y: box.y, width: box.width, height: box.height, stroke: { color: SELECT_BLUE, width: outlineWidth, alpha: 0.95 } },
     { kind: "circle", x: bounds.pivotX, y: bounds.pivotY, radius: pivotRadius, fill: { color: SELECT_BLUE, alpha: 0.95 } },
   ];
 }

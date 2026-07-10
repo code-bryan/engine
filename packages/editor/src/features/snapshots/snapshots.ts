@@ -34,7 +34,7 @@ function captureSnapshot<TWorld extends DebuggerWorld>(
           transform: {
             position: { x: transform.position.x, y: transform.position.y },
             rotation: transform.rotation,
-            scale: { x: transform.scale.x, y: transform.scale.y },
+            size: { x: transform.size.x, y: transform.size.y },
           },
         }
       : { components, physics });
@@ -71,8 +71,8 @@ function restoreSnapshot<TWorld extends DebuggerWorld>(
         transform.position.x = data.transform.position.x;
         transform.position.y = data.transform.position.y;
         transform.rotation = data.transform.rotation;
-        transform.scale.x = data.transform.scale.x;
-        transform.scale.y = data.transform.scale.y;
+        transform.size.x = data.transform.size.x;
+        transform.size.y = data.transform.size.y;
       }
     }
   }

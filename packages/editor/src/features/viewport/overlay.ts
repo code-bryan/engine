@@ -79,14 +79,15 @@ export function buildOverlay<TWorld extends DebuggerWorld>(
       const t = transforms.get(entity);
       if (!t) continue;
       const { sprite, offset, anchor } = spriteRef;
-      const scaleX = t.scale.x;
-      const scaleY = t.scale.y;
-      const w = sprite.texture.width * Math.abs(scaleX);
-      const h = sprite.texture.height * Math.abs(scaleY);
+      // Rendered footprint: size px (0 = native texture size); sign mirrors.
+      const sizeX = t.size.x;
+      const sizeY = t.size.y;
+      const w = sizeX !== 0 ? Math.abs(sizeX) : sprite.texture.width;
+      const h = sizeY !== 0 ? Math.abs(sizeY) : sprite.texture.height;
       const posX = t.position.x + offset.x;
       const posY = t.position.y + offset.y;
-      const bx = posX - (scaleX < 0 ? (1 - anchor.x) : anchor.x) * w;
-      const by = posY - (scaleY < 0 ? (1 - anchor.y) : anchor.y) * h;
+      const bx = posX - (sizeX < 0 ? (1 - anchor.x) : anchor.x) * w;
+      const by = posY - (sizeY < 0 ? (1 - anchor.y) : anchor.y) * h;
       const cs = 4;
       out.push({ kind: "rect", x: bx, y: by, width: w, height: h, stroke: { color: 0x06b6d4, width: 1, alpha: 0.7 } });
       out.push({ kind: "line", x1: posX - cs, y1: posY, x2: posX + cs, y2: posY, stroke: { color: 0xfbbf24, width: 1.5, alpha: 0.9 } });

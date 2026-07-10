@@ -275,7 +275,7 @@ export function BlueprintView(props: BlueprintViewProps) {
         {graph && !loading && !error && (
           <div ref={viewportRef} className="absolute inset-0 overflow-hidden" onPointerDown={handleGraphPointerDown} onWheel={handleGraphWheel}>
             <div ref={canvasRef} className="absolute top-0 left-0" style={{ width: `${bounds.width}px`, height: `${bounds.height}px`, transform: `translate(${graphView.x}px, ${graphView.y}px) scale(${graphView.zoom})`, transformOrigin: "0 0" }}>
-              <svg className="absolute top-0 left-0 pointer-events-none" width={bounds.width} height={bounds.height} viewBox={`0 0 ${bounds.width} ${bounds.height}`}>
+              <svg className="absolute top-0 left-0 pointer-events-none overflow-visible" width={bounds.width} height={bounds.height} viewBox={`0 0 ${bounds.width} ${bounds.height}`}>
                 {graph.edges.map((edge, index) => {
                   const from = nodeMap.get(edge.from.node);
                   const to = nodeMap.get(edge.to.node);

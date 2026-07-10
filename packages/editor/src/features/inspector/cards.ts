@@ -1,5 +1,5 @@
 import type { Entity } from "@engine/ecs-core";
-import { transforms } from "@engine/renderer";
+import { sprites, transforms } from "@engine/renderer";
 import type {
   DebugEditorField,
   DebugInspectorComponent,
@@ -29,16 +29,19 @@ export function createStoreInspector<TValue, TWorld extends DebuggerWorld = Debu
 
 export function createBuiltinInspectorComponents<TWorld extends DebuggerWorld>(
   getEntityTitle?: (world: TWorld, entity: Entity) => string,
+  getEntityPrefab?: (world: TWorld, entity: Entity) => string | undefined,
 ): DebugInspectorComponent<TWorld>[] {
   return [
     {
       id: "entity",
       title: "Entity",
       fields(world, entity) {
+        const prefab = getEntityPrefab?.(world, entity);
         return [
           { label: "Id", value: `#${entity}`, selectEntity: entity },
           { label: "Name", value: getEntityTitle?.(world, entity) ?? entityTitle(world, entity) },
           { label: "Tags", value: world.tags.list(entity).join(", ") || "-" },
+          ...(prefab ? [{ label: "Prefab", value: prefab }] : []),
         ];
       },
     },
@@ -54,17 +57,17 @@ export function createBuiltinInspectorComponents<TWorld extends DebuggerWorld>(
             value: "",
             editable: true,
             axes: [
-              { label: "X", value: formatNumber(transform.position.x), editKey: "x" },
-              { label: "Y", value: formatNumber(transform.position.y), editKey: "y" },
+              { label: "X", value: formatScalar(transform.position.x), editKey: "x" },
+              { label: "Y", value: formatScalar(transform.position.y), editKey: "y" },
             ],
           },
           {
-            label: "Scale",
+            label: "Size",
             value: "",
             editable: true,
             axes: [
-              { label: "X", value: formatNumber(transform.scale.x), editKey: "scaleX" },
-              { label: "Y", value: formatNumber(transform.scale.y), editKey: "scaleY" },
+              { label: "X", value: formatScalar(effectiveSize(entity, transform.size.x, "width")), editKey: "sizeX" },
+              { label: "Y", value: formatScalar(effectiveSize(entity, transform.size.y, "height")), editKey: "sizeY" },
             ],
           },
           {
@@ -72,7 +75,7 @@ export function createBuiltinInspectorComponents<TWorld extends DebuggerWorld>(
             value: "",
             editable: true,
             axes: [
-              { label: "°", value: formatNumber(transform.rotation * (180 / Math.PI)), editKey: "rotation" },
+              { label: "°", value: formatScalar(transform.rotation * (180 / Math.PI)), editKey: "rotation" },
             ],
           },
         ];
@@ -87,8 +90,8 @@ export function createBuiltinInspectorComponents<TWorld extends DebuggerWorld>(
         if (key === "x") transform.position.x = next;
         if (key === "y") transform.position.y = next;
         if (key === "rotation") transform.rotation = next * (Math.PI / 180);
-        if (key === "scaleX") transform.scale.x = next;
-        if (key === "scaleY") transform.scale.y = next;
+        if (key === "sizeX") transform.size.x = next;
+        if (key === "sizeY") transform.size.y = next;
       },
     },
     {
@@ -150,17 +153,6 @@ export function buildInspectorCards<TWorld extends DebuggerWorld>(
     });
   }
 
-  const runtimeFields = [{ label: "Details", value: options.getRuntimeDetails?.(world, state.selectedEntity) ?? defaultRuntimeDetails(world, state.selectedEntity) }];
-  const runtimeVisible = runtimeFields.filter((field) => !query || "runtime".includes(query) || field.label.toLowerCase().includes(query));
-  if (!query || runtimeVisible.length > 0) {
-    cards.push({
-      id: "runtime",
-      title: "Runtime",
-      collapsed: false,
-      fields: runtimeVisible.map((field) => ({ ...field, componentId: "runtime", entity: state.selectedEntity! })),
-    });
-  }
-
   return cards;
 }
 
@@ -173,12 +165,17 @@ function formatNumber(value?: number) {
   return value === undefined ? "-" : value.toFixed(2);
 }
 
-function defaultRuntimeDetails(world: DebuggerWorld, entity: Entity) {
-  const transform = transforms.get(entity);
-  return [
-    `entity=${entity}`,
-    `tags=${world.tags.list(entity).join(",") || "-"}`,
-    `x=${formatNumber(transform?.position.x)}`,
-    `y=${formatNumber(transform?.position.y)}`,
-  ].join(" | ");
+// Editable numeric fields: show whole numbers as plain integers (no ".00") and trim
+// float noise / trailing zeros (92.690000001 → "92.69", 100 → "100", 1.05 → "1.05").
+function formatScalar(value: number) {
+  if (!Number.isFinite(value)) return "0";
+  return String(Math.round(value * 1000) / 1000);
+}
+
+// Effective size shown in the Size field: the explicit size when set (nonzero),
+// otherwise the sprite's native texture size (what "auto" renders), else 0.
+function effectiveSize(entity: Entity, size: number, dim: "width" | "height") {
+  if (size !== 0) return size;
+  const texture = sprites.get(entity)?.sprite.texture;
+  return texture ? texture[dim] : 0;
 }

@@ -1,9 +1,9 @@
 import { getComponentRegistry, type Entity } from "@engine/ecs-core";
 import { transforms, sprites, spriteAnimations } from "@engine/renderer";
 import type { DemoGameWorld } from "./types";
-import { instantiatePrefab, coerceTransform, type PrefabPlacement, type PrefabTransform } from "./prefabs";
+import { instantiateEntity, coerceTransform, entityFolders, entityExtends, type WorldEntity, type PrefabTransform } from "./prefabs";
 
-export type DemoWorldEntity = PrefabPlacement;
+export type DemoWorldEntity = WorldEntity;
 
 export type DemoWorldData = {
   version: 1;
@@ -63,10 +63,12 @@ export async function materializeWorld(world: DemoGameWorld, data: DemoWorldData
   transforms.clear();
   sprites.clear();
   spriteAnimations.clear();
+  entityFolders.clear();
+  entityExtends.clear();
   for (const { store } of getComponentRegistry()) store.clear();
 
   for (const entity of data.entities) {
-    await instantiatePrefab(world, entity);
+    await instantiateEntity(world, entity);
   }
 }
 
@@ -77,21 +79,31 @@ export function serializeWorld(world: DemoGameWorld, systems: string[] = []): De
     const transform = transforms.get(entity);
     if (!transform) continue;
 
-    const prefab = world.tags.list(entity)[0] ?? "entity";
+    const extendsPrefab = entityExtends.get(entity);
     const components: Record<string, unknown> = {};
+
+    // Transform is components-first now.
+    components.transform = {
+      position: { x: transform.position.x, y: transform.position.y },
+      rotation: transform.rotation,
+      size: { x: transform.size.x, y: transform.size.y },
+    };
+    // Registry (per-instance / runtime-varying) components.
     for (const { id, store } of getComponentRegistry()) {
       const value = store.get(entity);
       if (value !== undefined) components[id] = cloneValue(value);
     }
+    // A prefab-less entity keeps its tag inline; extends entities inherit tag/sprite/
+    // physics from the prefab, so those are not re-emitted (overrides-only).
+    if (!extendsPrefab) {
+      const tags = world.tags.list(entity);
+      if (tags.length > 0) components.tag = tags.length === 1 ? tags[0] : tags;
+    }
 
     entities.push({
-      prefab,
-      transform: {
-        position: { x: transform.position.x, y: transform.position.y },
-        rotation: transform.rotation,
-        scale: { x: transform.scale.x, y: transform.scale.y },
-      },
-      components: Object.keys(components).length > 0 ? components : undefined,
+      extends: extendsPrefab,
+      components,
+      folder: entityFolders.get(entity),
     });
   }
 
@@ -136,6 +148,7 @@ function storageKey(name: string) {
 function normalizeWorldEntity(value: unknown): DemoWorldEntity | null {
   if (!value || typeof value !== "object") return null;
   const entity = value as {
+    extends?: unknown;
     prefab?: unknown;
     transform?: unknown;
     components?: unknown;
@@ -147,35 +160,37 @@ function normalizeWorldEntity(value: unknown): DemoWorldEntity | null {
     speed?: unknown;
     spawnX?: unknown;
     spawnY?: unknown;
+    folder?: unknown;
   };
 
+  const folder = typeof entity.folder === "string" && entity.folder.trim() !== "" ? entity.folder : undefined;
+  const extendsPrefab = typeof entity.extends === "string" ? entity.extends : undefined;
+
+  // Legacy: required `prefab` + top-level `transform`. Map prefab→extends and fold
+  // the top-level transform into components.transform (components-first).
   if (typeof entity.prefab === "string") {
     return {
-      prefab: entity.prefab,
-      transform: normalizeTransform(entity.transform),
-      components: normalizeComponents(entity.components),
+      extends: entity.prefab,
+      folder,
+      components: { ...normalizeComponents(entity.components), transform: normalizeTransform(entity.transform) },
     };
   }
 
-  if (typeof entity.kind !== "string") return null;
-  if (typeof entity.x !== "number" || typeof entity.y !== "number") return null;
-
-  const prefab = entity.kind;
-  const components = normalizeComponents(entity.components);
-  // Speed is a standalone component now; spawn is no longer entity data (it lives
-  // on separate spawn-point entities), so the legacy flat format only carries speed.
-  if (prefab === "player") {
-    components.speed = typeof entity.speed === "number" ? entity.speed : 96;
-  }
-  if (prefab === "enemy") {
-    components.speed = typeof entity.speed === "number" ? entity.speed : 42;
+  // Legacy flat {kind,x,y}: kind→extends, synthesize speed, transform from x/y.
+  if (typeof entity.kind === "string" && typeof entity.x === "number" && typeof entity.y === "number") {
+    const components = normalizeComponents(entity.components);
+    if (entity.kind === "player") components.speed = typeof entity.speed === "number" ? entity.speed : 96;
+    if (entity.kind === "enemy") components.speed = typeof entity.speed === "number" ? entity.speed : 42;
+    components.transform = normalizeTransform(entity);
+    return { extends: entity.kind, folder, components };
   }
 
-  return {
-    prefab,
-    transform: normalizeTransform(entity),
-    components: Object.keys(components).length > 0 ? components : undefined,
-  };
+  // New components-first shape: { extends?, folder?, components }.
+  if (entity.components && typeof entity.components === "object") {
+    return { extends: extendsPrefab, folder, components: normalizeComponents(entity.components) };
+  }
+
+  return null;
 }
 
 function normalizeTransform(value: unknown): PrefabTransform | undefined {
@@ -184,7 +199,7 @@ function normalizeTransform(value: unknown): PrefabTransform | undefined {
   return {
     position: parts.position ?? { x: 0, y: 0 },
     rotation: parts.rotation ?? 0,
-    scale: parts.scale ?? { x: 1, y: 1 },
+    size: parts.size ?? { x: 0, y: 0 },
   };
 }
 
