@@ -1,5 +1,5 @@
 import type { Entity } from "@engine/ecs-core";
-import { transforms, type TransformScale } from "@engine/renderer";
+import { transforms } from "@engine/renderer";
 import type {
   DebugEditorField,
   DebugInspectorComponent,
@@ -48,13 +48,33 @@ export function createBuiltinInspectorComponents<TWorld extends DebuggerWorld>(
       fields(world, entity) {
         const transform = transforms.get(entity);
         if (!transform) return [];
-        const scale = normalizeScale(transform.scale);
         return [
-          { label: "X", value: formatNumber(transform.x), editable: true, editKey: "x" },
-          { label: "Y", value: formatNumber(transform.y), editable: true, editKey: "y" },
-          { label: "Scale X", value: formatNumber(scale.x), editable: true, editKey: "scaleX" },
-          { label: "Scale Y", value: formatNumber(scale.y), editable: true, editKey: "scaleY" },
-          { label: "Rot", value: formatNumber(transform.rotation), editable: true, editKey: "rotation" },
+          {
+            label: "Position",
+            value: "",
+            editable: true,
+            axes: [
+              { label: "X", value: formatNumber(transform.position.x), editKey: "x" },
+              { label: "Y", value: formatNumber(transform.position.y), editKey: "y" },
+            ],
+          },
+          {
+            label: "Scale",
+            value: "",
+            editable: true,
+            axes: [
+              { label: "X", value: formatNumber(transform.scale.x), editKey: "scaleX" },
+              { label: "Y", value: formatNumber(transform.scale.y), editKey: "scaleY" },
+            ],
+          },
+          {
+            label: "Rotation",
+            value: "",
+            editable: true,
+            axes: [
+              { label: "°", value: formatNumber(transform.rotation * (180 / Math.PI)), editKey: "rotation" },
+            ],
+          },
         ];
       },
       set(world, entity, key, rawValue) {
@@ -64,15 +84,11 @@ export function createBuiltinInspectorComponents<TWorld extends DebuggerWorld>(
         const transform = transforms.get(entity);
         if (!transform) return;
 
-        if (key === "x") transform.x = next;
-        if (key === "y") transform.y = next;
-        if (key === "rotation") transform.rotation = next;
-        if (key === "scaleX" || key === "scaleY") {
-          const scale = normalizeScale(transform.scale);
-          if (key === "scaleX") scale.x = next;
-          if (key === "scaleY") scale.y = next;
-          transform.scale = scale;
-        }
+        if (key === "x") transform.position.x = next;
+        if (key === "y") transform.position.y = next;
+        if (key === "rotation") transform.rotation = next * (Math.PI / 180);
+        if (key === "scaleX") transform.scale.x = next;
+        if (key === "scaleY") transform.scale.y = next;
       },
     },
     {
@@ -157,17 +173,12 @@ function formatNumber(value?: number) {
   return value === undefined ? "-" : value.toFixed(2);
 }
 
-function normalizeScale(scale?: TransformScale) {
-  if (scale === undefined) return { x: 1, y: 1 };
-  return typeof scale === "number" ? { x: scale, y: scale } : scale;
-}
-
 function defaultRuntimeDetails(world: DebuggerWorld, entity: Entity) {
   const transform = transforms.get(entity);
   return [
     `entity=${entity}`,
     `tags=${world.tags.list(entity).join(",") || "-"}`,
-    `x=${formatNumber(transform?.x)}`,
-    `y=${formatNumber(transform?.y)}`,
+    `x=${formatNumber(transform?.position.x)}`,
+    `y=${formatNumber(transform?.position.y)}`,
   ].join(" | ");
 }

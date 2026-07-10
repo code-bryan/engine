@@ -4,18 +4,237 @@
   "entrypoint": "879c7398-621f-4bf3-a120-5b2db85739d2",
   "variables": [],
   "nodes": [
-    { "id": "879c7398-621f-4bf3-a120-5b2db85739d2", "type": "OnUpdate", "position": { "x": 120, "y": 80 } },
-    { "id": "22e1c379-3dcd-4a52-beda-aae9a5e95fa6", "type": "ForEachEntityWithTag", "position": { "x": 280, "y": 80 }, "data": { "tag": "player" } },
-    { "id": "da0ddc8e-e2af-44e7-ba1f-f073f8b2f965", "type": "CheckCollisionWithTag", "position": { "x": 460, "y": 80 }, "data": { "tag": "enemy" } },
-    { "id": "307f7c33-6e04-46f8-b88b-416c7f6a29c4", "type": "ResetTaggedEntities", "position": { "x": 640, "y": 80 }, "data": { "tags": ["player", "enemy"] } }
+    {
+      "id": "879c7398-621f-4bf3-a120-5b2db85739d2",
+      "type": "OnUpdate",
+      "position": {
+        "x": -206,
+        "y": 96
+      }
+    },
+    {
+      "id": "22e1c379-3dcd-4a52-beda-aae9a5e95fa6",
+      "type": "ForEachEntityWithTag",
+      "position": {
+        "x": 73,
+        "y": 112
+      },
+      "data": {
+        "tag": "player"
+      }
+    },
+    {
+      "id": "da0ddc8e-e2af-44e7-ba1f-f073f8b2f965",
+      "type": "CheckCollisionWithTag",
+      "position": {
+        "x": 328,
+        "y": 126
+      },
+      "data": {
+        "tag": "enemy"
+      }
+    },
+    {
+      "id": "a1111111-1111-4111-8111-111111111111",
+      "type": "FindFirstEntityWithTag",
+      "position": {
+        "x": 601,
+        "y": 106
+      },
+      "data": {
+        "tag": "player-spawn"
+      }
+    },
+    {
+      "id": "a2222222-2222-4222-8222-222222222222",
+      "type": "ReadTransform",
+      "position": {
+        "x": 871,
+        "y": 102
+      }
+    },
+    {
+      "id": "a3333333-3333-4333-8333-333333333333",
+      "type": "ForEachEntityWithTag",
+      "position": {
+        "x": 1158,
+        "y": -53
+      },
+      "data": {
+        "tag": "player"
+      }
+    },
+    {
+      "id": "a4444444-4444-4444-8444-444444444444",
+      "type": "SetPosition",
+      "position": {
+        "x": 1410,
+        "y": 51
+      }
+    },
+    {
+      "id": "b1111111-1111-4111-8111-111111111111",
+      "type": "FindFirstEntityWithTag",
+      "position": {
+        "x": 1659,
+        "y": 76
+      },
+      "data": {
+        "tag": "enemy-spawn"
+      }
+    },
+    {
+      "id": "b2222222-2222-4222-8222-222222222222",
+      "type": "ReadTransform",
+      "position": {
+        "x": 1995,
+        "y": 100
+      }
+    },
+    {
+      "id": "b3333333-3333-4333-8333-333333333333",
+      "type": "ForEachEntityWithTag",
+      "position": {
+        "x": 2250,
+        "y": -53
+      },
+      "data": {
+        "tag": "enemy"
+      }
+    },
+    {
+      "id": "b4444444-4444-4444-8444-444444444444",
+      "type": "SetPosition",
+      "position": {
+        "x": 2475,
+        "y": 106
+      }
+    }
   ],
   "edges": [
-    { "from": { "node": "879c7398-621f-4bf3-a120-5b2db85739d2", "port": "flow" }, "to": { "node": "22e1c379-3dcd-4a52-beda-aae9a5e95fa6", "port": "flow" } },
-    { "from": { "node": "22e1c379-3dcd-4a52-beda-aae9a5e95fa6", "port": "flow" }, "to": { "node": "da0ddc8e-e2af-44e7-ba1f-f073f8b2f965", "port": "flow" } },
-    { "from": { "node": "da0ddc8e-e2af-44e7-ba1f-f073f8b2f965", "port": "flow" }, "to": { "node": "307f7c33-6e04-46f8-b88b-416c7f6a29c4", "port": "flow" } }
+    {
+      "from": {
+        "node": "879c7398-621f-4bf3-a120-5b2db85739d2",
+        "port": "flow"
+      },
+      "to": {
+        "node": "22e1c379-3dcd-4a52-beda-aae9a5e95fa6",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "22e1c379-3dcd-4a52-beda-aae9a5e95fa6",
+        "port": "flow"
+      },
+      "to": {
+        "node": "da0ddc8e-e2af-44e7-ba1f-f073f8b2f965",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "da0ddc8e-e2af-44e7-ba1f-f073f8b2f965",
+        "port": "flow"
+      },
+      "to": {
+        "node": "a1111111-1111-4111-8111-111111111111",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "a1111111-1111-4111-8111-111111111111",
+        "port": "flow"
+      },
+      "to": {
+        "node": "a2222222-2222-4222-8222-222222222222",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "a2222222-2222-4222-8222-222222222222",
+        "port": "flow"
+      },
+      "to": {
+        "node": "a3333333-3333-4333-8333-333333333333",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "a3333333-3333-4333-8333-333333333333",
+        "port": "flow"
+      },
+      "to": {
+        "node": "a4444444-4444-4444-8444-444444444444",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "a2222222-2222-4222-8222-222222222222",
+        "port": "transform"
+      },
+      "to": {
+        "node": "a4444444-4444-4444-8444-444444444444",
+        "port": "position"
+      }
+    },
+    {
+      "from": {
+        "node": "a4444444-4444-4444-8444-444444444444",
+        "port": "flow"
+      },
+      "to": {
+        "node": "b1111111-1111-4111-8111-111111111111",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "b1111111-1111-4111-8111-111111111111",
+        "port": "flow"
+      },
+      "to": {
+        "node": "b2222222-2222-4222-8222-222222222222",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "b2222222-2222-4222-8222-222222222222",
+        "port": "flow"
+      },
+      "to": {
+        "node": "b3333333-3333-4333-8333-333333333333",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "b3333333-3333-4333-8333-333333333333",
+        "port": "flow"
+      },
+      "to": {
+        "node": "b4444444-4444-4444-8444-444444444444",
+        "port": "flow"
+      }
+    },
+    {
+      "from": {
+        "node": "b2222222-2222-4222-8222-222222222222",
+        "port": "transform"
+      },
+      "to": {
+        "node": "b4444444-4444-4444-8444-444444444444",
+        "port": "position"
+      }
+    }
   ],
   "metadata": {
     "order": 50,
-    "description": "Reset player and enemies when they touch"
+    "description": "On player-enemy touch, send each actor back to its spawn-point entity"
   }
 }

@@ -2,6 +2,38 @@ import { registerComponent, type ComponentStore } from "@engine/ecs-core";
 
 export type ComponentKind = "struct" | "scalar" | "enum";
 
+// Premade, engine-provided components registered before any project content so
+// their typed stores back the shared registry and the editor lists them under the
+// Engine tab. Content files must not redefine these. (Velocity is deliberately NOT
+// here — velocity is owned by physics, read via physics.getVelocity, not a component.)
+const PREMADE_COMPONENTS: { definition: ComponentDefinition; store: ComponentStore<unknown> }[] = [];
+
+export function getPremadeComponentIds(): string[] {
+  return PREMADE_COMPONENTS.map((entry) => entry.definition.id);
+}
+
+// A premade, engine-provided asset surfaced (read-only) under the editor's Engine
+// tab. `body` is the definition shown in preview; these are usable in worlds by id
+// without importing anything into the project.
+export type PremadeAsset = { kind: "component" | "system" | "prefab"; id: string; label: string; body: unknown };
+
+// Transform is a native, always-present component (its own transform store); it is
+// not in PREMADE_COMPONENTS since it is not registered through the generic registry,
+// so it is listed here explicitly for discoverability.
+const TRANSFORM_ASSET: PremadeAsset = {
+  kind: "component",
+  id: "transform",
+  label: "Transform",
+  body: { version: 1, id: "transform", label: "Transform", kind: "struct", defaultValue: { position: { x: 0, y: 0 }, rotation: 0, scale: { x: 1, y: 1 } } },
+};
+
+export function getPremadeAssets(): PremadeAsset[] {
+  return [
+    TRANSFORM_ASSET,
+    ...PREMADE_COMPONENTS.map(({ definition }) => ({ kind: "component" as const, id: definition.id, label: definition.label, body: definition })),
+  ];
+}
+
 export type ComponentDefinition = {
   version: 1;
   id: string;
@@ -23,6 +55,7 @@ let bootstrapPromise: Promise<void> | null = null;
 
 export async function initializeDemoRuntime() {
   if (!bootstrapPromise) {
+    for (const { definition, store } of PREMADE_COMPONENTS) registerComponentDefinition(definition, store);
     bootstrapPromise = fetchComponentDefinitions().then((definitions) => {
       for (const definition of definitions) registerComponentDefinition(definition);
     });
@@ -30,7 +63,7 @@ export async function initializeDemoRuntime() {
   return bootstrapPromise;
 }
 
-export function registerComponentDefinition(definition: ComponentDefinition) {
+export function registerComponentDefinition(definition: ComponentDefinition, store?: ComponentStore<unknown>) {
   validateComponentDefinition(definition);
   const existing = componentDefinitions.get(definition.id);
   if (existing) {
@@ -40,10 +73,10 @@ export function registerComponentDefinition(definition: ComponentDefinition) {
     return getComponentStore(definition.id);
   }
 
-  const store = registerComponent(definition.id, definition.label, new Map());
+  const registered = registerComponent(definition.id, definition.label, store ?? new Map());
   componentDefinitions.set(definition.id, definition);
-  componentStores.set(definition.id, store);
-  return store;
+  componentStores.set(definition.id, registered);
+  return registered;
 }
 
 export async function registerComponentDefinitionFromFile(path: string) {
@@ -62,6 +95,13 @@ export function getComponentStore<T>(id: string): ComponentStore<T> {
   const store = componentStores.get(id);
   if (!store) throw new Error(`missing component store: ${id}`);
   return store as ComponentStore<T>;
+}
+
+// Non-throwing lookup for callers that must degrade gracefully when a referenced
+// component was removed (e.g. a stale "velocity" reference — velocity is now
+// physics-owned, not a component).
+export function tryGetComponentStore<T>(id: string): ComponentStore<T> | undefined {
+  return componentStores.get(id) as ComponentStore<T> | undefined;
 }
 
 async function fetchComponentDefinitions() {

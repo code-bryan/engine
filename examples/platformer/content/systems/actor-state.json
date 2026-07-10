@@ -17,7 +17,7 @@
       "type": "ForEachEntityWithTag",
       "position": {
         "x": 17,
-        "y": 130
+        "y": 129
       },
       "data": {
         "tag": "player"
@@ -25,13 +25,10 @@
     },
     {
       "id": "4865a1d7-6b49-4a2a-970c-9165fb24e05d",
-      "type": "GetComponent",
+      "type": "GetVelocity",
       "position": {
         "x": 391,
         "y": 135
-      },
-      "data": {
-        "component": "velocity"
       }
     },
     {
@@ -121,7 +118,7 @@
     {
       "from": {
         "node": "4865a1d7-6b49-4a2a-970c-9165fb24e05d",
-        "port": "value"
+        "port": "velocity"
       },
       "to": {
         "node": "1b6b5aa0-115e-4f27-afa5-e6c6fe99e18f",

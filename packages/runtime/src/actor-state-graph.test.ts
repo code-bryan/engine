@@ -6,7 +6,6 @@ import { registerComponentDefinition, getComponentStore } from "./components";
 import { createGraphSystem, type GraphDefinition } from "./graphs";
 import type { DemoGameWorld } from "./types";
 
-registerComponentDefinition({ version: 1, id: "velocity", label: "Velocity", defaultValue: { x: 0, y: 0 } });
 registerComponentDefinition({ version: 1, id: "actor-state", label: "Actor State", defaultValue: "idle" });
 
 function makePlayer(world: DemoGameWorld) {
@@ -32,25 +31,23 @@ const graph = JSON.parse(
 
 test("actor-state graph switches sprite animation to walk when moving", async () => {
   const world = new World() as DemoGameWorld;
-  world.physics = { setVelocity() {}, reset() {}, collider() { return { collide() { return false; } }; } } as unknown as DemoGameWorld["physics"];
+  world.physics = { setVelocity() {}, reset() {}, getVelocity() { return { x: 96, y: 0 }; }, collider() { return { collide() { return false; } }; } } as unknown as DemoGameWorld["physics"];
   const player = makePlayer(world);
-  getComponentStore<{ x: number; y: number }>("velocity").set(player, { x: 96, y: 0 });
 
   const run = await createGraphSystem(world, graph);
   run(1 / 60);
 
   expect(spriteAnimations.get(player)?.state).toBe("walk");
-  // SetComponent must write its own literal, not the upstream GetComponent(velocity) value.
+  // SetComponent must write its own literal, not any upstream value.
   expect(getComponentStore<string>("actor-state").get(player)).toBe("walk");
 });
 
 test("actor-state graph switches sprite animation to idle when still", async () => {
   const world = new World() as DemoGameWorld;
-  world.physics = { setVelocity() {}, reset() {}, collider() { return { collide() { return false; } }; } } as unknown as DemoGameWorld["physics"];
+  world.physics = { setVelocity() {}, reset() {}, getVelocity() { return { x: 0, y: 0 }; }, collider() { return { collide() { return false; } }; } } as unknown as DemoGameWorld["physics"];
   const player = makePlayer(world);
   // start on walk so we can observe the switch back to idle
   spriteAnimations.get(player)!.state = "walk";
-  getComponentStore<{ x: number; y: number }>("velocity").set(player, { x: 0, y: 0 });
 
   const run = await createGraphSystem(world, graph);
   run(1 / 60);

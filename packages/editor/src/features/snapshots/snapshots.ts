@@ -1,5 +1,5 @@
 import { getComponentRegistry, type ComponentRegistryEntry, type Entity } from "@engine/ecs-core";
-import { transforms, type TransformScale } from "@engine/renderer";
+import { transforms } from "@engine/renderer";
 import type { DebuggerWorld, DebugWorldSnapshot, EntitySnapshot, WorldSnapshot } from "../../shared/types";
 
 function captureSnapshot<TWorld extends DebuggerWorld>(
@@ -32,10 +32,9 @@ function captureSnapshot<TWorld extends DebuggerWorld>(
           components,
           physics,
           transform: {
-            x: transform.x,
-            y: transform.y,
+            position: { x: transform.position.x, y: transform.position.y },
             rotation: transform.rotation,
-            scale: cloneTransformScale(transform.scale),
+            scale: { x: transform.scale.x, y: transform.scale.y },
           },
         }
       : { components, physics });
@@ -69,10 +68,11 @@ function restoreSnapshot<TWorld extends DebuggerWorld>(
     if (data.transform) {
       const transform = transforms.get(entity);
       if (transform) {
-        transform.x = data.transform.x;
-        transform.y = data.transform.y;
+        transform.position.x = data.transform.position.x;
+        transform.position.y = data.transform.position.y;
         transform.rotation = data.transform.rotation;
-        transform.scale = data.transform.scale === undefined ? transform.scale : cloneTransformScale(data.transform.scale);
+        transform.scale.x = data.transform.scale.x;
+        transform.scale.y = data.transform.scale.y;
       }
     }
   }
@@ -98,9 +98,4 @@ export function restoreRegistrySnapshot<TWorld extends DebuggerWorld>(
   registry: readonly ComponentRegistryEntry[],
 ) {
   restoreSnapshot(world, snapshot, registry);
-}
-
-function cloneTransformScale(scale: TransformScale | undefined) {
-  if (scale === undefined) return undefined;
-  return typeof scale === "number" ? scale : { x: scale.x, y: scale.y };
 }

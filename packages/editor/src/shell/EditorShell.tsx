@@ -8,7 +8,7 @@
 
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
-import type { ContentBookmark, ContentTreeNode, EditorToolMode } from "../shared/types";
+import type { ContentBookmark, ContentTreeNode, EditorToolMode, EngineAsset } from "../shared/types";
 import type {
   DebuggerEntityItemView,
   DebuggerInspectorCardView,
@@ -107,6 +107,7 @@ export type EditorShellProps = {
   onOpenLevel?: () => void;
   contentDrawerOpen: boolean;
   contentTree: ContentTreeNode[];
+  engineAssets: EngineAsset[];
   activeWorld?: string;
   activeSystems?: string[];
   onLoadWorld: (name: string) => void;
@@ -602,6 +603,7 @@ export function EditorShell(props: EditorShellProps) {
                 <div className="flex-1 flex overflow-hidden">
                   <ContentBrowser
                     tree={props.contentTree}
+                    engineAssets={props.engineAssets}
                     activeWorld={props.activeWorld}
                     activeSystems={props.activeSystems}
                     onOpenWorld={props.onOpenWorld}

@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "id": "speed",
+  "label": "Speed",
+  "kind": "scalar",
+  "defaultValue": 96
+}

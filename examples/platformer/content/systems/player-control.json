@@ -46,13 +46,12 @@
         "y": 23
       },
       "data": {
-        "component": "player",
-        "field": "speed"
+        "component": "speed"
       }
     },
     {
       "id": "0381665f-72ef-4e3d-94fd-18fc07942e8d",
-      "type": "ScaleVector",
+      "type": "Multiply",
       "position": {
         "x": 1598,
         "y": 278
@@ -60,13 +59,10 @@
     },
     {
       "id": "d77ab043-1bf8-43b0-8772-6a566f4a32bc",
-      "type": "SetComponent",
+      "type": "SetVelocity",
       "position": {
         "x": 2002,
         "y": 270
-      },
-      "data": {
-        "component": "velocity"
       }
     }
   ],
@@ -128,7 +124,7 @@
       },
       "to": {
         "node": "0381665f-72ef-4e3d-94fd-18fc07942e8d",
-        "port": "vector"
+        "port": "value"
       }
     },
     {
@@ -138,17 +134,17 @@
       },
       "to": {
         "node": "0381665f-72ef-4e3d-94fd-18fc07942e8d",
-        "port": "scale"
+        "port": "by"
       }
     },
     {
       "from": {
         "node": "0381665f-72ef-4e3d-94fd-18fc07942e8d",
-        "port": "vector"
+        "port": "result"
       },
       "to": {
         "node": "d77ab043-1bf8-43b0-8772-6a566f4a32bc",
-        "port": "value"
+        "port": "velocity"
       }
     }
   ],

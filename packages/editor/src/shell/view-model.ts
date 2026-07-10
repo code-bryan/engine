@@ -159,6 +159,7 @@ export function renderEditor<TWorld extends DebuggerWorld>(
     onOpenLevel: actions.openLevel,
     contentDrawerOpen: state.contentDrawerOpen,
     contentTree: options.contentTree ?? [],
+    engineAssets: options.engineAssets ?? [],
     activeWorld: options.activeWorld,
     activeSystems: options.activeSystems ?? [],
     onLoadWorld: actions.loadWorld,

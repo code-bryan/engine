@@ -10,7 +10,7 @@
       "component": "transform",
       "value": {
         "rotation": 0,
-        "scale": 1
+        "scale": { "x": 1, "y": 1 }
       }
     },
     {
@@ -63,13 +63,6 @@
       }
     },
     {
-      "component": "velocity",
-      "value": {
-        "x": 0,
-        "y": 0
-      }
-    },
-    {
       "component": "facing",
       "value": "right"
     },
@@ -78,10 +71,8 @@
       "value": "idle"
     },
     {
-      "component": "player",
-      "value": {
-        "speed": 96
-      }
+      "component": "speed",
+      "value": 96
     }
   ]
 }

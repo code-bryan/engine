@@ -2,7 +2,7 @@ import { type Entity } from "@engine/ecs-core";
 import { keyboard } from "@engine/input";
 import { sprite, transforms } from "@engine/renderer";
 import type { DemoGameWorld } from "./types";
-import { getComponentStore } from "./components";
+import { tryGetComponentStore } from "./components";
 
 export type GraphDefinition = {
   version: 3;
@@ -43,6 +43,9 @@ export type GraphNodeType =
   | "FindFirstEntityWithTag"
   | "GetComponent"
   | "ReadTransform"
+  | "GetVelocity"
+  | "ReadVelocity"
+  | "SetPosition"
   | "Multiply"
   | "Add"
   | "ScaleVector"
@@ -182,11 +185,35 @@ export const GRAPH_NODE_LIBRARY: GraphNodeSpec[] = [
     fields: [],
   },
   {
+    type: "GetVelocity",
+    label: "Get Velocity",
+    inputs: [
+      { name: "entity", kind: "data", direction: "input", label: "entity" },
+      { name: "flow", kind: "flow", direction: "input" },
+    ],
+    outputs: [
+      { name: "velocity", kind: "data", direction: "output", label: "velocity" },
+      { name: "flow", kind: "flow", direction: "output" },
+    ],
+    fields: [],
+  },
+  {
+    type: "SetPosition",
+    label: "Set Position",
+    inputs: [
+      { name: "position", kind: "data", direction: "input", label: "position" },
+      { name: "entity", kind: "data", direction: "input", label: "entity" },
+      { name: "flow", kind: "flow", direction: "input" },
+    ],
+    outputs: [{ name: "flow", kind: "flow", direction: "output" }],
+    fields: [],
+  },
+  {
     type: "Multiply",
     label: "Multiply",
     inputs: [
-      { name: "left", kind: "data", direction: "input", label: "left" },
-      { name: "right", kind: "data", direction: "input", label: "right" },
+      { name: "value", kind: "data", direction: "input", label: "value" },
+      { name: "by", kind: "data", direction: "input", label: "by" },
       { name: "flow", kind: "flow", direction: "input" },
     ],
     outputs: [
@@ -205,20 +232,6 @@ export const GRAPH_NODE_LIBRARY: GraphNodeSpec[] = [
     ],
     outputs: [
       { name: "result", kind: "data", direction: "output", label: "result" },
-      { name: "flow", kind: "flow", direction: "output" },
-    ],
-    fields: [],
-  },
-  {
-    type: "ScaleVector",
-    label: "Scale Vector",
-    inputs: [
-      { name: "vector", kind: "data", direction: "input", label: "vector" },
-      { name: "scale", kind: "data", direction: "input", label: "scale" },
-      { name: "flow", kind: "flow", direction: "input" },
-    ],
-    outputs: [
-      { name: "vector", kind: "data", direction: "output", label: "vector" },
       { name: "flow", kind: "flow", direction: "output" },
     ],
     fields: [],
@@ -386,13 +399,6 @@ export const GRAPH_NODE_LIBRARY: GraphNodeSpec[] = [
       { name: "flow", kind: "flow", direction: "output" },
     ],
     fields: [{ name: "tag", label: "Tag", type: "string" }],
-  },
-  {
-    type: "ResetTaggedEntities",
-    label: "Reset Tagged Entities",
-    inputs: [{ name: "flow", kind: "flow", direction: "input" }],
-    outputs: [{ name: "flow", kind: "flow", direction: "output" }],
-    fields: [{ name: "tags", label: "Tags", type: "json" }],
   },
   {
     type: "EmitSignal",
@@ -645,7 +651,8 @@ function executeNode(
     case "ForEachComponent": {
       const componentId = String(node.data?.component ?? "");
       if (!componentId) return [];
-      const store = getComponentStore<unknown>(componentId);
+      const store = tryGetComponentStore<unknown>(componentId);
+      if (!store) return [];
       return Array.from(store.keys()).map((entity) => ({
         ...context,
         entity,
@@ -688,7 +695,8 @@ function executeNode(
       if (entity === undefined) return [];
       const componentId = String(node.data?.component ?? "");
       if (!componentId) return [];
-      const store = getComponentStore<Record<string, unknown>>(componentId);
+      const store = tryGetComponentStore<Record<string, unknown>>(componentId);
+      if (!store) return [context];
       const value = store.get(entity);
       const field = typeof node.data?.field === "string" ? node.data.field : undefined;
       const resolved = field && value && typeof value === "object" ? (value as Record<string, unknown>)[field] : value;
@@ -714,26 +722,67 @@ function executeNode(
         values: {
           ...context.values,
           transform: cloneValue({
-            x: transform.x,
-            y: transform.y,
-            rotation: transform.rotation ?? 0,
-            scale: transform.scale ?? 1,
+            x: transform.position.x,
+            y: transform.position.y,
+            rotation: transform.rotation,
+            scale: transform.scale,
           }),
         },
       }];
     }
-    case "Multiply": {
-      const left = context.values.left;
-      const right = context.values.right;
-      if (typeof left !== "number" || typeof right !== "number") return [];
+    case "GetVelocity":
+    case "ReadVelocity": {
+      const entity = resolveEntityRef(
+        context,
+        context.values.entity ?? context.values.entityFrom ?? node.data?.entityFrom,
+        context.entity,
+      );
+      if (entity === undefined) return [];
       return [{
         ...context,
         values: {
           ...context.values,
-          result: left * right,
+          velocity: world.physics.getVelocity(entity),
         },
       }];
     }
+    case "SetPosition": {
+      const entity = resolveEntityRef(context, node.data?.entityFrom ?? context.values.entity, context.entity);
+      if (entity === undefined) return [context];
+      // `position` may be a bare vector or a transform-shaped object (x/y at top).
+      const pos = asVector(context.values.position ?? resolveNodeValue(node.data, context));
+      if (!pos) return [context];
+      const transform = transforms.get(entity);
+      if (transform) {
+        transform.position.x = pos.x;
+        transform.position.y = pos.y;
+      }
+      // Keep the physics body in sync and zero velocity, like a respawn.
+      world.physics.reset(entity, { x: pos.x, y: pos.y });
+      return [context];
+    }
+    case "Multiply": {
+      // Polymorphic multiply: `value` may be a number or a vector, `by` a number
+      // or a vector. Returns the same shape as `value` — number*number → number,
+      // vector*number → scaled vector, vector*vector → componentwise. Subsumes the
+      // old ScaleVector. Reads legacy port names (left/right/vector/scale) too.
+      const a = context.values.value ?? context.values.left ?? context.values.vector;
+      const b = context.values.by ?? context.values.right ?? context.values.scale;
+      const av = asVector(a);
+      const bv = asVector(b);
+      let result: number | { x: number; y: number };
+      if (typeof a === "number" && typeof b === "number") result = a * b;
+      else if (av && typeof b === "number") result = { x: av.x * b, y: av.y * b };
+      else if (typeof a === "number" && bv) result = { x: bv.x * a, y: bv.y * a };
+      else if (av && bv) result = { x: av.x * bv.x, y: av.y * bv.y };
+      else return [];
+      const values: Record<string, unknown> = { ...context.values, result, value: result };
+      if (typeof result === "object") values.vector = result;
+      return [{ ...context, values }];
+    }
+    // Retired from the node palette (superseded by the polymorphic Multiply node).
+    // Executor kept as a hidden alias so existing graphs that reference these types
+    // still load and run.
     case "ScaleVector":
     case "BuildVelocity":
     case "SetVelocityFromAxes": {
@@ -799,8 +848,8 @@ function executeNode(
       if (!target || context.entity === undefined) return [];
       const sourceTransform = transforms.get(context.entity);
       if (!sourceTransform || typeof target.x !== "number" || typeof target.y !== "number") return [];
-      const dx = target.x - sourceTransform.x;
-      const dy = target.y - sourceTransform.y;
+      const dx = target.x - sourceTransform.position.x;
+      const dy = target.y - sourceTransform.position.y;
       const distance = Math.hypot(dx, dy);
       const direction = distance > 0 ? { x: dx / distance, y: dy / distance } : { x: 0, y: 0 };
       return [{
@@ -865,7 +914,8 @@ function executeNode(
       // would clobber the intended literal (e.g. actor-state "walk").
       const value = resolveNodeValue(node.data, context) ?? context.values.value ?? context.values.payload ?? context.values[String(node.data?.from ?? componentId)];
       if (value === undefined) return [context];
-      const store = getComponentStore<unknown>(componentId);
+      const store = tryGetComponentStore<unknown>(componentId);
+      if (!store) return [context];
       const field = typeof node.data?.field === "string" ? node.data.field : undefined;
       if (field) {
         const current = store.get(context.entity);
@@ -879,12 +929,6 @@ function executeNode(
         }
       } else {
         store.set(context.entity, cloneValue(value));
-      }
-      if (componentId === "velocity") {
-        const velocity = value as { x?: number; y?: number } | undefined;
-        if (velocity && typeof velocity.x === "number" && typeof velocity.y === "number") {
-          world.physics.setVelocity(context.entity, { x: velocity.x, y: velocity.y });
-        }
       }
       return [context];
     }
@@ -913,7 +957,7 @@ function executeNode(
     case "SetVelocity":
     case "SetPhysicsVelocity": {
       if (context.entity === undefined) return [];
-      const value = (context.values.velocity ?? context.values.vector ?? context.values[String(node.data?.from ?? "velocity")]) as { x?: number; y?: number } | undefined;
+      const value = (resolveNodeValue(node.data, context) ?? context.values.velocity ?? context.values.vector ?? context.values[String(node.data?.from ?? "velocity")]) as { x?: number; y?: number } | undefined;
       if (!value || typeof value.x !== "number" || typeof value.y !== "number") return [context];
       world.physics.setVelocity(context.entity, { x: value.x, y: value.y });
       return [context];
@@ -950,20 +994,18 @@ function executeNode(
       for (const tag of tags) {
         for (const entity of world.tags.with(tag)) {
           const componentId = tag;
-          const store = getComponentStore<{ spawnX: number; spawnY: number; speed?: number }>(componentId);
-          const component = store.get(entity);
+          const store = tryGetComponentStore<{ spawn?: { x: number; y: number }; spawnX?: number; spawnY?: number; speed?: number }>(componentId);
+          const component = store?.get(entity);
           if (!component) continue;
+          // Prefer the vector `spawn`; fall back to legacy scalar spawnX/spawnY.
+          const spawn = component.spawn ?? { x: component.spawnX ?? 0, y: component.spawnY ?? 0 };
           const transform = transforms.get(entity);
-          const velocity = getComponentStore<{ x: number; y: number }>("velocity").get(entity);
           if (transform) {
-            transform.x = component.spawnX;
-            transform.y = component.spawnY;
+            transform.position.x = spawn.x;
+            transform.position.y = spawn.y;
           }
-          if (velocity) {
-            velocity.x = 0;
-            velocity.y = 0;
-          }
-          world.physics.reset(entity, { x: component.spawnX, y: component.spawnY });
+          // Physics owns velocity; reset() already zeroes the body's velocity.
+          world.physics.reset(entity, { x: spawn.x, y: spawn.y });
         }
       }
       return [context];
@@ -1024,6 +1066,12 @@ function resolveEntityRef(context: GraphContext, ref: unknown, fallback?: Entity
 
 function getBaseScale(scale: number | { x: number; y: number } = 1) {
   return typeof scale === "number" ? Math.abs(scale) : Math.abs(scale.y);
+}
+
+function asVector(value: unknown): { x: number; y: number } | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const v = value as { x?: unknown; y?: unknown };
+  return typeof v.x === "number" && typeof v.y === "number" ? { x: v.x, y: v.y } : undefined;
 }
 
 function parseGraphDefinition(value: unknown): GraphDefinition | null {

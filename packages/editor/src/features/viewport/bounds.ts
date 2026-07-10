@@ -2,7 +2,7 @@
 // small fallback box. Pure geometry over the renderer's data stores — no Pixi.
 
 import type { Entity } from "@engine/ecs-core";
-import { sprites, transforms, type TransformScale } from "@engine/renderer";
+import { sprites, transforms, type Vector } from "@engine/renderer";
 import type { DebuggerWorld } from "../../shared/types";
 
 export type EditorBounds = {
@@ -25,11 +25,11 @@ export function getEntityEditorBounds<TWorld extends DebuggerWorld>(
   const transform = transforms.get(entity);
   if (spriteRef && transform) {
     const { sprite, offset, anchor } = spriteRef;
-    const scale = normalizeScale(transform.scale);
+    const scale = transform.scale;
     const width = Math.max(12, sprite.texture.width * Math.abs(scale.x));
     const height = Math.max(12, sprite.texture.height * Math.abs(scale.y));
-    const pivotX = transform.x + offset.x;
-    const pivotY = transform.y + offset.y;
+    const pivotX = transform.position.x + offset.x;
+    const pivotY = transform.position.y + offset.y;
     const x = pivotX - anchor.x * width;
     const y = pivotY - anchor.y * height;
     return toBounds(entity, x, y, width, height, pivotX, pivotY);
@@ -39,7 +39,8 @@ export function getEntityEditorBounds<TWorld extends DebuggerWorld>(
   if (body) return toBounds(entity, body.x, body.y, body.width, body.height, body.x + body.width / 2, body.y + body.height / 2);
 
   if (!transform) return undefined;
-  return toBounds(entity, transform.x - 8, transform.y - 8, 16, 16, transform.x, transform.y);
+  const { x, y } = transform.position;
+  return toBounds(entity, x - 8, y - 8, 16, 16, x, y);
 }
 
 export function toBounds(
@@ -54,7 +55,8 @@ export function toBounds(
   return { entity, x, y, width, height, centerX: x + width / 2, centerY: y + height / 2, pivotX, pivotY };
 }
 
-export function normalizeScale(scale?: TransformScale) {
-  if (scale === undefined) return { x: 1, y: 1 };
-  return typeof scale === "number" ? { x: scale, y: scale } : scale;
+// Scale is always a fully-formed Vector now; kept as a thin clone helper so the
+// few call sites that defensively normalized keep working.
+export function normalizeScale(scale?: Vector): Vector {
+  return scale ? { x: scale.x, y: scale.y } : { x: 1, y: 1 };
 }

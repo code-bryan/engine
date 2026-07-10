@@ -1,5 +1,5 @@
 {
-  "name": "@engine/editor",
+  "name": "@engine/components",
   "type": "module",
   "version": "0.0.0",
   "exports": "./src/index.ts",
@@ -7,9 +7,5 @@
     "build": "bun run typecheck",
     "typecheck": "tsc -p ../../tsconfig.json --noEmit",
     "test": "bun test --pass-with-no-tests"
-  },
-  "dependencies": {
-    "@engine/components": "workspace:*",
-    "@engine/runtime": "workspace:*"
   }
 }

@@ -79,12 +79,12 @@ export function buildOverlay<TWorld extends DebuggerWorld>(
       const t = transforms.get(entity);
       if (!t) continue;
       const { sprite, offset, anchor } = spriteRef;
-      const scaleX = typeof t.scale === "number" ? t.scale : (t.scale?.x ?? 1);
-      const scaleY = typeof t.scale === "number" ? t.scale : (t.scale?.y ?? 1);
+      const scaleX = t.scale.x;
+      const scaleY = t.scale.y;
       const w = sprite.texture.width * Math.abs(scaleX);
       const h = sprite.texture.height * Math.abs(scaleY);
-      const posX = t.x + offset.x;
-      const posY = t.y + offset.y;
+      const posX = t.position.x + offset.x;
+      const posY = t.position.y + offset.y;
       const bx = posX - (scaleX < 0 ? (1 - anchor.x) : anchor.x) * w;
       const by = posY - (scaleY < 0 ? (1 - anchor.y) : anchor.y) * h;
       const cs = 4;

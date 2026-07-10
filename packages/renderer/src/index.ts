@@ -1,8 +1,11 @@
 import { Application, Assets, Container, Rectangle, Sprite, Texture, type ApplicationOptions } from "pixi.js";
 import { createStore, type ComponentStore, type Entity, type World } from "@engine/ecs-core";
+import { transforms, type Transform } from "@engine/components";
 
-export type TransformScale = number | { x: number; y: number };
-export type Transform = { x: number; y: number; rotation?: number; scale?: TransformScale };
+// Transform now lives in @engine/components (it is spatial data, not a rendering
+// concern). Re-exported here so existing `@engine/renderer` importers keep working.
+export { transforms, type Transform, type Vector } from "@engine/components";
+
 export type SpriteAnchor = number | { x: number; y: number };
 export type SpriteOffset = { x: number; y: number };
 export type SpriteRef = {
@@ -41,7 +44,6 @@ export type SpriteSheetProps = {
   frames: number;
 };
 
-export const transforms = createStore<Transform>();
 export const sprites = createStore<SpriteRef>();
 export const spriteAnimations = createStore<SpriteAnimation>();
 
@@ -159,20 +161,15 @@ export function createRenderSystem(
       if (!sprite.parent) stage.addChild(sprite);
       const t = transformStore.get(e);
       if (!t) continue;
-      const scale = normalizeScale(t.scale);
       sprite.anchor.set(anchor.x, anchor.y);
       sprite.position.set(
-        Math.round(t.x + offset.x),
-        Math.round(t.y + offset.y),
+        Math.round(t.position.x + offset.x),
+        Math.round(t.position.y + offset.y),
       );
-      sprite.rotation = t.rotation ?? 0;
-      sprite.scale.set(scale.x, scale.y);
+      sprite.rotation = t.rotation;
+      sprite.scale.set(t.scale.x, t.scale.y);
     }
   };
-}
-
-function normalizeScale(scale: TransformScale = 1) {
-  return typeof scale === "number" ? { x: scale, y: scale } : scale;
 }
 
 function normalizeAnchor(anchor: SpriteAnchor = 0) {

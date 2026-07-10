@@ -20,18 +20,15 @@
         "y": 181
       },
       "data": {
-        "component": "velocity"
+        "component": "facing"
       }
     },
     {
       "id": "bfe34634-e9dd-4cc1-9b77-6cba545441b3",
-      "type": "GetComponent",
+      "type": "GetVelocity",
       "position": {
         "x": 838,
         "y": 209
-      },
-      "data": {
-        "component": "velocity"
       }
     },
     {
@@ -94,7 +91,7 @@
     {
       "from": {
         "node": "bfe34634-e9dd-4cc1-9b77-6cba545441b3",
-        "port": "value"
+        "port": "velocity"
       },
       "to": {
         "node": "57a0580a-3017-46bd-a026-e0895846e71b",

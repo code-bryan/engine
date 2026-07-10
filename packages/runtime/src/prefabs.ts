@@ -1,21 +1,22 @@
 import { getComponentRegistry, type Entity } from "@engine/ecs-core";
+import { transforms, type Transform, type Vector } from "@engine/components";
 import {
   loadSpriteSheet,
   sprite,
   sprites,
-  transforms,
   type SpriteAnchor,
   type SpriteOffset,
   type SpriteAnimationClip,
-  type TransformScale,
 } from "@engine/renderer";
 import type { DemoGameWorld } from "./types";
 
+// On-disk transform: position/rotation/scale as vectors. Legacy flat {x,y} and
+// numeric scale are tolerated on read (see coerceTransform) so old prefab/world
+// files still load.
 export type PrefabTransform = {
-  x?: number;
-  y?: number;
+  position?: Vector;
   rotation?: number;
-  scale?: TransformScale;
+  scale?: Vector;
 };
 
 export type PrefabSpriteSheet = {
@@ -61,13 +62,6 @@ export type PrefabPlacement = {
   components?: Record<string, unknown>;
 };
 
-type ResolvedPrefabTransform = {
-  x: number;
-  y: number;
-  rotation: number;
-  scale: TransformScale;
-};
-
 const prefabCache = new Map<string, Promise<PrefabDefinition | null>>();
 const spriteSheetCache = new Map<string, Promise<Awaited<ReturnType<typeof loadSpriteSheet>>>>();
 
@@ -105,14 +99,44 @@ export async function loadPrefabDefinition(name: string): Promise<PrefabDefiniti
   return pending;
 }
 
-function resolveTransform(definition: PrefabDefinition, placement: PrefabPlacement): ResolvedPrefabTransform {
-  const prefabTransform = definition.components.find((component): component is Extract<PrefabComponentDefinition, { component: "transform" }> => component.component === "transform")?.value ?? {};
+function resolveTransform(definition: PrefabDefinition, placement: PrefabPlacement): Transform {
+  const prefabTransform = definition.components.find((component): component is Extract<PrefabComponentDefinition, { component: "transform" }> => component.component === "transform")?.value;
+  const base = coerceTransform(prefabTransform);
+  const over = coerceTransform(placement.transform);
   return {
-    x: placement.transform?.x ?? prefabTransform.x ?? 0,
-    y: placement.transform?.y ?? prefabTransform.y ?? 0,
-    rotation: placement.transform?.rotation ?? prefabTransform.rotation ?? 0,
-    scale: placement.transform?.scale ?? prefabTransform.scale ?? 1,
+    position: {
+      x: over.position?.x ?? base.position?.x ?? 0,
+      y: over.position?.y ?? base.position?.y ?? 0,
+    },
+    rotation: over.rotation ?? base.rotation ?? 0,
+    scale: {
+      x: over.scale?.x ?? base.scale?.x ?? 1,
+      y: over.scale?.y ?? base.scale?.y ?? 1,
+    },
   };
+}
+
+// Read a transform-ish value from prefab/world JSON, tolerating both the nested
+// {position,scale} vectors and the legacy flat {x,y}/numeric-scale layout.
+export function coerceTransform(value: unknown): { position?: Vector; rotation?: number; scale?: Vector } {
+  if (!value || typeof value !== "object") return {};
+  const raw = value as Record<string, unknown>;
+  const position = coerceVector(raw.position) ?? coerceVector({ x: raw.x, y: raw.y });
+  const scale = coerceScale(raw.scale);
+  const rotation = typeof raw.rotation === "number" ? raw.rotation : undefined;
+  return { position, rotation, scale };
+}
+
+function coerceVector(value: unknown): Vector | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const raw = value as Record<string, unknown>;
+  if (typeof raw.x !== "number" || typeof raw.y !== "number") return undefined;
+  return { x: raw.x, y: raw.y };
+}
+
+function coerceScale(value: unknown): Vector | undefined {
+  if (typeof value === "number") return { x: value, y: value };
+  return coerceVector(value);
 }
 
 async function applyPrefabComponent(
@@ -121,7 +145,7 @@ async function applyPrefabComponent(
   entry: PrefabComponentDefinition,
   registry: Map<string, Map<Entity, unknown>>,
   placement: PrefabPlacement,
-  effectiveTransform: Required<PrefabTransform>,
+  effectiveTransform: Transform,
 ) {
   switch (entry.component) {
     case "tag": {
@@ -131,23 +155,17 @@ async function applyPrefabComponent(
     }
     case "transform": {
       transforms.set(entity, {
-        x: effectiveTransform.x,
-        y: effectiveTransform.y,
+        position: { ...effectiveTransform.position },
         rotation: effectiveTransform.rotation,
-        scale: effectiveTransform.scale,
+        scale: { ...effectiveTransform.scale },
       });
       return;
     }
     case "physics.body": {
       const body = entry.value as Extract<PrefabComponentDefinition, { component: "physics.body" }>["value"];
-      const transform = transforms.get(entity) ?? {
-        x: effectiveTransform.x,
-        y: effectiveTransform.y,
-        rotation: effectiveTransform.rotation,
-        scale: effectiveTransform.scale,
-      };
+      const transform = transforms.get(entity) ?? effectiveTransform;
       const { kind, width, height } = body;
-      world.physics.body[kind ?? "dynamic"].set(entity, { x: transform.x, y: transform.y, width, height });
+      world.physics.body[kind ?? "dynamic"].set(entity, { x: transform.position.x, y: transform.position.y, width, height });
       return;
     }
     case "sprite": {

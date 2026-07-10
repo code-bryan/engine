@@ -23,6 +23,8 @@ export type DebuggerFieldView = {
   entity?: number;
   selectEntity?: number;
   selectEntities?: number[];
+  // Grouped vector layout: label above, one input per axis below.
+  axes?: { label: string; value: string; editKey: string }[];
 };
 
 export type DebuggerInspectorCardView = {

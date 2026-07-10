@@ -1,7 +1,7 @@
 {
   "version": 1,
   "name": "Platformer Demo",
-  "entryWorld": "worlds/world-01",
+  "entryWorld": "worlds/World1",
   "systems": [
     "player-control",
     "enemy-follow",
