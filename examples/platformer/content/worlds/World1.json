@@ -9,32 +9,13 @@
   ],
   "elements": [
     {
-      "type": "entity",
-      "position": 0,
-      "folder": "enemy",
-      "name": "Testing",
-      "components": {
-        "transform": {
-          "position": {
-            "x": 0,
-            "y": 0
-          },
-          "rotation": 0,
-          "size": {
-            "x": 0,
-            "y": 0
-          }
-        }
-      }
-    },
-    {
       "type": "folder",
       "name": "player",
-      "position": 1
+      "position": 0
     },
     {
       "type": "entity",
-      "position": 2,
+      "position": 1,
       "extends": "player",
       "folder": "player",
       "components": {
@@ -57,11 +38,11 @@
     {
       "type": "folder",
       "name": "enemy",
-      "position": 3
+      "position": 2
     },
     {
       "type": "entity",
-      "position": 4,
+      "position": 3,
       "extends": "enemy",
       "folder": "enemy",
       "components": {
@@ -83,8 +64,9 @@
     },
     {
       "type": "entity",
-      "position": 5,
+      "position": 4,
       "folder": "player",
+      "name": "Player-spawn",
       "components": {
         "transform": {
           "position": {
@@ -102,7 +84,7 @@
     },
     {
       "type": "entity",
-      "position": 6,
+      "position": 5,
       "folder": "enemy",
       "components": {
         "transform": {
@@ -118,11 +100,6 @@
         },
         "tag": "enemy-spawn"
       }
-    },
-    {
-      "type": "folder",
-      "name": "testing",
-      "position": 7
     }
   ]
 }

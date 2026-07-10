@@ -66,7 +66,7 @@ export function attachEditor<TWorld extends DebuggerWorld>(
     }));
 
   const componentInspectors = [
-    ...createBuiltinInspectorComponents(options.getEntityTitle, options.getEntityPrefab),
+    ...createBuiltinInspectorComponents(options.getEntityPrefab),
     ...autoInspectors,
     ...(options.components ?? []),
     ...(options.sections ?? []).map((section, index) => ({
@@ -137,6 +137,18 @@ export function attachEditor<TWorld extends DebuggerWorld>(
   // in memory — no disk write. The world is persisted only on an explicit save.
   const markWorldDirty = () => {
     if (!getState().worldDirty) store.dispatch({ type: "set-world-dirty", dirty: true });
+  };
+
+  // Add a tag to the project catalog (kept sorted, deduped) and notify the host so
+  // it persists to the manifest. No-op if empty or already present.
+  const registerProjectTag = (tag: string) => {
+    if (!tag) return;
+    const current = options.projectTags ?? [];
+    if (current.includes(tag)) return;
+    // Append in creation order (registry order is meaningful, not alphabetical).
+    const next = [...current, tag];
+    options.projectTags = next;
+    options.onProjectTagsChange?.(next);
   };
 
   // Explicit save (⌘/Ctrl+S, File ▸ Save). No-op unless the active world view has
@@ -265,6 +277,41 @@ export function attachEditor<TWorld extends DebuggerWorld>(
       if (trimmed) entityNames.set(entity, trimmed);
       else entityNames.delete(entity);
       markWorldDirty();
+      render();
+    },
+    addEntityTag(entity, tag) {
+      if (options.playback?.getState?.() === "playing") return;
+      const trimmed = tag.trim();
+      if (!trimmed) return;
+      registerProjectTag(trimmed); // remember it in the project catalog
+      if (world.tags.has(entity, trimmed)) { render(); return; }
+      world.tags.add(entity, trimmed);
+      markWorldDirty();
+      render();
+    },
+    removeEntityTag(entity, tag) {
+      if (options.playback?.getState?.() === "playing") return;
+      world.tags.remove(entity, tag);
+      markWorldDirty();
+      render();
+    },
+    registerTag(tag) {
+      if (options.playback?.getState?.() === "playing") return;
+      registerProjectTag(tag.trim());
+      render();
+    },
+    deleteTag(tag) {
+      if (options.playback?.getState?.() === "playing") return;
+      // Cascade: strip the tag from every entity in the loaded world…
+      let touched = false;
+      for (const entity of Array.from(world.entities as Iterable<number>)) {
+        if (world.tags.has(entity, tag)) { world.tags.remove(entity, tag); touched = true; }
+      }
+      // …and drop it from the project catalog.
+      const next = (options.projectTags ?? []).filter((existing) => existing !== tag);
+      options.projectTags = next;
+      options.onProjectTagsChange?.(next);
+      if (touched) markWorldDirty();
       render();
     },
     moveEntityToFolder(entity, folder) {
@@ -728,6 +775,10 @@ export function attachEditor<TWorld extends DebuggerWorld>(
     },
     setBookmarks(bookmarks: ContentBookmark[]) {
       options.bookmarks = bookmarks;
+      render();
+    },
+    setProjectTags(tags: string[]) {
+      options.projectTags = tags;
       render();
     },
     // Sync open world/doc tabs (and the active-world identity) after a content

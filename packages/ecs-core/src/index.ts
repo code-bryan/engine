@@ -78,6 +78,16 @@ export class Tags<TTag extends string = string> {
     return tags;
   }
 
+  // All tag names currently applied to at least one entity (remove() can leave
+  // empty stores behind, so those are skipped).
+  names() {
+    const names: TTag[] = [];
+    for (const [tag, store] of this.stores) {
+      if (store.size > 0) names.push(tag);
+    }
+    return names;
+  }
+
   clear() {
     this.stores.clear();
   }

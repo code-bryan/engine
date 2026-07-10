@@ -11,8 +11,11 @@ export type DebuggerEntityItemView = {
   entity: number;
   title: string;
   tag: string;
+  tags: string[];
   selected: boolean;
   folder?: string;
+  // Custom name if set; undefined means the title is the tag-derived default.
+  customName?: string;
 };
 
 // One node in the ordered outliner tree: a folder (with its ordered entity

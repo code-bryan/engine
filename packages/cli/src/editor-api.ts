@@ -5,7 +5,7 @@ import { createContentApiMiddleware } from "./content-api";
 
 const execFileAsync = promisify(execFile);
 import { initProject } from "./init";
-import { loadProject, saveProjectBookmarks, saveProjectEntryWorld, type ProjectBookmark, type ResolvedProject } from "./project";
+import { loadProject, saveProjectBookmarks, saveProjectTags, saveProjectEntryWorld, type ProjectBookmark, type ResolvedProject } from "./project";
 
 type Next = (err?: unknown) => void;
 
@@ -112,6 +112,23 @@ export function createEditorApi(initialDir?: string) {
       return;
     }
 
+    if (req.method === "POST" && pathName === "/api/project/tags") {
+      if (!active) return sendJson(res, 409, { error: "no project open" });
+      const project = active;
+      readBody(req).then(async (body) => {
+        try {
+          const parsed = JSON.parse(body) as { tags?: unknown };
+          const tags = normalizeTags(parsed.tags);
+          await saveProjectTags(project.root, tags);
+          project.manifest.tags = tags;
+          sendJson(res, 200, { ok: true });
+        } catch (error) {
+          sendJson(res, 400, { error: error instanceof Error ? error.message : "invalid tags" });
+        }
+      });
+      return;
+    }
+
     if (req.method === "POST" && pathName === "/api/project/entry-world") {
       if (!active) return sendJson(res, 409, { error: "no project open" });
       const project = active;
@@ -177,6 +194,11 @@ function normalizeBookmarks(raw: unknown): ProjectBookmark[] {
     const items = Array.isArray(value.items) ? value.items.filter((item): item is string => typeof item === "string") : [];
     return [{ id: value.id, name: value.name, items }];
   });
+}
+
+function normalizeTags(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return Array.from(new Set(raw.filter((tag): tag is string => typeof tag === "string" && tag.trim() !== "").map((tag) => tag.trim())));
 }
 
 function parsePath(body: string): string | null {

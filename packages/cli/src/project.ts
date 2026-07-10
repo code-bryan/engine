@@ -16,6 +16,8 @@ export type ProjectManifest = {
   entryWorld: string;
   systems?: string[];
   bookmarks?: ProjectBookmark[];
+  // Project-wide tag registry — the catalog the editor remembers across worlds.
+  tags?: string[];
 };
 
 export type ResolvedProject = {
@@ -61,7 +63,13 @@ function parseManifest(raw: unknown, root: string): ProjectManifest {
     entryWorld: value.entryWorld,
     systems: Array.isArray(value.systems) ? value.systems.filter((s): s is string => typeof s === "string") : [],
     bookmarks: parseBookmarks(value.bookmarks),
+    tags: parseTags(value.tags),
   };
+}
+
+function parseTags(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return Array.from(new Set(raw.filter((tag): tag is string => typeof tag === "string" && tag.trim() !== "")));
 }
 
 function parseBookmarks(raw: unknown): ProjectBookmark[] {
@@ -85,6 +93,10 @@ async function patchManifest(root: string, patch: Record<string, unknown>): Prom
 
 export async function saveProjectBookmarks(root: string, bookmarks: ProjectBookmark[]): Promise<void> {
   await patchManifest(root, { bookmarks });
+}
+
+export async function saveProjectTags(root: string, tags: string[]): Promise<void> {
+  await patchManifest(root, { tags });
 }
 
 export async function saveProjectEntryWorld(root: string, entryWorld: string): Promise<void> {

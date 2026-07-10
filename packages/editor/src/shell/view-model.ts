@@ -48,6 +48,10 @@ export type EditorUiActions = {
   createEntity: (folder?: string) => void;
   removeEntity: (entity: number) => void;
   renameEntity: (entity: number, name: string) => void;
+  addEntityTag: (entity: number, tag: string) => void;
+  removeEntityTag: (entity: number, tag: string) => void;
+  registerTag: (tag: string) => void;
+  deleteTag: (tag: string) => void;
   createFolder: (name: string) => void;
   removeFolder: (name: string) => void;
   moveEntityToFolder: (entity: number, folder?: string) => void;
@@ -100,13 +104,17 @@ export function renderEditor<TWorld extends DebuggerWorld>(
   // The flat `entities` list respects the search box (for selection/scroll); the
   // outliner tree is built from the unfiltered set + the world's element order.
   const query = state.entityQuery.trim().toLowerCase();
-  const entities = buildEntityItems(world, state, options.getEntityTitle, options.getEntityFolder);
+  const entities = buildEntityItems(world, state, options.getEntityTitle, options.getEntityFolder, options.getEntityName);
   const allEntities = query
-    ? buildEntityItems(world, { ...state, entityQuery: "" }, options.getEntityTitle, options.getEntityFolder)
+    ? buildEntityItems(world, { ...state, entityQuery: "" }, options.getEntityTitle, options.getEntityFolder, options.getEntityName)
     : entities;
   const worldOrderItems = options.getWorldOrder?.() ?? [];
   const outline = buildOutline(allEntities, worldOrderItems, query, entities);
   const folders = worldOrderItems.filter((item) => item.kind === "folder").map((item) => item.name);
+  // Suggestions/catalog: the persisted project registry (in creation order)
+  // unioned with any tags already applied in the loaded world.
+  const projectTags = Array.from(new Set(options.projectTags ?? []));
+  const knownTags = Array.from(new Set([...projectTags, ...world.tags.names()]));
   root.render(createElement(EditorShell, {
     fps: state.fps.toFixed(1),
     frameMs: state.latestFrameMs.toFixed(2),
@@ -156,6 +164,12 @@ export function renderEditor<TWorld extends DebuggerWorld>(
     onCreateEntity: actions.createEntity,
     onRemoveEntity: actions.removeEntity,
     onRenameEntity: actions.renameEntity,
+    onAddTag: actions.addEntityTag,
+    onRemoveTag: actions.removeEntityTag,
+    knownTags,
+    projectTags,
+    onRegisterTag: actions.registerTag,
+    onDeleteTag: actions.deleteTag,
     onAddFolder: actions.createFolder,
     onRemoveFolder: actions.removeFolder,
     onMoveEntity: actions.moveEntityToFolder,
@@ -238,6 +252,7 @@ export function buildEntityItems<TWorld extends DebuggerWorld>(
   state: DebugState,
   getEntityTitle?: (world: TWorld, entity: Entity) => string,
   getEntityFolder?: (world: TWorld, entity: Entity) => string | undefined,
+  getEntityName?: (world: TWorld, entity: Entity) => string | undefined,
 ): DebuggerEntityItemView[] {
   const query = state.entityQuery.trim().toLowerCase();
   return Array.from(world.entities)
@@ -246,13 +261,18 @@ export function buildEntityItems<TWorld extends DebuggerWorld>(
       const tags = world.tags.list(entity).join(" ");
       return `${title} ${tags} ${entity}`.toLowerCase().includes(query);
     })
-    .map((entity) => ({
-      entity,
-      title: getEntityTitle?.(world, entity) ?? entityListTitle(world, entity),
-      tag: world.tags.list(entity)[0] ?? "entity",
-      selected: entity === state.selectedEntity,
-      folder: getEntityFolder?.(world, entity),
-    }));
+    .map((entity) => {
+      const tags = world.tags.list(entity);
+      return {
+        entity,
+        title: getEntityTitle?.(world, entity) ?? entityListTitle(world, entity),
+        tag: tags[0] ?? "entity",
+        tags,
+        selected: entity === state.selectedEntity,
+        folder: getEntityFolder?.(world, entity),
+        customName: getEntityName?.(world, entity),
+      };
+    });
 }
 
 // Build the outliner tree from the world's ordered element list: folders and

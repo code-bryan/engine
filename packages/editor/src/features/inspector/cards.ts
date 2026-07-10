@@ -28,7 +28,6 @@ export function createStoreInspector<TValue, TWorld extends DebuggerWorld = Debu
 }
 
 export function createBuiltinInspectorComponents<TWorld extends DebuggerWorld>(
-  getEntityTitle?: (world: TWorld, entity: Entity) => string,
   getEntityPrefab?: (world: TWorld, entity: Entity) => string | undefined,
 ): DebugInspectorComponent<TWorld>[] {
   return [
@@ -37,10 +36,10 @@ export function createBuiltinInspectorComponents<TWorld extends DebuggerWorld>(
       title: "Entity",
       fields(world, entity) {
         const prefab = getEntityPrefab?.(world, entity);
+        // Name + Tags are edited in the dedicated Details header controls, so the
+        // card only surfaces the immutable Id and the prefab link.
         return [
           { label: "Id", value: `#${entity}`, selectEntity: entity },
-          { label: "Name", value: getEntityTitle?.(world, entity) ?? entityTitle(world, entity) },
-          { label: "Tags", value: world.tags.list(entity).join(", ") || "-" },
           ...(prefab ? [{ label: "Prefab", value: prefab }] : []),
         ];
       },
@@ -156,11 +155,6 @@ export function buildInspectorCards<TWorld extends DebuggerWorld>(
   }
 
   return cards;
-}
-
-function entityTitle<TWorld extends DebuggerWorld>(world: TWorld, entity: Entity) {
-  const firstTag = world.tags.list(entity)[0] ?? "entity";
-  return `${firstTag}_${entity}`;
 }
 
 function formatNumber(value?: number) {

@@ -33,6 +33,8 @@ export type DebugEditorPlayback = {
 export type DebugEditorOptions = DebugEditorPlayback & {
   bookmarks?: ContentBookmark[];
   onBookmarksChange?: (bookmarks: ContentBookmark[]) => void;
+  projectTags?: string[];
+  onProjectTagsChange?: (tags: string[]) => void;
   contentTree?: ContentTreeNode[];
   activeWorld?: string;
   activeSystems?: string[];
@@ -60,6 +62,8 @@ export function attachDebugEditor(world: GameWorld, engine: EngineApplication, o
     onRename: playback.onRename,
     bookmarks: options.bookmarks,
     onBookmarksChange: options.onBookmarksChange,
+    projectTags: options.projectTags,
+    onProjectTagsChange: options.onProjectTagsChange,
     onAddSystem: playback.onAddSystem,
     onRemoveSystem: playback.onRemoveSystem,
     onOpenProject: playback.onOpenProject,
@@ -125,6 +129,9 @@ export function attachDebugEditor(world: GameWorld, engine: EngineApplication, o
     },
     getEntityFolder(_debugWorld: DebuggerWorld, entity: number) {
       return entityFolders.get(entity);
+    },
+    getEntityName(_debugWorld: DebuggerWorld, entity: number) {
+      return entityNames.get(entity);
     },
     getEntityPrefab(_debugWorld: DebuggerWorld, entity: number) {
       return entityExtends.get(entity);

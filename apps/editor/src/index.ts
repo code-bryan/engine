@@ -25,6 +25,7 @@ type ProjectManifest = {
   entryWorld: string;
   systems?: string[];
   bookmarks?: ContentBookmark[];
+  tags?: string[];
 };
 
 // The editor opens whatever project the CLI wired in; the manifest supplies the
@@ -151,9 +152,27 @@ async function loadWorld(name: string, override?: DemoWorldData) {
   engine?.installSystems();
   authoredSnapshot = captureWorldSnapshot(gameWorld);
   debuggerEditor?.setActiveWorld(name, { activeSystems: activeWorldSystems, contentTree });
+  seedProjectTagsFromWorld();
   playbackState = "stopped";
   engine?.stop();
   engine?.tick(0);
+}
+
+// Fold any tags already present in the loaded world into the project registry so
+// existing worlds' tags are remembered (and offered as suggestions) even if the
+// manifest didn't list them yet.
+function seedProjectTagsFromWorld() {
+  const existing = projectManifest.tags ?? [];
+  // Keep existing (creation) order; append any world-only tags after them.
+  const merged = Array.from(new Set([...existing, ...gameWorld.tags.names()]));
+  if (merged.length === existing.length) return;
+  projectManifest = { ...projectManifest, tags: merged };
+  debuggerEditor?.setProjectTags(merged);
+  void fetch("/api/project/tags", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tags: merged }),
+  });
 }
 
 // Refresh only the content-drawer tree (for content create/import/delete).
@@ -336,6 +355,15 @@ async function boot(startPlaying: boolean) {
         body: JSON.stringify({ bookmarks }),
       });
     },
+    projectTags: projectManifest.tags ?? [],
+    onProjectTagsChange(tags) {
+      projectManifest = { ...projectManifest, tags };
+      void fetch("/api/project/tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags }),
+      });
+    },
     initialContentDrawerOpen: contentDrawerOpen,
     onContentDrawerToggled(open) {
       contentDrawerOpen = open;
@@ -354,6 +382,8 @@ async function boot(startPlaying: boolean) {
     activeWorld: worldName,
     activeSystems: activeWorldSystems,
   });
+
+  if (hasProject) seedProjectTagsFromWorld();
 
   if (startPlaying) {
     playbackState = "playing";

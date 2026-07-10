@@ -104,6 +104,9 @@ export type RuntimeDebuggerOptions<TWorld extends DebuggerWorld = DebuggerWorld>
   getEntityTitle?: (world: TWorld, entity: Entity) => string;
   // Optional outliner folder path for an entity (editor-only grouping).
   getEntityFolder?: (world: TWorld, entity: Entity) => string | undefined;
+  // Custom display name for an entity, if one is set (distinct from the tag-derived
+  // default title). Used to seed the editable Name field.
+  getEntityName?: (world: TWorld, entity: Entity) => string | undefined;
   // Optional prefab name an entity extends (shown in the inspector; highlighted in the content drawer).
   getEntityPrefab?: (world: TWorld, entity: Entity) => string | undefined;
   // The outliner's ordered element list — folders (incl. empty) and entities as
@@ -135,6 +138,10 @@ export type RuntimeDebuggerOptions<TWorld extends DebuggerWorld = DebuggerWorld>
   onRename?: (from: string, to: string, kind: ContentTreeNode["kind"]) => void;
   bookmarks?: ContentBookmark[];
   onBookmarksChange?: (bookmarks: ContentBookmark[]) => void;
+  // Project-wide tag registry (persisted in the project manifest). The editor
+  // suggests/assigns from this catalog and calls back when it changes.
+  projectTags?: string[];
+  onProjectTagsChange?: (tags: string[]) => void;
   initialContentDrawerOpen?: boolean;
   onContentDrawerToggled?: (open: boolean) => void;
   initialOpenWorlds?: string[];
@@ -154,6 +161,7 @@ export type DebugEditor<TWorld extends DebuggerWorld = DebuggerWorld> = {
   setActiveSystems: (names: string[]) => void;
   setContentTree: (tree: ContentTreeNode[]) => void;
   setBookmarks: (bookmarks: ContentBookmark[]) => void;
+  setProjectTags: (tags: string[]) => void;
   setActiveWorld: (name: string, opts?: { activeSystems?: string[]; contentTree?: ContentTreeNode[] }) => void;
   renameContent: (from: string, to: string) => void;
   destroy: () => void;

@@ -20,8 +20,8 @@ import type {
 } from "./view-types";
 import { ContentBrowser } from "../features/content/ContentBrowser";
 import { SceneSystemsPanel } from "../features/systems/SceneSystemsPanel";
-import { SystemsDrawer } from "../features/systems/SystemsDrawer";
 import { SnapshotsDrawer } from "../features/snapshots/SnapshotsDrawer";
+import { TagsDrawer } from "../features/tags/TagsDrawer";
 import { EventLogDrawer } from "../features/log/EventLogDrawer";
 import { ProjectPathDialog } from "../features/project/ProjectPathDialog";
 import { StartScreen } from "../features/project/StartScreen";
@@ -33,7 +33,7 @@ import { DIALOG_BTN, DIALOG_BTN_PRIMARY, DIALOG_BTN_DANGER } from "../components
 import { Toasts } from "../components/Toasts";
 import type { EditorToast } from "../state/types";
 
-type BottomDrawerTab = "content" | "systems" | "snapshots" | "logs";
+type BottomDrawerTab = "content" | "snapshots" | "logs" | "tags";
 
 // Right-click context in the outliner: an entity row, a folder header, or empty
 // space / the world root. Drives which context-menu items apply and where Add lands.
@@ -72,6 +72,12 @@ export type EditorShellProps = {
   onCreateEntity: (folder?: string) => void;
   onRemoveEntity: (entity: number) => void;
   onRenameEntity: (entity: number, name: string) => void;
+  onAddTag: (entity: number, tag: string) => void;
+  onRemoveTag: (entity: number, tag: string) => void;
+  knownTags: string[];
+  projectTags: string[];
+  onRegisterTag: (tag: string) => void;
+  onDeleteTag: (tag: string) => void;
   onAddFolder: (name: string) => void;
   onRemoveFolder: (name: string) => void;
   onMoveEntity: (entity: number, folder?: string) => void;
@@ -172,6 +178,7 @@ export function EditorShell(props: EditorShellProps) {
   const [folderDialogName, setFolderDialogName] = useState<string | null>(null);
   const [deleteFolderName, setDeleteFolderName] = useState<string | null>(null);
   const [renameTarget, setRenameTarget] = useState<{ entity: number; value: string } | null>(null);
+  const [tagDraft, setTagDraft] = useState("");
   const dragEntityRef = useRef<number | null>(null);
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
   const [dragOverGap, setDragOverGap] = useState<string | null>(null);
@@ -435,9 +442,9 @@ export function EditorShell(props: EditorShellProps) {
                 {windowMenuOpen && (
                   <div className="absolute left-0 top-full mt-1 w-40 bg-[#1e1e1e] border border-[#303030] rounded shadow-xl py-1 z-40">
                     {([
-                      { id: "systems", label: "Systems" },
                       { id: "snapshots", label: "Snapshots" },
                       { id: "logs", label: "Logs" },
+                      { id: "tags", label: "Tags" },
                     ] as const).map((entry) => (
                       <button
                         key={entry.id}
@@ -907,21 +914,65 @@ export function EditorShell(props: EditorShellProps) {
                 ) : (
                   <>
                     {selectedEntity ? (
-                      <div className="p-3 border-b border-[#303030] flex items-center gap-2">
-                        <i className="ph-fill ph-cube text-[#0070e0] text-lg" />
-                        <input
-                          type="text"
-                          key={selectedEntity.entity}
-                          defaultValue={selectedEntity.title}
-                          readOnly={isPlaying}
-                          title="Rename entity (Enter to apply; blank resets to default)"
-                          className="engine-input px-2 py-1 w-full rounded font-medium"
-                          onBlur={(event) => props.onRenameEntity(selectedEntity.entity, event.target.value.trim())}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") event.currentTarget.blur();
-                            if (event.key === "Escape") { event.currentTarget.value = selectedEntity.title; event.currentTarget.blur(); }
-                          }}
-                        />
+                      <div className="p-3 border-b border-[#303030] space-y-2">
+                        <div className="flex items-center gap-2">
+                          <i className="ph-fill ph-cube text-[#0070e0] text-lg" />
+                          <input
+                            type="text"
+                            key={selectedEntity.entity}
+                            defaultValue={selectedEntity.customName ?? ""}
+                            placeholder={selectedEntity.title}
+                            readOnly={isPlaying}
+                            title="Entity name (Enter to apply; blank uses the default)"
+                            className="engine-input px-2 py-1 w-full rounded font-medium"
+                            onBlur={(event) => props.onRenameEntity(selectedEntity.entity, event.target.value.trim())}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") event.currentTarget.blur();
+                              if (event.key === "Escape") { event.currentTarget.value = selectedEntity.customName ?? ""; event.currentTarget.blur(); }
+                            }}
+                          />
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="text-[10px] uppercase tracking-wide text-[#888] mr-1">Tags</span>
+                          {selectedEntity.tags.length === 0 && <span className="text-[#666] text-[11px]">none</span>}
+                          {selectedEntity.tags.map((tag) => (
+                            <span key={tag} className="inline-flex items-center gap-1 bg-[#2d2d2d] border border-[#303030] rounded px-2 py-0.5 text-[11px] text-[#ccc]">
+                              {tag}
+                              {!isPlaying && (
+                                <button
+                                  className="text-[#888] hover:text-[#f87171] transition-colors"
+                                  onClick={() => props.onRemoveTag(selectedEntity.entity, tag)}
+                                  aria-label={`Remove tag ${tag}`}
+                                >
+                                  <i className="ph ph-x text-[10px]" />
+                                </button>
+                              )}
+                            </span>
+                          ))}
+                          {!isPlaying && (
+                            <>
+                              <input
+                                type="text"
+                                value={tagDraft}
+                                placeholder="add tag…"
+                                list="entity-tag-suggestions"
+                                className="engine-input px-2 py-0.5 rounded text-[11px] w-24"
+                                onChange={(event) => setTagDraft(event.target.value)}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") {
+                                    const tag = tagDraft.trim();
+                                    if (tag) { props.onAddTag(selectedEntity.entity, tag); setTagDraft(""); }
+                                  }
+                                }}
+                              />
+                              <datalist id="entity-tag-suggestions">
+                                {props.knownTags
+                                  .filter((tag) => !selectedEntity.tags.includes(tag))
+                                  .map((tag) => <option key={tag} value={tag} />)}
+                              </datalist>
+                            </>
+                          )}
+                        </div>
                       </div>
                     ) : (
                       <div className="p-3 text-[#666]">Select the world or an entity</div>
@@ -984,10 +1035,10 @@ export function EditorShell(props: EditorShellProps) {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-3">
-              {windowPanel === "systems" ? (
-                <SystemsDrawer statusCards={props.statusCards} systems={props.systems} onToggleSystem={props.onToggleSystem} />
-              ) : windowPanel === "snapshots" ? (
+              {windowPanel === "snapshots" ? (
                 <SnapshotsDrawer snapshots={props.snapshots} onSaveSnapshot={props.onSaveSnapshot} onRestoreSnapshot={props.onRestoreSnapshot} />
+              ) : windowPanel === "tags" ? (
+                <TagsDrawer tags={props.projectTags} onRegisterTag={props.onRegisterTag} onDeleteTag={props.onDeleteTag} />
               ) : (
                 <EventLogDrawer logs={props.logs} logFilters={props.logFilters} logPaused={props.logPaused} onToggleLogFilter={props.onToggleLogFilter} onToggleLogPause={props.onToggleLogPause} />
               )}

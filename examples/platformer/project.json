@@ -8,5 +8,12 @@
     "actor-state",
     "sprite-facing",
     "restart-on-enemy-touch"
+  ],
+  "tags": [
+    "enemy",
+    "enemy-spawn",
+    "player",
+    "player-spawn",
+    "spawner"
   ]
 }
