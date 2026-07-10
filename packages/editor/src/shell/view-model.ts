@@ -104,7 +104,7 @@ export function renderEditor<TWorld extends DebuggerWorld>(
     entityQuery: state.entityQuery,
     inspectorQuery: state.inspectorQuery,
     statusCards: buildStatusCards(world, options.statusPanels ?? []),
-    entities: buildEntityItems(world, state, options.getEntityTitle),
+    entities: buildEntityItems(world, state, options.getEntityTitle, options.getEntityFolder),
     inspectorCards: buildInspectorCards(world, state, components, options),
     snapshots: buildSnapshotViews(state),
     systems: buildSystemViews(world, state.systemMetrics, state.systemTimingHistory, options.activeSystems ?? []),
@@ -204,6 +204,7 @@ export function buildEntityItems<TWorld extends DebuggerWorld>(
   world: TWorld,
   state: DebugState,
   getEntityTitle?: (world: TWorld, entity: Entity) => string,
+  getEntityFolder?: (world: TWorld, entity: Entity) => string | undefined,
 ): DebuggerEntityItemView[] {
   const query = state.entityQuery.trim().toLowerCase();
   return Array.from(world.entities)
@@ -217,6 +218,7 @@ export function buildEntityItems<TWorld extends DebuggerWorld>(
       title: getEntityTitle?.(world, entity) ?? entityListTitle(world, entity),
       tag: world.tags.list(entity)[0] ?? "entity",
       selected: entity === state.selectedEntity,
+      folder: getEntityFolder?.(world, entity),
     }));
 }
 

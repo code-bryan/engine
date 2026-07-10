@@ -96,6 +96,8 @@ export type ContentBookmark = {
 
 export type RuntimeDebuggerOptions<TWorld extends DebuggerWorld = DebuggerWorld> = {
   getEntityTitle?: (world: TWorld, entity: Entity) => string;
+  // Optional outliner folder path for an entity (editor-only grouping).
+  getEntityFolder?: (world: TWorld, entity: Entity) => string | undefined;
   sections?: DebugEditorSection<TWorld>[];
   components?: DebugInspectorComponent<TWorld>[];
   statusPanels?: DebugStatusPanel<TWorld>[];
