@@ -285,8 +285,9 @@ export function EditorShell(props: EditorShellProps) {
       if (event.target.closest("[data-window-menu-root]")) return;
       setWindowMenuOpen(false);
     };
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
+    // Capture phase so a viewport handler that stops propagation can't swallow it.
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    return () => document.removeEventListener("pointerdown", handlePointerDown, true);
   }, [windowMenuOpen]);
 
   useEffect(() => {
@@ -296,8 +297,8 @@ export function EditorShell(props: EditorShellProps) {
       if (event.target.closest("[data-file-menu-root]")) return;
       setFileMenuOpen(false);
     };
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    return () => document.removeEventListener("pointerdown", handlePointerDown, true);
   }, [fileMenuOpen]);
 
   useEffect(() => {
@@ -385,11 +386,7 @@ export function EditorShell(props: EditorShellProps) {
         {/* TOP HEADER BAR */}
         <header className="pointer-events-auto relative h-12 bg-[#181818] border-b border-[#303030] flex items-center justify-between px-3 select-none flex-shrink-0 z-30">
           <div className="flex items-center space-x-4">
-            <div className="text-white font-bold text-sm tracking-wide flex items-center gap-2">
-              <i className="ph-fill ph-hexagon text-[#0070e0] text-lg" />
-              NEXUS
-            </div>
-            <nav className="flex space-x-1 text-[#cccccc]" data-window-menu-root onClick={(event) => event.stopPropagation()}>
+            <nav className="flex space-x-1 text-[#cccccc]" onClick={(event) => event.stopPropagation()}>
               <div className="relative" data-file-menu-root>
                 <div
                   className={`px-2 py-1 rounded cursor-pointer transition-colors${fileMenuOpen ? " bg-[#2d2d2d] text-white" : " hover:bg-[#2d2d2d]"}`}
@@ -432,7 +429,7 @@ export function EditorShell(props: EditorShellProps) {
                 )}
               </div>
               <div className="px-2 py-1 hover:bg-[#2d2d2d] rounded cursor-pointer transition-colors">Edit</div>
-              <div className="relative">
+              <div className="relative" data-window-menu-root>
                 <div
                   className={`px-2 py-1 rounded cursor-pointer transition-colors${windowMenuOpen ? " bg-[#2d2d2d] text-white" : " hover:bg-[#2d2d2d]"}`}
                   onClick={() => setWindowMenuOpen((open) => !open)}
