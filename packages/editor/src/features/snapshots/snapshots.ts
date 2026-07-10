@@ -1,5 +1,5 @@
 import { getComponentRegistry, type ComponentRegistryEntry, type Entity } from "@engine/ecs-core";
-import { transforms } from "@engine/renderer";
+import { sprites, transforms } from "@engine/renderer";
 import type { DebuggerWorld, DebugWorldSnapshot, EntitySnapshot, WorldSnapshot } from "../../shared/types";
 
 function captureSnapshot<TWorld extends DebuggerWorld>(
@@ -27,18 +27,20 @@ function captureSnapshot<TWorld extends DebuggerWorld>(
       : undefined;
 
     const transform = transforms.get(entity);
+    const flipX = sprites.get(entity)?.flipX;
 
     entities.set(entity, transform
       ? {
           components,
           physics,
+          flipX,
           transform: {
             position: { x: transform.position.x, y: transform.position.y },
             rotation: transform.rotation,
             size: { x: transform.size.x, y: transform.size.y },
           },
         }
-      : { components, physics });
+      : { components, physics, flipX });
   }
 
   return { frame: world.getFrame(), entities };
@@ -75,6 +77,11 @@ function restoreSnapshot<TWorld extends DebuggerWorld>(
         transform.size.x = data.transform.size.x;
         transform.size.y = data.transform.size.y;
       }
+    }
+
+    if (data.flipX !== undefined) {
+      const spriteRef = sprites.get(entity);
+      if (spriteRef) spriteRef.flipX = data.flipX;
     }
   }
 }

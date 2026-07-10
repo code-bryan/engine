@@ -3,5 +3,7 @@
   "id": "speed",
   "label": "Speed",
   "kind": "scalar",
-  "defaultValue": 96
+  "defaultValue": 96,
+  "min": 0,
+  "integer": true
 }

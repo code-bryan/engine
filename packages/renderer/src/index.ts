@@ -12,6 +12,9 @@ export type SpriteRef = {
   sprite: Sprite;
   offset: SpriteOffset;
   anchor: { x: number; y: number };
+  // Horizontal mirror (Unity SpriteRenderer.flipX style). Kept separate from size
+  // so size stays a positive dimension; facing toggles this.
+  flipX: boolean;
 };
 export type SpriteProps = {
   texture?: Texture;
@@ -60,7 +63,7 @@ export async function loadSpriteSheet(props: SpriteSheetProps) {
 }
 
 export function attachSprite(e: Entity, sprite = createSprite()) {
-  sprites.set(e, { sprite, offset: { x: 0, y: 0 }, anchor: { x: 0, y: 0 } });
+  sprites.set(e, { sprite, offset: { x: 0, y: 0 }, anchor: { x: 0, y: 0 }, flipX: false });
   return sprite;
 }
 
@@ -72,8 +75,14 @@ export const sprite = {
       sprite: pixiSprite,
       offset: props.offset ?? { x: 0, y: 0 },
       anchor: normalizeAnchor(props.anchor),
+      flipX: false,
     });
     return pixiSprite;
+  },
+  // Toggle the horizontal mirror (used by facing).
+  flip(entity: Entity, flipX: boolean) {
+    const ref = sprites.get(entity);
+    if (ref) ref.flipX = flipX;
   },
   animation: {
     set(entity: Entity, props: SpriteAnimationProps) {
@@ -168,11 +177,13 @@ export function createRenderSystem(
       );
       sprite.rotation = t.rotation;
       // `size` is the target size in world px (0 = auto/native). Derive the pixi
-      // draw-scale from size / texture; a negative size mirrors.
+      // draw-scale from size / texture; flipX mirrors horizontally (independent of
+      // size, which stays a positive dimension).
       const texW = sprite.texture.width || 1;
       const texH = sprite.texture.height || 1;
+      const scaleX = t.size.x !== 0 ? t.size.x / texW : 1;
       sprite.scale.set(
-        t.size.x !== 0 ? t.size.x / texW : 1,
+        spriteRef.flipX ? -scaleX : scaleX,
         t.size.y !== 0 ? t.size.y / texH : 1,
       );
     }

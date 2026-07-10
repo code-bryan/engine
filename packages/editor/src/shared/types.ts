@@ -159,6 +159,7 @@ export type EntitySnapshot = {
   components: Map<string, unknown>;
   physics?: { x: number; y: number; vx: number; vy: number };
   transform?: Transform;
+  flipX?: boolean;
 };
 
 export type WorldSnapshot = {

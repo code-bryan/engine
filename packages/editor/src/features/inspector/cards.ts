@@ -90,8 +90,10 @@ export function createBuiltinInspectorComponents<TWorld extends DebuggerWorld>(
         if (key === "x") transform.position.x = next;
         if (key === "y") transform.position.y = next;
         if (key === "rotation") transform.rotation = next * (Math.PI / 180);
-        if (key === "sizeX") transform.size.x = next;
-        if (key === "sizeY") transform.size.y = next;
+        // Size is a dimension — never negative from the inspector. (Mirroring is
+        // handled by the facing system, which re-applies the size.x sign each frame.)
+        if (key === "sizeX") transform.size.x = Math.max(0, next);
+        if (key === "sizeY") transform.size.y = Math.max(0, next);
       },
     },
     {

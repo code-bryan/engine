@@ -34,6 +34,17 @@ export function getPremadeAssets(): PremadeAsset[] {
   ];
 }
 
+// Per-field inspector metadata for a struct component's key (Unity/Unreal-style:
+// per-property editability + numeric constraints). Overrides the component-level
+// defaults below for that key.
+export type FieldConstraint = {
+  label?: string;
+  editable?: boolean;
+  min?: number;
+  max?: number;
+  integer?: boolean;
+};
+
 export type ComponentDefinition = {
   version: 1;
   id: string;
@@ -41,6 +52,17 @@ export type ComponentDefinition = {
   kind?: ComponentKind;
   values?: string[];
   defaultValue?: unknown;
+  // Component-level defaults, enforced when editing this component's number values
+  // in the inspector. `min: 0` prevents negatives; `integer` rounds.
+  min?: number;
+  max?: number;
+  integer?: boolean;
+  // Whether this component is editable in the Details panel (default true). Set
+  // `"editable": false` to make the whole component read-only.
+  editable?: boolean;
+  // Per-key overrides for struct components — control editability/constraints/label
+  // of individual fields, e.g. `"fields": { "maxHealth": { "editable": false } }`.
+  fields?: Record<string, FieldConstraint>;
 };
 
 type ContentTreeNode = {
@@ -157,16 +179,48 @@ function parseComponentDefinition(value: unknown): ComponentDefinition {
     const values = Array.isArray(parsed.values) ? parsed.values.filter((v): v is string => typeof v === "string" && v.trim() !== "") : [];
     if (values.length === 0) throw new Error(`enum component "${parsed.id}" must declare at least one value`);
     const defaultValue = typeof parsed.defaultValue === "string" && values.includes(parsed.defaultValue) ? parsed.defaultValue : values[0];
-    return { version: 1, id: parsed.id, label: parsed.label, kind, values, defaultValue };
+    return {
+      version: 1,
+      id: parsed.id,
+      label: parsed.label,
+      kind,
+      values,
+      defaultValue,
+      ...(parsed.editable === false ? { editable: false } : {}),
+    };
   }
 
+  const fields = parseFieldConstraints(parsed.fields);
   return {
     version: 1,
     id: parsed.id,
     label: parsed.label,
     ...(kind ? { kind } : {}),
     defaultValue: parsed.defaultValue,
+    ...(typeof parsed.min === "number" ? { min: parsed.min } : {}),
+    ...(typeof parsed.max === "number" ? { max: parsed.max } : {}),
+    ...(parsed.integer === true ? { integer: true } : {}),
+    ...(parsed.editable === false ? { editable: false } : {}),
+    ...(fields ? { fields } : {}),
   };
+}
+
+function parseFieldConstraints(value: unknown): Record<string, FieldConstraint> | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const out: Record<string, FieldConstraint> = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (!raw || typeof raw !== "object") continue;
+    const c = raw as Record<string, unknown>;
+    const fc: FieldConstraint = {
+      ...(typeof c.label === "string" ? { label: c.label } : {}),
+      ...(typeof c.editable === "boolean" ? { editable: c.editable } : {}),
+      ...(typeof c.min === "number" ? { min: c.min } : {}),
+      ...(typeof c.max === "number" ? { max: c.max } : {}),
+      ...(c.integer === true ? { integer: true } : {}),
+    };
+    out[key] = fc;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 function validateComponentDefinition(definition: ComponentDefinition) {

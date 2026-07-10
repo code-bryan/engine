@@ -137,9 +137,9 @@ export function attachDebugEditor(world: GameWorld, engine: EngineApplication, o
           title: def.label,
           store,
           fields: (value) => componentFields(def, value),
-          set: def.kind === "enum"
+          set: def.kind === "enum" || def.editable === false
             ? undefined
-            : (value, key, next, _world, entity) => setComponentField(store, value, key, next, entity),
+            : (value, key, next, _world, entity) => setComponentField(store, value, key, next, entity, def),
         });
       }),
     ],
@@ -171,32 +171,52 @@ function componentFields(def: ComponentDefinition, value: unknown): DebugEditorF
     const display = typeof value === "string" ? value : String(def.defaultValue ?? "-");
     return [{ label: "Value", value: display }];
   }
+  const componentEditable = def.editable !== false;
   if (value !== null && typeof value === "object") {
     return Object.entries(value as Record<string, unknown>).map(([key, val]) => {
       const numeric = typeof val === "number";
+      const fc = def.fields?.[key];
+      // Per-field editability overrides the component default.
+      const editable = componentEditable && (fc?.editable ?? true);
       return {
-        label: titleize(key),
+        label: fc?.label ?? titleize(key),
         value: numeric ? formatNumber(val as number) : String(val),
-        ...(numeric ? { editable: true, editKey: key } : {}),
+        ...(numeric && editable ? { editable: true, editKey: key } : {}),
       };
     });
   }
-  // Scalar (enum already returned above): editable single value.
-  return [{ label: "Value", value: String(value), editable: true, editKey: "value" }];
+  // Scalar (enum already returned above): editable single value unless disabled.
+  return [{ label: "Value", value: String(value), ...(componentEditable ? { editable: true, editKey: "value" } : {}) }];
+}
+
+// Clamp/round a numeric edit to the effective constraints (per-field override,
+// falling back to component-level).
+function constrainNumber(value: number, def: ComponentDefinition, key?: string) {
+  const fc = key ? def.fields?.[key] : undefined;
+  const integer = fc?.integer ?? def.integer;
+  const min = fc?.min ?? def.min;
+  const max = fc?.max ?? def.max;
+  let v = value;
+  if (integer) v = Math.round(v);
+  if (typeof min === "number") v = Math.max(min, v);
+  if (typeof max === "number") v = Math.min(max, v);
+  return v;
 }
 
 // Write an edited field back. Object → mutate the numeric key in place; primitive → replace the store entry.
-function setComponentField(store: ComponentStore<unknown>, value: unknown, key: string, next: string, entity: Entity) {
+function setComponentField(store: ComponentStore<unknown>, value: unknown, key: string, next: string, entity: Entity, def: ComponentDefinition) {
   if (value !== null && typeof value === "object") {
+    // Guard: a per-field editable:false is never written even if a stale edit arrives.
+    if (def.fields?.[key]?.editable === false) return;
     const record = value as Record<string, unknown>;
     if (typeof record[key] === "number") {
       const numeric = Number(next);
-      if (!Number.isNaN(numeric)) record[key] = numeric;
+      if (!Number.isNaN(numeric)) record[key] = constrainNumber(numeric, def, key);
     }
     return;
   }
   const numeric = Number(next);
-  store.set(entity, next.trim() !== "" && !Number.isNaN(numeric) ? numeric : next);
+  store.set(entity, next.trim() !== "" && !Number.isNaN(numeric) ? constrainNumber(numeric, def) : next);
 }
 
 // "spawnX" → "Spawn X", "speed" → "Speed".

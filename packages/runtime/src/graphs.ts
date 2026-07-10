@@ -1,6 +1,6 @@
 import { type Entity } from "@engine/ecs-core";
 import { keyboard } from "@engine/input";
-import { sprite, sprites, transforms } from "@engine/renderer";
+import { sprite, transforms } from "@engine/renderer";
 import type { DemoGameWorld } from "./types";
 import { tryGetComponentStore } from "./components";
 
@@ -945,21 +945,8 @@ function executeNode(
       if (context.entity === undefined) return [];
       const facing = context.values.facing ?? context.values[String(node.data?.facingFrom ?? "facing")];
       if (typeof facing !== "string") return [context];
-      const transform = transforms.get(context.entity);
-      if (!transform) return [context];
-      // Mirror via the sign of size.x (negative = facing left). The flip needs a
-      // magnitude: use the current size when set, else fall back to the sprite's
-      // native texture size (so "auto" size {0,0} entities still mirror).
-      let base = getBaseScale(transform.size);
-      if (base === 0) {
-        const texture = sprites.get(context.entity)?.sprite.texture;
-        base = texture ? texture.height : 0;
-      }
-      if (base === 0) return [context];
-      transform.size = {
-        x: facing === String(node.data?.left ?? "left") ? -base : base,
-        y: base,
-      };
+      // Mirror via the sprite's flipX flag (size stays a positive dimension).
+      sprite.flip(context.entity, facing === String(node.data?.left ?? "left"));
       return [context];
     }
     case "SetVelocity":
@@ -1070,10 +1057,6 @@ function resolveEntityRef(context: GraphContext, ref: unknown, fallback?: Entity
     if (typeof value === "number") return value as Entity;
   }
   return fallback;
-}
-
-function getBaseScale(scale: number | { x: number; y: number } = 1) {
-  return typeof scale === "number" ? Math.abs(scale) : Math.abs(scale.y);
 }
 
 function asVector(value: unknown): { x: number; y: number } | undefined {
