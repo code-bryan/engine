@@ -12,6 +12,7 @@ import type {
   DebuggerEntityItemView,
   DebuggerFieldView,
   DebuggerLogEntryView,
+  DebuggerOutlineNodeView,
   DebuggerSnapshotView,
   DebuggerStatusCardView,
   DebuggerSystemView,
@@ -25,6 +26,7 @@ import type {
   DebuggerWorld,
   FrameMetric,
   LogCategory,
+  OutlineOrderItem,
   RuntimeDebuggerOptions,
 } from "../shared/types";
 
@@ -43,6 +45,12 @@ export type EditorUiActions = {
   setEntityQuery: (value: string) => void;
   setInspectorQuery: (value: string) => void;
   selectEntity: (entity: number) => void;
+  createEntity: (folder?: string) => void;
+  removeEntity: (entity: number) => void;
+  renameEntity: (entity: number, name: string) => void;
+  createFolder: (name: string) => void;
+  removeFolder: (name: string) => void;
+  moveEntityToFolder: (entity: number, folder?: string) => void;
   toggleComponentCollapse: (id: string) => void;
   editInspector: (entity: number, componentId: string, key: string, value: string) => void;
   saveSnapshot: () => void;
@@ -88,6 +96,16 @@ export function renderEditor<TWorld extends DebuggerWorld>(
   // content drawer (path is prefabs/<name>).
   const selectedPrefab = state.selectedEntity !== undefined ? options.getEntityPrefab?.(world, state.selectedEntity) : undefined;
   const contentHighlightPath = selectedPrefab ? `prefabs/${selectedPrefab}` : undefined;
+  // The flat `entities` list respects the search box (for selection/scroll); the
+  // outliner tree is built from the unfiltered set + the world's element order.
+  const query = state.entityQuery.trim().toLowerCase();
+  const entities = buildEntityItems(world, state, options.getEntityTitle, options.getEntityFolder);
+  const allEntities = query
+    ? buildEntityItems(world, { ...state, entityQuery: "" }, options.getEntityTitle, options.getEntityFolder)
+    : entities;
+  const worldOrderItems = options.getWorldOrder?.() ?? [];
+  const outline = buildOutline(allEntities, worldOrderItems, query, entities);
+  const folders = worldOrderItems.filter((item) => item.kind === "folder").map((item) => item.name);
   root.render(createElement(EditorShell, {
     fps: state.fps.toFixed(1),
     frameMs: state.latestFrameMs.toFixed(2),
@@ -108,7 +126,8 @@ export function renderEditor<TWorld extends DebuggerWorld>(
     entityQuery: state.entityQuery,
     inspectorQuery: state.inspectorQuery,
     statusCards: buildStatusCards(world, options.statusPanels ?? []),
-    entities: buildEntityItems(world, state, options.getEntityTitle, options.getEntityFolder),
+    entities,
+    outline,
     inspectorCards: buildInspectorCards(world, state, components, options),
     snapshots: buildSnapshotViews(state),
     systems: buildSystemViews(world, state.systemMetrics, state.systemTimingHistory, options.activeSystems ?? []),
@@ -133,6 +152,13 @@ export function renderEditor<TWorld extends DebuggerWorld>(
     onEntityQueryChange: actions.setEntityQuery,
     onInspectorQueryChange: actions.setInspectorQuery,
     onSelectEntity: actions.selectEntity,
+    onCreateEntity: actions.createEntity,
+    onRemoveEntity: actions.removeEntity,
+    onRenameEntity: actions.renameEntity,
+    onAddFolder: actions.createFolder,
+    onRemoveFolder: actions.removeFolder,
+    onMoveEntity: actions.moveEntityToFolder,
+    folders,
     onToggleComponentCollapse: actions.toggleComponentCollapse,
     onInspectorEdit: actions.editInspector,
     onSaveSnapshot: actions.saveSnapshot,
@@ -225,6 +251,50 @@ export function buildEntityItems<TWorld extends DebuggerWorld>(
       selected: entity === state.selectedEntity,
       folder: getEntityFolder?.(world, entity),
     }));
+}
+
+// Build the outliner tree from the world's ordered element list: folders and
+// loose entities are top-level nodes in `order` order; a foldered entity nests
+// under its folder node. With a search query active we flatten to the matching
+// entities (no folder chrome). `allEntities` is the unfiltered view set so folder
+// membership resolves; `filteredEntities` is the search-filtered flat list.
+export function buildOutline(
+  allEntities: DebuggerEntityItemView[],
+  order: OutlineOrderItem[],
+  query: string,
+  filteredEntities: DebuggerEntityItemView[],
+): DebuggerOutlineNodeView[] {
+  if (query) return filteredEntities.map((entity) => ({ kind: "entity", entity }));
+
+  const viewByEntity = new Map(allEntities.map((view) => [view.entity, view]));
+  const folderNodes = new Map<string, { kind: "folder"; name: string; children: DebuggerEntityItemView[] }>();
+  for (const item of order) {
+    if (item.kind === "folder" && !folderNodes.has(item.name)) {
+      folderNodes.set(item.name, { kind: "folder", name: item.name, children: [] });
+    }
+  }
+
+  const topLevel: DebuggerOutlineNodeView[] = [];
+  const seen = new Set<number>();
+  for (const item of order) {
+    if (item.kind === "folder") {
+      const node = folderNodes.get(item.name);
+      if (node) topLevel.push(node);
+      continue;
+    }
+    const view = viewByEntity.get(item.entity);
+    if (!view) continue;
+    seen.add(view.entity);
+    const parent = view.folder ? folderNodes.get(view.folder) : undefined;
+    if (parent) parent.children.push(view);
+    else topLevel.push({ kind: "entity", entity: view });
+  }
+
+  // Entities not tracked in the order list (e.g. runtime-spawned) still show, at the end.
+  for (const view of allEntities) {
+    if (!seen.has(view.entity)) topLevel.push({ kind: "entity", entity: view });
+  }
+  return topLevel;
 }
 
 export function buildSnapshotViews(state: DebugState): DebuggerSnapshotView[] {

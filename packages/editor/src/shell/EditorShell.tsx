@@ -7,12 +7,13 @@
 // is a component under features/*. Extracted verbatim from the old debugger-ui.
 
 import { createPortal } from "react-dom";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type DragEvent as ReactDragEvent } from "react";
 import type { ContentBookmark, ContentTreeNode, EditorToolMode, EngineAsset } from "../shared/types";
 import type {
   DebuggerEntityItemView,
   DebuggerInspectorCardView,
   DebuggerLogEntryView,
+  DebuggerOutlineNodeView,
   DebuggerSnapshotView,
   DebuggerStatusCardView,
   DebuggerSystemView,
@@ -27,10 +28,23 @@ import { StartScreen } from "../features/project/StartScreen";
 import { ComponentView } from "../features/components/ComponentView";
 import { BlueprintView } from "../features/blueprint/BlueprintView";
 import { InspectorField } from "../components/InspectorField";
+import { ContextMenu, ContextMenuItem, ContextMenuSeparator, ContextMenuSub } from "../components/ContextMenu";
+import { DIALOG_BTN, DIALOG_BTN_PRIMARY, DIALOG_BTN_DANGER } from "../components/ui-kit";
 import { Toasts } from "../components/Toasts";
 import type { EditorToast } from "../state/types";
 
 type BottomDrawerTab = "content" | "systems" | "snapshots" | "logs";
+
+// Right-click context in the outliner: an entity row, a folder header, or empty
+// space / the world root. Drives which context-menu items apply and where Add lands.
+type OutlinerTarget =
+  | { kind: "entity"; entity: number }
+  | { kind: "folder"; folder: string }
+  | { kind: "root" };
+
+// Drag-over highlight sentinel for the ungrouped/root drop region (folder names
+// are always trimmed non-empty, so an empty string never collides with one).
+const ROOT_DROP = "";
 
 export type EditorShellProps = {
   fps: string;
@@ -53,6 +67,14 @@ export type EditorShellProps = {
   inspectorQuery: string;
   statusCards: DebuggerStatusCardView[];
   entities: DebuggerEntityItemView[];
+  outline: DebuggerOutlineNodeView[];
+  folders: string[];
+  onCreateEntity: (folder?: string) => void;
+  onRemoveEntity: (entity: number) => void;
+  onRenameEntity: (entity: number, name: string) => void;
+  onAddFolder: (name: string) => void;
+  onRemoveFolder: (name: string) => void;
+  onMoveEntity: (entity: number, folder?: string) => void;
   inspectorCards: DebuggerInspectorCardView[];
   snapshots: DebuggerSnapshotView[];
   systems: DebuggerSystemView[];
@@ -143,11 +165,72 @@ export function EditorShell(props: EditorShellProps) {
   const [projectDialog, setProjectDialog] = useState<"open" | "create" | null>(null);
   const [snapMenu, setSnapMenu] = useState<"grid" | "rot" | null>(null);
   const [zoomToastOpen, setZoomToastOpen] = useState(false);
+  // Outliner authoring: right-click menu target, folder-name dialog, folder-delete
+  // confirm, and the in-flight drag source (a ref so onDrop reads it synchronously).
+  const [outlinerMenu, setOutlinerMenu] = useState<{ x: number; y: number; target: OutlinerTarget } | null>(null);
+  const [folderDialogName, setFolderDialogName] = useState<string | null>(null);
+  const [deleteFolderName, setDeleteFolderName] = useState<string | null>(null);
+  const [renameTarget, setRenameTarget] = useState<{ entity: number; value: string } | null>(null);
+  const dragEntityRef = useRef<number | null>(null);
+  const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
   const zoomToastTimerRef = useRef<number | undefined>(undefined);
   const didMountRef = useRef(false);
   const isPlaying = props.playbackState === "playing";
   const selectedEntity = props.entities.find((entity) => entity.selected);
   const activeDocEntry = props.openDocs.find((doc) => doc.path === props.activeDoc);
+
+  // ── Outliner authoring handlers ────────────────────────────────────────────
+  const closeOutlinerMenu = () => setOutlinerMenu(null);
+  const openOutlinerMenu = (event: ReactMouseEvent, target: OutlinerTarget) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (target.kind === "entity") props.onSelectEntity(target.entity);
+    setOutlinerMenu({ x: event.clientX, y: event.clientY, target });
+  };
+  const outlinerAddEntity = (target: OutlinerTarget) => {
+    props.onCreateEntity(target.kind === "folder" ? target.folder : undefined);
+    closeOutlinerMenu();
+  };
+  const outlinerAddFolder = () => {
+    setFolderDialogName("");
+    closeOutlinerMenu();
+  };
+  const confirmAddFolder = () => {
+    const name = (folderDialogName ?? "").trim();
+    if (name) props.onAddFolder(name);
+    setFolderDialogName(null);
+  };
+  const outlinerDelete = (target: OutlinerTarget) => {
+    if (target.kind === "entity") props.onRemoveEntity(target.entity);
+    else if (target.kind === "folder") {
+      const count = props.entities.filter((entity) => entity.folder === target.folder).length;
+      if (count === 0) props.onRemoveFolder(target.folder);
+      else setDeleteFolderName(target.folder);
+    }
+    closeOutlinerMenu();
+  };
+  const outlinerRename = (entity: number) => {
+    const current = props.entities.find((row) => row.entity === entity);
+    setRenameTarget({ entity, value: current?.title ?? "" });
+    closeOutlinerMenu();
+  };
+  const confirmRename = () => {
+    if (!renameTarget) return;
+    props.onRenameEntity(renameTarget.entity, renameTarget.value.trim());
+    setRenameTarget(null);
+  };
+  const handleEntityDragStart = (event: ReactDragEvent, entity: number) => {
+    dragEntityRef.current = entity;
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", String(entity));
+  };
+  // folder === undefined drops to the ungrouped root.
+  const handleDropToFolder = (folder?: string) => {
+    const entity = dragEntityRef.current;
+    dragEntityRef.current = null;
+    setDragOverFolder(null);
+    if (entity !== null) props.onMoveEntity(entity, folder);
+  };
 
   useEffect(() => {
     selectedEntityRef.current?.scrollIntoView({ block: "nearest", behavior: "instant" });
@@ -655,7 +738,14 @@ export function EditorShell(props: EditorShellProps) {
             <div className="flex-1 flex flex-col border-b border-[#303030] min-h-[30%]">
               <div className="h-8 bg-[#252526] flex items-center px-3 border-b border-[#303030] justify-between text-white font-medium select-none">
                 Outliner
-                <i className="ph ph-magnifying-glass text-[#888]" />
+                <button
+                  className="text-[#888] hover:text-white transition-colors disabled:opacity-40 disabled:hover:text-[#888]"
+                  title="Add entity"
+                  disabled={isPlaying}
+                  onClick={() => props.onCreateEntity()}
+                >
+                  <i className="ph ph-plus" />
+                </button>
               </div>
               <div className="px-2 py-1.5 border-b border-[#303030]">
                 <input
@@ -665,7 +755,12 @@ export function EditorShell(props: EditorShellProps) {
                   onChange={(event) => props.onEntityQueryChange(event.target.value)}
                 />
               </div>
-              <div className="flex-1 overflow-y-auto py-1 select-none">
+              <div
+                className={`flex-1 overflow-y-auto py-1 select-none ${dragOverFolder === ROOT_DROP ? "bg-[#0070e0]/10" : ""}`}
+                onContextMenu={(event) => { if (!isPlaying) openOutlinerMenu(event, { kind: "root" }); }}
+                onDragOver={(event) => { if (dragEntityRef.current !== null) { event.preventDefault(); setDragOverFolder(ROOT_DROP); } }}
+                onDrop={(event) => { event.preventDefault(); handleDropToFolder(undefined); }}
+              >
                 <button
                   className={`w-full flex items-center px-3 py-1 cursor-pointer text-left ${props.sceneSelected ? "bg-[#2d2d2d] border-l-2 border-[#0070e0] text-white" : "text-[#ccc] hover:bg-[#2d2d2d]"}`}
                   onClick={props.onSelectScene}
@@ -679,23 +774,18 @@ export function EditorShell(props: EditorShellProps) {
                     <button
                       key={entity.entity}
                       ref={entity.selected ? selectedEntityRef : null}
+                      draggable={!isPlaying}
+                      onDragStart={(event) => handleEntityDragStart(event, entity.entity)}
+                      onDragEnd={() => setDragOverFolder(null)}
                       className={`w-full flex items-center ${padLeft} pr-3 py-1 cursor-pointer text-left ${entity.selected ? "bg-[#2d2d2d] border-l-2 border-[#0070e0] text-white" : "text-[#ccc] hover:bg-[#2d2d2d]"}`}
                       onClick={() => props.onSelectEntity(entity.entity)}
+                      onContextMenu={(event) => openOutlinerMenu(event, { kind: "entity", entity: entity.entity })}
                     >
                       <i className="ph-fill ph-cube text-[#888] mr-2" />
                       <span className="truncate flex-1">{entity.title}</span>
                       <span className="text-[10px] text-[#666] ml-2">{entity.tag}</span>
                     </button>
                   );
-                  // Group by folder (preserving first-seen order); folderless entities render flat.
-                  const order: string[] = [];
-                  const byFolder = new Map<string, DebuggerEntityItemView[]>();
-                  const loose: DebuggerEntityItemView[] = [];
-                  for (const entity of props.entities) {
-                    if (!entity.folder) { loose.push(entity); continue; }
-                    if (!byFolder.has(entity.folder)) { byFolder.set(entity.folder, []); order.push(entity.folder); }
-                    byFolder.get(entity.folder)!.push(entity);
-                  }
                   const toggleFolder = (folder: string) => {
                     setCollapsedEntityFolders((prev) => {
                       const next = new Set(prev);
@@ -703,27 +793,34 @@ export function EditorShell(props: EditorShellProps) {
                       return next;
                     });
                   };
+                  // Render the ordered outliner tree: folders and loose entities are
+                  // top-level nodes in world-order; foldered entities nest under them.
                   return (
                     <>
-                      {order.map((folder) => {
-                        const collapsed = collapsedEntityFolders.has(folder);
-                        const items = byFolder.get(folder)!;
+                      {props.outline.map((node) => {
+                        if (node.kind === "entity") return renderEntityRow(node.entity, "pl-7");
+                        const collapsed = collapsedEntityFolders.has(node.name);
                         return (
-                          <div key={`folder:${folder}`}>
+                          <div
+                            key={`folder:${node.name}`}
+                            className={dragOverFolder === node.name ? "bg-[#0070e0]/10" : ""}
+                            onDragOver={(event) => { if (dragEntityRef.current !== null) { event.preventDefault(); event.stopPropagation(); setDragOverFolder(node.name); } }}
+                            onDrop={(event) => { event.preventDefault(); event.stopPropagation(); handleDropToFolder(node.name); }}
+                          >
                             <button
                               className="w-full flex items-center pl-7 pr-3 py-1 cursor-pointer text-left text-[#ccc] hover:bg-[#2d2d2d]"
-                              onClick={() => toggleFolder(folder)}
+                              onClick={() => toggleFolder(node.name)}
+                              onContextMenu={(event) => openOutlinerMenu(event, { kind: "folder", folder: node.name })}
                             >
                               <i className={`ph ph-caret-${collapsed ? "right" : "down"} text-[10px] mr-1 text-[#888]`} />
                               <i className={`ph-fill ph-${collapsed ? "folder" : "folder-open"} text-[#888] mr-2`} />
-                              <span className="truncate flex-1">{folder}</span>
-                              <span className="text-[10px] text-[#666] ml-2">{items.length}</span>
+                              <span className="truncate flex-1">{node.name}</span>
+                              <span className="text-[10px] text-[#666] ml-2">{node.children.length}</span>
                             </button>
-                            {collapsed ? null : items.map((entity) => renderEntityRow(entity, "pl-12"))}
+                            {collapsed ? null : node.children.map((entity) => renderEntityRow(entity, "pl-12"))}
                           </div>
                         );
                       })}
-                      {loose.map((entity) => renderEntityRow(entity, "pl-7"))}
                     </>
                   );
                 })()}
@@ -762,7 +859,19 @@ export function EditorShell(props: EditorShellProps) {
                     {selectedEntity ? (
                       <div className="p-3 border-b border-[#303030] flex items-center gap-2">
                         <i className="ph-fill ph-cube text-[#0070e0] text-lg" />
-                        <input type="text" value={selectedEntity.title} readOnly className="engine-input px-2 py-1 w-full rounded font-medium" />
+                        <input
+                          type="text"
+                          key={selectedEntity.entity}
+                          defaultValue={selectedEntity.title}
+                          readOnly={isPlaying}
+                          title="Rename entity (Enter to apply; blank resets to default)"
+                          className="engine-input px-2 py-1 w-full rounded font-medium"
+                          onBlur={(event) => props.onRenameEntity(selectedEntity.entity, event.target.value.trim())}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") event.currentTarget.blur();
+                            if (event.key === "Escape") { event.currentTarget.value = selectedEntity.title; event.currentTarget.blur(); }
+                          }}
+                        />
                       </div>
                     ) : (
                       <div className="p-3 text-[#666]">Select the world or an entity</div>
@@ -859,6 +968,143 @@ export function EditorShell(props: EditorShellProps) {
           onPickRecent={(path) => props.onOpenProject(path)}
         />
       )}
+
+      {/* Outliner right-click menu: Add ▸ (Entity / Folder) + Delete. */}
+      {outlinerMenu && (
+        <ContextMenu x={outlinerMenu.x} y={outlinerMenu.y} onClose={closeOutlinerMenu}>
+          <ContextMenuSub label="Add" icon={<i className="ph ph-plus" />}>
+            <ContextMenuItem icon={<i className="ph-fill ph-cube" />} disabled={isPlaying} onClick={() => outlinerAddEntity(outlinerMenu.target)}>
+              Entity
+            </ContextMenuItem>
+            <ContextMenuItem icon={<i className="ph-fill ph-folder" />} disabled={isPlaying} onClick={outlinerAddFolder}>
+              Folder
+            </ContextMenuItem>
+          </ContextMenuSub>
+          {outlinerMenu.target.kind === "entity" && (
+            <ContextMenuItem
+              icon={<i className="ph ph-pencil-simple" />}
+              disabled={isPlaying}
+              onClick={() => { if (outlinerMenu.target.kind === "entity") outlinerRename(outlinerMenu.target.entity); }}
+            >
+              Rename
+            </ContextMenuItem>
+          )}
+          {outlinerMenu.target.kind !== "root" && (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuItem danger icon={<i className="ph ph-trash" />} disabled={isPlaying} onClick={() => outlinerDelete(outlinerMenu.target)}>
+                Delete
+              </ContextMenuItem>
+            </>
+          )}
+        </ContextMenu>
+      )}
+
+      {/* New-folder name dialog (flat folders; created at the world root). */}
+      {folderDialogName !== null && (() => {
+        const trimmed = folderDialogName.trim();
+        const collides = props.folders.includes(trimmed);
+        const submit = () => { if (trimmed && !collides) confirmAddFolder(); };
+        return createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm text-xs" role="dialog" aria-modal="true" onClick={() => setFolderDialogName(null)}>
+            <div className="w-[360px] max-w-[90vw] flex flex-col bg-[#1e1e1e] border border-[#303030] rounded-lg shadow-2xl overflow-hidden" onClick={(event) => event.stopPropagation()}>
+              <div className="h-9 bg-[#252526] flex items-center justify-between px-3 border-b border-[#303030]">
+                <span className="text-white font-medium flex items-center gap-1"><i className="ph-fill ph-folder text-[#0070e0]" /> New folder</span>
+                <button className="text-[#888] hover:text-white transition-colors" onClick={() => setFolderDialogName(null)} aria-label="Close dialog">
+                  <i className="ph ph-x" />
+                </button>
+              </div>
+              <div className="p-3 space-y-2">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[#888]">Name</span>
+                  <input
+                    className="engine-input px-2 py-1 rounded"
+                    autoFocus
+                    placeholder="folder name…"
+                    value={folderDialogName}
+                    onChange={(event) => setFolderDialogName(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") submit();
+                      if (event.key === "Escape") setFolderDialogName(null);
+                    }}
+                  />
+                </label>
+                {collides && trimmed ? <div className="text-[#f87171]">already exists</div> : null}
+              </div>
+              <div className="flex justify-end gap-2 p-3 border-t border-[#303030]">
+                <button className={DIALOG_BTN} onClick={() => setFolderDialogName(null)}>Cancel</button>
+                <button className={DIALOG_BTN_PRIMARY} onClick={submit} disabled={!trimmed || collides}>Create</button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        );
+      })()}
+
+      {/* Rename an entity (custom display name; blank clears back to the tag default). */}
+      {renameTarget !== null && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm text-xs" role="dialog" aria-modal="true" onClick={() => setRenameTarget(null)}>
+          <div className="w-[360px] max-w-[90vw] flex flex-col bg-[#1e1e1e] border border-[#303030] rounded-lg shadow-2xl overflow-hidden" onClick={(event) => event.stopPropagation()}>
+            <div className="h-9 bg-[#252526] flex items-center justify-between px-3 border-b border-[#303030]">
+              <span className="text-white font-medium flex items-center gap-1"><i className="ph ph-pencil-simple text-[#0070e0]" /> Rename entity</span>
+              <button className="text-[#888] hover:text-white transition-colors" onClick={() => setRenameTarget(null)} aria-label="Close dialog">
+                <i className="ph ph-x" />
+              </button>
+            </div>
+            <div className="p-3 space-y-2">
+              <label className="flex flex-col gap-1">
+                <span className="text-[#888]">Name</span>
+                <input
+                  className="engine-input px-2 py-1 rounded"
+                  autoFocus
+                  placeholder="entity name…"
+                  value={renameTarget.value}
+                  onChange={(event) => setRenameTarget((prev) => (prev ? { ...prev, value: event.target.value } : prev))}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") confirmRename();
+                    if (event.key === "Escape") setRenameTarget(null);
+                  }}
+                />
+              </label>
+            </div>
+            <div className="flex justify-end gap-2 p-3 border-t border-[#303030]">
+              <button className={DIALOG_BTN} onClick={() => setRenameTarget(null)}>Cancel</button>
+              <button className={DIALOG_BTN_PRIMARY} onClick={confirmRename}>Rename</button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+
+      {/* Confirm deleting a non-empty folder: removes the folder AND its entities. */}
+      {deleteFolderName !== null && (() => {
+        const count = props.entities.filter((entity) => entity.folder === deleteFolderName).length;
+        const confirm = () => { props.onRemoveFolder(deleteFolderName); setDeleteFolderName(null); };
+        return createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm text-xs" role="dialog" aria-modal="true" onClick={() => setDeleteFolderName(null)}>
+            <div className="w-[360px] max-w-[90vw] flex flex-col bg-[#1e1e1e] border border-[#303030] rounded-lg shadow-2xl overflow-hidden" onClick={(event) => event.stopPropagation()}>
+              <div className="h-9 bg-[#252526] flex items-center justify-between px-3 border-b border-[#303030]">
+                <div className="flex flex-col">
+                  <span className="text-white font-medium">Delete folder</span>
+                  <span className="text-[#888] text-[10px]">{deleteFolderName}</span>
+                </div>
+                <button className="text-[#888] hover:text-white transition-colors" onClick={() => setDeleteFolderName(null)} aria-label="Close dialog">
+                  <i className="ph ph-x" />
+                </button>
+              </div>
+              <div className="p-3">
+                <div className="text-[#ccc]">Delete “{deleteFolderName}” and its {count} {count === 1 ? "entity" : "entities"}?</div>
+                <div className="text-[#888] mt-1">This action cannot be undone.</div>
+              </div>
+              <div className="flex justify-end gap-2 p-3 border-t border-[#303030]">
+                <button className={DIALOG_BTN} onClick={() => setDeleteFolderName(null)}>Cancel</button>
+                <button className={DIALOG_BTN_DANGER} onClick={confirm}>Delete</button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        );
+      })()}
     </>
   );
 }

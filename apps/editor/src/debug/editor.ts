@@ -1,5 +1,5 @@
 import { attachEditor, createStoreInspector, type ContentBookmark, type ContentTreeNode, type DebugEditorField, type DebuggerWorld } from "@engine/editor";
-import { getComponentDefinitions, getComponentStore, getPremadeAssets, entityFolders, entityExtends, type ComponentDefinition } from "@engine/runtime";
+import { getComponentDefinitions, getComponentStore, getPremadeAssets, entityFolders, entityExtends, entityNames, worldOrder, type ComponentDefinition } from "@engine/runtime";
 import type { ComponentStore, Entity } from "@engine/ecs-core";
 import { keyboard, pointer } from "@engine/input";
 import type { EngineApplication } from "@engine/renderer";
@@ -118,6 +118,8 @@ export function attachDebugEditor(world: GameWorld, engine: EngineApplication, o
       },
     ],
     getEntityTitle(debugWorld: DebuggerWorld, entity: number) {
+      const custom = entityNames.get(entity);
+      if (custom) return custom;
       const tag = debugWorld.tags.list(entity)[0] ?? "entity";
       return `${tag.slice(0, 1).toUpperCase()}${tag.slice(1)}_${entity}`;
     },
@@ -126,6 +128,11 @@ export function attachDebugEditor(world: GameWorld, engine: EngineApplication, o
     },
     getEntityPrefab(_debugWorld: DebuggerWorld, entity: number) {
       return entityExtends.get(entity);
+    },
+    getWorldOrder() {
+      // worldOrder is the runtime's live ordered element list; hand back a shallow
+      // copy so the editor never mutates it directly.
+      return worldOrder.map((item) => ({ ...item }));
     },
     components: [
       // One inspector per project component definition, derived from its kind/shape.

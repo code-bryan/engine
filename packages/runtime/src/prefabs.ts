@@ -4,6 +4,7 @@ import {
   loadSpriteSheet,
   sprite,
   sprites,
+  spriteAnimations,
   type SpriteAnchor,
   type SpriteOffset,
   type SpriteAnimationClip,
@@ -63,6 +64,7 @@ export type PrefabDefinition = {
 export type WorldEntity = {
   extends?: string;
   folder?: string;
+  name?: string;
   components: Record<string, unknown>;
 };
 
@@ -73,6 +75,22 @@ const spriteSheetCache = new Map<string, Promise<Awaited<ReturnType<typeof loadS
 // read back by serializeWorld and the editor. Cleared per world load (materializeWorld).
 export const entityFolders = new Map<Entity, string>();
 export const entityExtends = new Map<Entity, string>();
+// Live-entity → custom display name (overrides the tag-derived default title).
+export const entityNames = new Map<Entity, string>();
+
+// One node in the outliner's ordered element list. Folders and entities are
+// siblings in a single sequence, so a folder can persist while empty and an
+// entity can sit between two folders. Array order IS the position; serializeWorld
+// stamps each element's `position` from its index here. Cleared per world load.
+export type OutlineItem =
+  | { kind: "folder"; name: string }
+  | { kind: "entity"; entity: Entity };
+
+export const worldOrder: OutlineItem[] = [];
+
+export function resetWorldOrder() {
+  worldOrder.length = 0;
+}
 
 // Special component types are applied before generic ones (transform first so the
 // physics body can anchor to it; sprite before its animation).
@@ -94,6 +112,7 @@ export async function instantiateEntity(world: DemoGameWorld, entity: WorldEntit
   const spawned = world.spawn();
   if (entity.folder) entityFolders.set(spawned, entity.folder);
   if (entity.extends) entityExtends.set(spawned, entity.extends);
+  if (entity.name) entityNames.set(spawned, entity.name);
   const registry = new Map(getComponentRegistry().map((entry) => [entry.id, entry.store]));
 
   const ids = Object.keys(merged);
@@ -106,6 +125,26 @@ export async function instantiateEntity(world: DemoGameWorld, entity: WorldEntit
   }
 
   return spawned;
+}
+
+// Fully remove an entity: tear down every store it touches, then drop it from the
+// world. Inverse of instantiateEntity.
+export function destroyEntity(world: DemoGameWorld, entity: Entity) {
+  const spriteRef = sprites.get(entity);
+  if (spriteRef) spriteRef.sprite.destroy({ children: true });
+  sprites.delete(entity);
+  spriteAnimations.delete(entity);
+  transforms.delete(entity);
+  for (const { store } of getComponentRegistry()) store.delete(entity);
+  const tags = world.tags.list(entity);
+  if (tags.length > 0) world.tags.remove(entity, ...tags);
+  world.physics?.removeBody(entity);
+  entityFolders.delete(entity);
+  entityExtends.delete(entity);
+  entityNames.delete(entity);
+  const orderIndex = worldOrder.findIndex((item) => item.kind === "entity" && item.entity === entity);
+  if (orderIndex !== -1) worldOrder.splice(orderIndex, 1);
+  world.destroy(entity);
 }
 
 export async function loadPrefabDefinition(name: string): Promise<PrefabDefinition | null> {

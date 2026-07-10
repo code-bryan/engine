@@ -1,5 +1,6 @@
 import { getComponentRegistry, type Entity } from "@engine/ecs-core";
 import { transforms, type EngineApplication } from "@engine/renderer";
+import { instantiateEntity, destroyEntity, entityFolders, entityNames, worldOrder } from "@engine/runtime";
 import { createRoot } from "react-dom/client";
 import {
   applyInspectorEdit,
@@ -218,6 +219,61 @@ export function attachEditor<TWorld extends DebuggerWorld>(
     setInspectorQuery(value) { store.dispatch({ type: "set-inspector-query", value }); render(); },
     selectEntity(entity) { store.dispatch({ type: "select-entity", entity }); render(); },
     selectScene() { store.dispatch({ type: "select-scene" }); render(); },
+    // Outliner editing (authoring only — not while the sim is running).
+    async createEntity(folder) {
+      if (options.playback?.getState?.() === "playing") return;
+      const entity = await instantiateEntity(world, {
+        ...(folder ? { folder } : {}),
+        components: { transform: { position: { x: 0, y: 0 }, rotation: 0, size: { x: 0, y: 0 } } },
+      });
+      // Append to the outliner order (renders under its folder via membership).
+      worldOrder.push({ kind: "entity", entity });
+      store.dispatch({ type: "select-entity", entity });
+      markWorldDirty();
+      render();
+    },
+    removeEntity(entity) {
+      if (options.playback?.getState?.() === "playing") return;
+      destroyEntity(world, entity);
+      if (getState().selectedEntity === entity) store.dispatch({ type: "select-entity", entity: undefined });
+      markWorldDirty();
+      render();
+    },
+    createFolder(name) {
+      if (options.playback?.getState?.() === "playing") return;
+      const trimmed = name.trim();
+      if (!trimmed || worldOrder.some((item) => item.kind === "folder" && item.name === trimmed)) return;
+      worldOrder.push({ kind: "folder", name: trimmed });
+      markWorldDirty();
+      render();
+    },
+    removeFolder(name) {
+      if (options.playback?.getState?.() === "playing") return;
+      // Destroy the folder's entities (each splices itself out of worldOrder)…
+      for (const [entity, folder] of Array.from(entityFolders.entries())) {
+        if (folder === name) destroyEntity(world, entity);
+      }
+      // …then drop the folder header itself.
+      const index = worldOrder.findIndex((item) => item.kind === "folder" && item.name === name);
+      if (index !== -1) worldOrder.splice(index, 1);
+      markWorldDirty();
+      render();
+    },
+    renameEntity(entity, name) {
+      if (options.playback?.getState?.() === "playing") return;
+      const trimmed = name.trim();
+      if (trimmed) entityNames.set(entity, trimmed);
+      else entityNames.delete(entity);
+      markWorldDirty();
+      render();
+    },
+    moveEntityToFolder(entity, folder) {
+      if (options.playback?.getState?.() === "playing") return;
+      if (folder) entityFolders.set(entity, folder);
+      else entityFolders.delete(entity);
+      markWorldDirty();
+      render();
+    },
     addSystem(name) { options.onAddSystem?.(name); markWorldDirty(); render(); },
     removeSystem(name) { options.onRemoveSystem?.(name); markWorldDirty(); render(); },
     openProject(path) { options.onOpenProject?.(path); },

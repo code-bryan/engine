@@ -227,7 +227,7 @@ async function boot(startPlaying: boolean) {
       void loadWorld(name);
     },
     async onCreateWorld(name) {
-      await saveWorldDefinition(name, { version: 1, systems: [], entities: [] });
+      await saveWorldDefinition(name, { version: 1, systems: [], elements: [] });
       await refreshContent();
     },
     onAddSystem(name) {

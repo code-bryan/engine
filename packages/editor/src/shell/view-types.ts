@@ -15,6 +15,13 @@ export type DebuggerEntityItemView = {
   folder?: string;
 };
 
+// One node in the ordered outliner tree: a folder (with its ordered entity
+// children) or a top-level (loose) entity. Built by buildOutline from the world's
+// element order.
+export type DebuggerOutlineNodeView =
+  | { kind: "folder"; name: string; children: DebuggerEntityItemView[] }
+  | { kind: "entity"; entity: DebuggerEntityItemView };
+
 export type DebuggerFieldView = {
   label: string;
   value: string;

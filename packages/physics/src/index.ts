@@ -95,6 +95,14 @@ export class Physics {
     this.collisionSeq = 0;
   }
 
+  // Remove a single entity's body from the world (used when an entity is deleted).
+  removeBody(entity: Entity) {
+    const rigidBody = this.rigidBodies.get(entity);
+    if (!rigidBody) return;
+    Matter.Composite.remove(this.engine.world, rigidBody.body);
+    this.rigidBodies.delete(entity);
+  }
+
   setBody(entity: Entity, props: RigidBodyBoxProps & { kind?: RigidBodyKind }) {
     const kind = props.kind ?? "dynamic";
     // props.x/y is the entity's CENTER (= transform.position).

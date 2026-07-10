@@ -94,12 +94,21 @@ export type ContentBookmark = {
   items: string[];
 };
 
+// One node in the outliner's ordered element list (folders and entities are
+// siblings; array order is the render position).
+export type OutlineOrderItem =
+  | { kind: "folder"; name: string }
+  | { kind: "entity"; entity: Entity };
+
 export type RuntimeDebuggerOptions<TWorld extends DebuggerWorld = DebuggerWorld> = {
   getEntityTitle?: (world: TWorld, entity: Entity) => string;
   // Optional outliner folder path for an entity (editor-only grouping).
   getEntityFolder?: (world: TWorld, entity: Entity) => string | undefined;
   // Optional prefab name an entity extends (shown in the inspector; highlighted in the content drawer).
   getEntityPrefab?: (world: TWorld, entity: Entity) => string | undefined;
+  // The outliner's ordered element list — folders (incl. empty) and entities as
+  // siblings, in render order. Drives the outliner tree and its ordering.
+  getWorldOrder?: () => OutlineOrderItem[];
   sections?: DebugEditorSection<TWorld>[];
   components?: DebugInspectorComponent<TWorld>[];
   statusPanels?: DebugStatusPanel<TWorld>[];
