@@ -12,18 +12,21 @@ export type GizmoDrag = {
   startWorld: { x: number; y: number };
   startPosition: { x: number; y: number };
   startRotation: number;
-  startScale: { x: number; y: number };
+  startSize: { x: number; y: number };
 };
 
 export type SnapSettings = { grid: boolean; gridSize: number; rotate: boolean; rotateDeg: number };
 
+// Snap an entity's center to the nearest grid CELL CENTER (n·step + step/2), so a
+// grid-sized entity fills a cell instead of straddling the grid lines. (position is
+// the entity center.)
 export function snapToGrid(value: number, step: number) {
   if (step <= 1) return value;
-  return Math.round(value / step) * step;
+  return Math.round((value - step / 2) / step) * step + step / 2;
 }
 
-export function snapScale(value: number) {
-  return Math.round(value * 20) / 20;
+export function snapSize(value: number) {
+  return Math.round(value);
 }
 
 export function snapRotation(angle: number, degrees: number) {
@@ -79,22 +82,28 @@ function applyScaleDrag(
   const startDy = drag.startWorld.y - py;
   const nextDx = worldPt.x - px;
   const nextDy = worldPt.y - py;
-  const minScale = 0.1;
+  const minSize = 1;
 
-  let nextScaleX = drag.startScale.x;
-  let nextScaleY = drag.startScale.y;
+  // startSize is in world px; a drag multiplies it by the pointer-distance factor.
+  let nextSizeX = drag.startSize.x;
+  let nextSizeY = drag.startSize.y;
 
   if (drag.hit.handle === "uniform") {
     const startDist = Math.hypot(startDx, startDy);
     const nextDist = Math.hypot(nextDx, nextDy);
     const factor = startDist < 0.001 ? 1 : nextDist / startDist;
-    nextScaleX = Math.max(minScale, drag.startScale.x * factor);
-    nextScaleY = Math.max(minScale, drag.startScale.y * factor);
+    nextSizeX = keepSign(drag.startSize.x, Math.max(minSize, Math.abs(drag.startSize.x) * factor));
+    nextSizeY = keepSign(drag.startSize.y, Math.max(minSize, Math.abs(drag.startSize.y) * factor));
   } else if (drag.hit.handle === "x") {
-    if (Math.abs(startDx) >= 0.001) nextScaleX = Math.max(minScale, drag.startScale.x * (nextDx / startDx));
+    if (Math.abs(startDx) >= 0.001) nextSizeX = keepSign(drag.startSize.x, Math.max(minSize, Math.abs(drag.startSize.x) * Math.abs(nextDx / startDx)));
   } else {
-    if (Math.abs(startDy) >= 0.001) nextScaleY = Math.max(minScale, drag.startScale.y * (nextDy / startDy));
+    if (Math.abs(startDy) >= 0.001) nextSizeY = keepSign(drag.startSize.y, Math.max(minSize, Math.abs(drag.startSize.y) * Math.abs(nextDy / startDy)));
   }
 
-  transform.scale = { x: snapScale(nextScaleX), y: snapScale(nextScaleY) };
+  transform.size = { x: snapSize(nextSizeX), y: snapSize(nextSizeY) };
+}
+
+// Preserve the original sign (mirror) while taking a new magnitude.
+function keepSign(original: number, magnitude: number) {
+  return original < 0 ? -magnitude : magnitude;
 }

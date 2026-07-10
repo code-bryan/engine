@@ -13,7 +13,7 @@ test("instantiateEntity spawns a prefab-less entity from inline components", asy
   const entity = await instantiateEntity(world, {
     components: {
       tag: "thing",
-      transform: { position: { x: 5, y: 6 }, rotation: 0, scale: { x: 1, y: 1 } },
+      transform: { position: { x: 5, y: 6 }, rotation: 0, size: { x: 0, y: 0 } },
       speed: 42,
     },
   });
@@ -28,7 +28,7 @@ test("parseDemoWorldData accepts the new components-first shape", () => {
     version: 1,
     systems: [],
     entities: [
-      { extends: "player", components: { transform: { position: { x: 1, y: 2 }, rotation: 0, scale: { x: 1, y: 1 } }, facing: "right" } },
+      { extends: "player", components: { transform: { position: { x: 1, y: 2 }, rotation: 0, size: { x: 0, y: 0 } }, facing: "right" } },
     ],
   });
   expect(parsed?.entities[0].extends).toBe("player");
@@ -40,7 +40,7 @@ test("parseDemoWorldData still parses the legacy prefab shape (prefab→extends,
     version: 1,
     systems: [],
     entities: [
-      { prefab: "enemy", transform: { position: { x: 3, y: 4 }, rotation: 0, scale: { x: 1, y: 1 } }, components: { facing: "left" } },
+      { prefab: "enemy", transform: { position: { x: 3, y: 4 }, rotation: 0, size: { x: 0, y: 0 } }, components: { facing: "left" } },
     ],
   });
   const entity = parsed?.entities[0];

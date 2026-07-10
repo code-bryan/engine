@@ -236,10 +236,10 @@ test("enemy follow graph from content moves the enemy", async () => {
 
   const player = world.spawn();
   world.tags.add(player, "player");
-  transforms.set(player, { position: { x: 100, y: 0 }, rotation: 0, scale: { x: 1, y: 1 } });
+  transforms.set(player, { position: { x: 100, y: 0 }, rotation: 0, size: { x: 0, y: 0 } });
   const enemy = world.spawn();
   world.tags.add(enemy, "enemy");
-  transforms.set(enemy, { position: { x: 0, y: 0 }, rotation: 0, scale: { x: 1, y: 1 } });
+  transforms.set(enemy, { position: { x: 0, y: 0 }, rotation: 0, size: { x: 0, y: 0 } });
   getComponentStore<number>("speed").set(enemy, 42);
 
   const graph = JSON.parse(
@@ -322,7 +322,7 @@ test("SetPosition writes transform position and resets physics", async () => {
 
   const entity = world.spawn();
   world.tags.add(entity, "movable");
-  transforms.set(entity, { position: { x: 0, y: 0 }, rotation: 0, scale: { x: 1, y: 1 } });
+  transforms.set(entity, { position: { x: 0, y: 0 }, rotation: 0, size: { x: 0, y: 0 } });
 
   const graph: GraphDefinition = {
     version: 3,

@@ -16,7 +16,7 @@ import type { DemoGameWorld } from "./types";
 export type PrefabTransform = {
   position?: Vector;
   rotation?: number;
-  scale?: Vector;
+  size?: Vector;
 };
 
 export type PrefabSpriteSheet = {
@@ -124,11 +124,17 @@ export async function loadPrefabDefinition(name: string): Promise<PrefabDefiniti
     .catch(() => null);
 
   prefabCache.set(name, pending);
+  // Never poison the cache with a transient failure: evict a null result so the
+  // next load retries the fetch (only successful definitions stay cached).
+  void pending.then((def) => {
+    if (!def && prefabCache.get(name) === pending) prefabCache.delete(name);
+  });
   return pending;
 }
 
 // Field-level transform merge: `over` (inline) wins per field, else `base` (prefab),
-// else defaults. Lets an entity override just position while inheriting scale.
+// else defaults. Lets an entity override just position while inheriting size.
+// `size` defaults to 0 (= auto/native render size).
 function mergeTransform(base: ReturnType<typeof coerceTransform>, over: ReturnType<typeof coerceTransform>): Transform {
   return {
     position: {
@@ -136,22 +142,22 @@ function mergeTransform(base: ReturnType<typeof coerceTransform>, over: ReturnTy
       y: over.position?.y ?? base.position?.y ?? 0,
     },
     rotation: over.rotation ?? base.rotation ?? 0,
-    scale: {
-      x: over.scale?.x ?? base.scale?.x ?? 1,
-      y: over.scale?.y ?? base.scale?.y ?? 1,
+    size: {
+      x: over.size?.x ?? base.size?.x ?? 0,
+      y: over.size?.y ?? base.size?.y ?? 0,
     },
   };
 }
 
-// Read a transform-ish value from prefab/world JSON, tolerating both the nested
-// {position,scale} vectors and the legacy flat {x,y}/numeric-scale layout.
-export function coerceTransform(value: unknown): { position?: Vector; rotation?: number; scale?: Vector } {
+// Read a transform-ish value from prefab/world JSON, tolerating the nested
+// {position,size} vectors and the legacy flat {x,y} layout.
+export function coerceTransform(value: unknown): { position?: Vector; rotation?: number; size?: Vector } {
   if (!value || typeof value !== "object") return {};
   const raw = value as Record<string, unknown>;
   const position = coerceVector(raw.position) ?? coerceVector({ x: raw.x, y: raw.y });
-  const scale = coerceScale(raw.scale);
+  const size = coerceSize(raw.size);
   const rotation = typeof raw.rotation === "number" ? raw.rotation : undefined;
-  return { position, rotation, scale };
+  return { position, rotation, size };
 }
 
 function coerceVector(value: unknown): Vector | undefined {
@@ -161,7 +167,7 @@ function coerceVector(value: unknown): Vector | undefined {
   return { x: raw.x, y: raw.y };
 }
 
-function coerceScale(value: unknown): Vector | undefined {
+function coerceSize(value: unknown): Vector | undefined {
   if (typeof value === "number") return { x: value, y: value };
   return coerceVector(value);
 }
@@ -187,7 +193,7 @@ async function applyComponent(
       transforms.set(entity, {
         position: { ...effectiveTransform.position },
         rotation: effectiveTransform.rotation,
-        scale: { ...effectiveTransform.scale },
+        size: { ...effectiveTransform.size },
       });
       return;
     }

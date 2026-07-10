@@ -97,9 +97,10 @@ export class Physics {
 
   setBody(entity: Entity, props: RigidBodyBoxProps & { kind?: RigidBodyKind }) {
     const kind = props.kind ?? "dynamic";
+    // props.x/y is the entity's CENTER (= transform.position).
     const body = Matter.Bodies.rectangle(
-      props.x + props.width / 2,
-      props.y + props.height / 2,
+      props.x,
+      props.y,
       props.width,
       props.height,
       {
@@ -144,10 +145,8 @@ export class Physics {
     const rigidBody = this.rigidBodies.get(entity);
     if (!rigidBody) return;
 
-    Matter.Body.setPosition(rigidBody.body, {
-      x: position.x + rigidBody.width / 2,
-      y: position.y + rigidBody.height / 2,
-    });
+    // `position` is the entity's center (= transform.position).
+    Matter.Body.setPosition(rigidBody.body, { x: position.x, y: position.y });
     Matter.Body.setVelocity(rigidBody.body, velocity);
     this.emitDebug({ type: "body:reset", entity, x: position.x, y: position.y, velocity: { ...velocity } });
   }
@@ -167,8 +166,9 @@ export class Physics {
         const transform = transforms.get(e);
         if (!transform) continue;
 
-        transform.position.x = rigidBody.body.position.x - rigidBody.width / 2;
-        transform.position.y = rigidBody.body.position.y - rigidBody.height / 2;
+        // transform.position is the entity's center = the body's center.
+        transform.position.x = rigidBody.body.position.x;
+        transform.position.y = rigidBody.body.position.y;
         transform.rotation = rigidBody.body.angle;
       }
     };

@@ -167,7 +167,14 @@ export function createRenderSystem(
         Math.round(t.position.y + offset.y),
       );
       sprite.rotation = t.rotation;
-      sprite.scale.set(t.scale.x, t.scale.y);
+      // `size` is the target size in world px (0 = auto/native). Derive the pixi
+      // draw-scale from size / texture; a negative size mirrors.
+      const texW = sprite.texture.width || 1;
+      const texH = sprite.texture.height || 1;
+      sprite.scale.set(
+        t.size.x !== 0 ? t.size.x / texW : 1,
+        t.size.y !== 0 ? t.size.y / texH : 1,
+      );
     }
   };
 }

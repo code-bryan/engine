@@ -1,10 +1,11 @@
 import { test, expect } from "bun:test";
-import { snapToGrid, snapScale, snapRotation } from "./gizmo-drag";
+import { snapToGrid, snapSize, snapRotation } from "./gizmo-drag";
 
-test("snapToGrid rounds to the nearest multiple", () => {
-  expect(snapToGrid(10, 16)).toBe(16);
-  expect(snapToGrid(5, 16)).toBe(0);
-  expect(snapToGrid(40, 16)).toBe(48);
+test("snapToGrid snaps to the nearest cell center (n·step + step/2)", () => {
+  expect(snapToGrid(10, 16)).toBe(8);   // cell center 8
+  expect(snapToGrid(5, 16)).toBe(8);
+  expect(snapToGrid(20, 16)).toBe(24);  // cell center 24
+  expect(snapToGrid(40, 16)).toBe(40);  // 2·16 + 8
 });
 
 test("snapToGrid is a no-op for step <= 1", () => {
@@ -12,9 +13,10 @@ test("snapToGrid is a no-op for step <= 1", () => {
   expect(snapToGrid(3.7, 0)).toBe(3.7);
 });
 
-test("snapScale rounds to 1/20 increments", () => {
-  expect(snapScale(0.333)).toBeCloseTo(0.35, 10);
-  expect(snapScale(1)).toBe(1);
+test("snapSize rounds to whole pixels", () => {
+  expect(snapSize(16.4)).toBe(16);
+  expect(snapSize(15.6)).toBe(16);
+  expect(snapSize(100)).toBe(100);
 });
 
 test("snapRotation snaps to degree steps", () => {

@@ -9,15 +9,17 @@ export type Vector = { x: number; y: number };
 export const vec = (x = 0, y = 0): Vector => ({ x, y });
 export const cloneVector = (v: Vector): Vector => ({ x: v.x, y: v.y });
 
-// Spatial transform. Position, rotation (radians), and scale are always present
-// and fully-formed — no optional fields, no number|vector union. Callers reading
-// a Transform never normalize; defaults are applied once here at construction.
-export type Transform = { position: Vector; rotation: number; scale: Vector };
+// Spatial transform. `position` is the entity's CENTER (world px), `rotation` is
+// radians, and `size` is the entity's size in world px — NOT a multiplier. A `size`
+// axis of 0 means "auto" (render at the sprite's native texture size); a negative
+// size.x mirrors horizontally. The renderer derives the pixi draw-scale from
+// size / textureSize.
+export type Transform = { position: Vector; rotation: number; size: Vector };
 
 export const transform = (init?: Partial<Transform>): Transform => ({
   position: init?.position ? cloneVector(init.position) : vec(),
   rotation: init?.rotation ?? 0,
-  scale: init?.scale ? cloneVector(init.scale) : vec(1, 1),
+  size: init?.size ? cloneVector(init.size) : vec(0, 0),
 });
 
 export const transforms = createStore<Transform>();

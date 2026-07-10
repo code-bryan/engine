@@ -7,7 +7,6 @@ import {
 } from "../features/inspector/cards";
 import { getEntityEditorBounds, hitEditorGizmo, type GizmoHit } from "../features/viewport/gizmo";
 import { applyGizmoDrag, snapToGrid } from "../features/viewport/gizmo-drag";
-import { normalizeScale } from "../features/viewport/bounds";
 import { resolveGridOptions } from "../features/viewport/grid";
 import { buildOverlay } from "../features/viewport/overlay";
 import { centerCamera as fitCamera, wheelZoomCamera, zoomActionCamera } from "../features/viewport/camera";
@@ -277,7 +276,9 @@ export function attachEditor<TWorld extends DebuggerWorld>(
       const s = getState();
       if (s.selectedEntity === undefined) return;
       const bounds = getEntityEditorBounds(world, s.selectedEntity);
-      if (bounds) store.dispatch({ type: "set-grid-snap-size", value: Math.max(bounds.width, bounds.height) });
+      // Empty entities have 0×0 bounds; fall back to the current grid size.
+      const size = bounds ? Math.max(bounds.width, bounds.height) : 0;
+      if (size > 0) store.dispatch({ type: "set-grid-snap-size", value: size });
       render();
     },
     toggleRotationSnap() { store.dispatch({ type: "toggle-rotation-snap" }); render(); },
@@ -358,6 +359,15 @@ export function attachEditor<TWorld extends DebuggerWorld>(
 
   const unsubscribers: Array<() => void> = [];
 
+  // While the user is typing in an inspector field, the per-frame re-render below
+  // would reset the controlled input to the entity's live value each frame, wiping
+  // keystrokes. Skip the React refresh while a form field is focused.
+  const isEditingFormField = () => {
+    const el = typeof document !== "undefined" ? document.activeElement : null;
+    if (!el) return false;
+    return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || (el as HTMLElement).isContentEditable;
+  };
+
   unsubscribers.push(world.onDebugEvent((event) => {
     switch (event.type) {
       case "frame:start":
@@ -368,7 +378,7 @@ export function attachEditor<TWorld extends DebuggerWorld>(
         break;
       case "frame:end":
         store.dispatch({ type: "frame-end", frame: event.frame, dt: event.dt, durationMs: event.durationMs, fps: event.dt > 0 ? 1 / event.dt : 0 });
-        render();
+        if (!isEditingFormField()) render();
         break;
       default:
         store.dispatch({ type: "push-log", entry: formatWorldEvent(world, event, options.getEntityTitle) });
@@ -442,7 +452,7 @@ export function attachEditor<TWorld extends DebuggerWorld>(
     startWorld: { x: number; y: number };
     startPosition: { x: number; y: number };
     startRotation: number;
-    startScale: { x: number; y: number };
+    startSize: { x: number; y: number };
   } | null = null;
   let didDrag = false;
   let suppressCanvasClick = false;
@@ -491,7 +501,15 @@ export function attachEditor<TWorld extends DebuggerWorld>(
             startWorld: worldPt,
             startPosition: { x: transform.position.x, y: transform.position.y },
             startRotation: transform.rotation,
-            startScale: normalizeScale(transform.scale),
+            // Effective start size in px: explicit size when set, else the current
+            // (content-derived) bounds so resizing an "auto" entity makes it explicit.
+            startSize: (() => {
+              const effective = getEntityEditorBounds(world, gizmoHit.entity);
+              return {
+                x: transform.size.x !== 0 ? transform.size.x : effective?.width ?? 0,
+                y: transform.size.y !== 0 ? transform.size.y : effective?.height ?? 0,
+              };
+            })(),
           };
           didDrag = false;
           suppressCanvasClick = false;

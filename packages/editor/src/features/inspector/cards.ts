@@ -1,5 +1,5 @@
 import type { Entity } from "@engine/ecs-core";
-import { transforms } from "@engine/renderer";
+import { sprites, transforms } from "@engine/renderer";
 import type {
   DebugEditorField,
   DebugInspectorComponent,
@@ -57,17 +57,17 @@ export function createBuiltinInspectorComponents<TWorld extends DebuggerWorld>(
             value: "",
             editable: true,
             axes: [
-              { label: "X", value: formatNumber(transform.position.x), editKey: "x" },
-              { label: "Y", value: formatNumber(transform.position.y), editKey: "y" },
+              { label: "X", value: formatScalar(transform.position.x), editKey: "x" },
+              { label: "Y", value: formatScalar(transform.position.y), editKey: "y" },
             ],
           },
           {
-            label: "Scale",
+            label: "Size",
             value: "",
             editable: true,
             axes: [
-              { label: "X", value: formatNumber(transform.scale.x), editKey: "scaleX" },
-              { label: "Y", value: formatNumber(transform.scale.y), editKey: "scaleY" },
+              { label: "X", value: formatScalar(effectiveSize(entity, transform.size.x, "width")), editKey: "sizeX" },
+              { label: "Y", value: formatScalar(effectiveSize(entity, transform.size.y, "height")), editKey: "sizeY" },
             ],
           },
           {
@@ -75,7 +75,7 @@ export function createBuiltinInspectorComponents<TWorld extends DebuggerWorld>(
             value: "",
             editable: true,
             axes: [
-              { label: "°", value: formatNumber(transform.rotation * (180 / Math.PI)), editKey: "rotation" },
+              { label: "°", value: formatScalar(transform.rotation * (180 / Math.PI)), editKey: "rotation" },
             ],
           },
         ];
@@ -90,8 +90,8 @@ export function createBuiltinInspectorComponents<TWorld extends DebuggerWorld>(
         if (key === "x") transform.position.x = next;
         if (key === "y") transform.position.y = next;
         if (key === "rotation") transform.rotation = next * (Math.PI / 180);
-        if (key === "scaleX") transform.scale.x = next;
-        if (key === "scaleY") transform.scale.y = next;
+        if (key === "sizeX") transform.size.x = next;
+        if (key === "sizeY") transform.size.y = next;
       },
     },
     {
@@ -163,4 +163,19 @@ function entityTitle<TWorld extends DebuggerWorld>(world: TWorld, entity: Entity
 
 function formatNumber(value?: number) {
   return value === undefined ? "-" : value.toFixed(2);
+}
+
+// Editable numeric fields: show whole numbers as plain integers (no ".00") and trim
+// float noise / trailing zeros (92.690000001 → "92.69", 100 → "100", 1.05 → "1.05").
+function formatScalar(value: number) {
+  if (!Number.isFinite(value)) return "0";
+  return String(Math.round(value * 1000) / 1000);
+}
+
+// Effective size shown in the Size field: the explicit size when set (nonzero),
+// otherwise the sprite's native texture size (what "auto" renders), else 0.
+function effectiveSize(entity: Entity, size: number, dim: "width" | "height") {
+  if (size !== 0) return size;
+  const texture = sprites.get(entity)?.sprite.texture;
+  return texture ? texture[dim] : 0;
 }

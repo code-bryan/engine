@@ -86,7 +86,7 @@ export function serializeWorld(world: DemoGameWorld, systems: string[] = []): De
     components.transform = {
       position: { x: transform.position.x, y: transform.position.y },
       rotation: transform.rotation,
-      scale: { x: transform.scale.x, y: transform.scale.y },
+      size: { x: transform.size.x, y: transform.size.y },
     };
     // Registry (per-instance / runtime-varying) components.
     for (const { id, store } of getComponentRegistry()) {
@@ -199,7 +199,7 @@ function normalizeTransform(value: unknown): PrefabTransform | undefined {
   return {
     position: parts.position ?? { x: 0, y: 0 },
     rotation: parts.rotation ?? 0,
-    scale: parts.scale ?? { x: 1, y: 1 },
+    size: parts.size ?? { x: 0, y: 0 },
   };
 }
 

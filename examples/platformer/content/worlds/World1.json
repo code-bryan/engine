@@ -10,51 +10,77 @@
   "entities": [
     {
       "extends": "player",
-      "folder": "player",
       "components": {
         "transform": {
-          "position": { "x": 0, "y": 80 },
+          "position": {
+            "x": 8,
+            "y": 88
+          },
           "rotation": 0,
-          "scale": { "x": 1.1, "y": 1.05 }
+          "size": {
+            "x": 0,
+            "y": 0
+          }
         },
         "actor-state": "idle",
-        "facing": "right"
-      }
+        "facing": "right",
+        "speed": 96
+      },
+      "folder": "player"
     },
     {
       "extends": "enemy",
-      "folder": "enemy",
       "components": {
         "transform": {
-          "position": { "x": 304, "y": 80 },
+          "position": {
+            "x": 312,
+            "y": 88
+          },
           "rotation": 0,
-          "scale": { "x": -1, "y": 1 }
+          "size": {
+            "x": -100,
+            "y": 100
+          }
         },
         "actor-state": "idle",
-        "facing": "left"
-      }
+        "facing": "left",
+        "speed": 42
+      },
+      "folder": "enemy"
     },
     {
-      "folder": "player",
       "components": {
-        "tag": "player-spawn",
         "transform": {
-          "position": { "x": 32, "y": 64 },
+          "position": {
+            "x": 8,
+            "y": 88
+          },
           "rotation": 0,
-          "scale": { "x": 1, "y": 1 }
-        }
-      }
+          "size": {
+            "x": 16,
+            "y": 16
+          }
+        },
+        "tag": "player-spawn"
+      },
+      "folder": "player"
     },
     {
-      "folder": "enemy",
       "components": {
-        "tag": "enemy-spawn",
         "transform": {
-          "position": { "x": 220, "y": 64 },
+          "position": {
+            "x": 312,
+            "y": 88
+          },
           "rotation": 0,
-          "scale": { "x": 1, "y": 1 }
-        }
-      }
+          "size": {
+            "x": 16,
+            "y": 16
+          }
+        },
+        "tag": "enemy-spawn"
+      },
+      "folder": "enemy"
     }
   ]
 }
