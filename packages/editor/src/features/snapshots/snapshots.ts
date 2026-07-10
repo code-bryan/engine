@@ -16,10 +16,11 @@ function captureSnapshot<TWorld extends DebuggerWorld>(
     }
 
     const rigidBody = world.physics.rigidBodies.get(entity);
+    // Store the body CENTER (= transform.position); physics.reset expects a center.
     const physics = rigidBody
       ? {
-        x: rigidBody.body.position.x - rigidBody.width / 2,
-        y: rigidBody.body.position.y - rigidBody.height / 2,
+        x: rigidBody.body.position.x,
+        y: rigidBody.body.position.y,
         vx: rigidBody.body.velocity.x,
         vy: rigidBody.body.velocity.y,
       }
