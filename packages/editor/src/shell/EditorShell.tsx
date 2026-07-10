@@ -225,6 +225,24 @@ export function EditorShell(props: EditorShellProps) {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [onToggleContentDrawer]);
 
+  // Close the active tab with Cmd/Ctrl+D — the active doc if one is open, else the
+  // active world (kept open if it's the last world). preventDefault suppresses the
+  // browser's bookmark dialog.
+  const { activeDoc, activeWorld, onCloseDoc, onCloseWorld } = props;
+  const worldCount = props.worlds.length;
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== "d" || !(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      event.preventDefault();
+      if (activeDoc !== null) onCloseDoc(activeDoc);
+      else if (activeWorld && worldCount > 1) onCloseWorld(activeWorld);
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [activeDoc, activeWorld, worldCount, onCloseDoc, onCloseWorld]);
+
   useEffect(() => {
     if (!didMountRef.current) {
       didMountRef.current = true;
@@ -373,6 +391,7 @@ export function EditorShell(props: EditorShellProps) {
                 key={world.path}
                 className={`px-4 py-1.5 text-[11px] font-medium flex items-center gap-2 flex-shrink-0 border-t-2 transition-colors ${active ? "bg-[#1e1e1e] text-white border-[#0070e0]" : "text-[#888] hover:bg-[#1e1e1e] hover:text-[#ccc] border-transparent"}`}
                 onClick={() => props.onSelectWorld(world.path)}
+                onAuxClick={(event) => { if (event.button === 1 && props.worlds.length > 1) { event.preventDefault(); props.onCloseWorld(world.path); } }}
               >
                 <i className={`ph-fill ph-globe-hemisphere-west ${active ? "text-[#0070e0]" : "text-[#888]"}`} /> {world.name}
                 {active && props.worldDirty && <span className="text-[#0070e0] text-[8px] leading-none" title="Unsaved changes" aria-label="Unsaved changes">●</span>}
@@ -397,6 +416,7 @@ export function EditorShell(props: EditorShellProps) {
                 key={doc.path}
                 className={`px-4 py-1.5 text-[11px] font-medium flex items-center gap-2 flex-shrink-0 border-t-2 transition-colors ${active ? "bg-[#1e1e1e] text-white border-[#0070e0]" : "text-[#888] hover:bg-[#1e1e1e] hover:text-[#ccc] border-transparent"}`}
                 onClick={() => props.onSelectDoc(doc.path)}
+                onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); props.onCloseDoc(doc.path); } }}
               >
                 <i className={`ph-fill ${icon} ${active ? "text-[#0070e0]" : "text-[#888]"}`} /> {doc.name}
                 <span

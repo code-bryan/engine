@@ -3,6 +3,9 @@
   "id": "facing",
   "label": "Facing",
   "kind": "enum",
-  "values": ["left", "right"],
+  "values": [
+    "left",
+    "right"
+  ],
   "defaultValue": "right"
 }
