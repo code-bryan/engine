@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import { Fragment, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type DragEvent as ReactDragEvent } from "react";
 import type { ContentBookmark, ContentTreeNode, EditorToolMode, EngineAsset, OutlineOrderItem } from "../shared/types";
 import type {
+  DebuggerAddableComponentView,
   DebuggerEntityItemView,
   DebuggerInspectorCardView,
   DebuggerLogEntryView,
@@ -108,6 +109,8 @@ export type EditorShellProps = {
   onSelectEntity: (entity: number) => void;
   onToggleComponentCollapse: (id: string) => void;
   onRemoveComponent: (entity: number, componentId: string) => void;
+  onAddComponent: (entity: number, componentId: string) => void;
+  addableComponents: DebuggerAddableComponentView[];
   onInspectorEdit: (entity: number, componentId: string, key: string, value: string) => void;
   onSaveSnapshot: () => void;
   onRestoreSnapshot: (index: number) => void;
@@ -181,6 +184,7 @@ export function EditorShell(props: EditorShellProps) {
   const [deleteFolderName, setDeleteFolderName] = useState<string | null>(null);
   const [renameTarget, setRenameTarget] = useState<{ entity: number; value: string } | null>(null);
   const [tagDraft, setTagDraft] = useState("");
+  const [addComponentMenu, setAddComponentMenu] = useState<{ x: number; y: number } | null>(null);
   const dragEntityRef = useRef<number | null>(null);
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
   const [dragOverGap, setDragOverGap] = useState<string | null>(null);
@@ -1015,7 +1019,15 @@ export function EditorShell(props: EditorShellProps) {
                     ))}
                     {selectedEntity && (
                       <div className="p-3">
-                        <button className="w-full py-1.5 bg-[#2d2d2d] hover:bg-[#3a3a3a] border border-[#303030] rounded text-white transition-colors flex justify-center items-center gap-2 cursor-default" title="Add Component (coming soon)">
+                        <button
+                          className="w-full py-1.5 bg-[#2d2d2d] hover:bg-[#3a3a3a] border border-[#303030] rounded text-white transition-colors flex justify-center items-center gap-2 disabled:opacity-40 disabled:hover:bg-[#2d2d2d]"
+                          title={props.addableComponents.length === 0 ? "All components already attached" : "Add Component"}
+                          disabled={isPlaying || props.addableComponents.length === 0}
+                          onClick={(event) => {
+                            const rect = event.currentTarget.getBoundingClientRect();
+                            setAddComponentMenu({ x: rect.left, y: rect.bottom + 2 });
+                          }}
+                        >
                           <i className="ph ph-plus" /> Add Component
                         </button>
                       </div>
@@ -1119,6 +1131,35 @@ export function EditorShell(props: EditorShellProps) {
               </ContextMenuItem>
             </>
           )}
+        </ContextMenu>
+      )}
+
+      {/* Add Component menu: engine premade first, then project components. */}
+      {addComponentMenu && selectedEntity && (
+        <ContextMenu x={addComponentMenu.x} y={addComponentMenu.y} onClose={() => setAddComponentMenu(null)}>
+          {(() => {
+            const entity = selectedEntity.entity;
+            const premade = props.addableComponents.filter((component) => component.premade);
+            const project = props.addableComponents.filter((component) => !component.premade);
+            const item = (component: DebuggerAddableComponentView) => (
+              <ContextMenuItem
+                key={component.id}
+                icon={<i className="ph-fill ph-puzzle-piece" />}
+                onClick={() => { props.onAddComponent(entity, component.id); setAddComponentMenu(null); }}
+              >
+                {component.label}
+              </ContextMenuItem>
+            );
+            return (
+              <>
+                {premade.length > 0 && <div className="px-3 py-1 text-[10px] uppercase tracking-wide text-[#666]">Engine</div>}
+                {premade.map(item)}
+                {premade.length > 0 && project.length > 0 && <ContextMenuSeparator />}
+                {project.length > 0 && <div className="px-3 py-1 text-[10px] uppercase tracking-wide text-[#666]">Project</div>}
+                {project.map(item)}
+              </>
+            );
+          })()}
         </ContextMenu>
       )}
 

@@ -381,6 +381,13 @@ export function attachEditor<TWorld extends DebuggerWorld>(
       markWorldDirty();
       render();
     },
+    addComponent(entity, componentId) {
+      if (options.playback?.getState?.() === "playing") return;
+      componentInspectorMap.get(componentId)?.add?.(world, entity);
+      engine.tick(0);
+      markWorldDirty();
+      render();
+    },
     openLevel() { options.onOpenLevel?.(); },
     toggleContentDrawer() {
       const open = !getState().contentDrawerOpen;

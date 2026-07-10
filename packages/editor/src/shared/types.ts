@@ -41,6 +41,11 @@ export type DebugInspectorComponent<TWorld extends DebuggerWorld = DebuggerWorld
   // Detach the component from the entity. When defined the card shows a remove
   // icon; omit for essential/native components (transform, entity meta).
   remove?: (world: TWorld, entity: Entity) => void;
+  // Attach the component to the entity with default values. When defined the
+  // component appears in the Add Component menu (once it's not already present).
+  add?: (world: TWorld, entity: Entity) => void;
+  // Engine-provided component (listed first in the Add Component menu).
+  premade?: boolean;
 };
 
 export type DebugStoreInspectorOptions<TValue, TWorld extends DebuggerWorld = DebuggerWorld> = {

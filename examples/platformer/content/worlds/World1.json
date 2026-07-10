@@ -18,6 +18,7 @@
       "position": 1,
       "extends": "player",
       "folder": "player",
+      "name": "Player",
       "components": {
         "transform": {
           "position": {
@@ -31,7 +32,7 @@
           }
         },
         "actor-state": "idle",
-        "facing": "left",
+        "facing": "right",
         "speed": 96,
         "physics": {
           "bodyType": "kinematic",
@@ -55,6 +56,7 @@
       "position": 3,
       "extends": "enemy",
       "folder": "enemy",
+      "name": "Enemy",
       "components": {
         "transform": {
           "position": {

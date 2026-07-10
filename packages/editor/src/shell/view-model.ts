@@ -49,6 +49,7 @@ export type EditorUiActions = {
   removeEntity: (entity: number) => void;
   renameEntity: (entity: number, name: string) => void;
   removeComponent: (entity: number, componentId: string) => void;
+  addComponent: (entity: number, componentId: string) => void;
   addEntityTag: (entity: number, tag: string) => void;
   removeEntityTag: (entity: number, tag: string) => void;
   registerTag: (tag: string) => void;
@@ -116,6 +117,12 @@ export function renderEditor<TWorld extends DebuggerWorld>(
   // unioned with any tags already applied in the loaded world.
   const projectTags = Array.from(new Set(options.projectTags ?? []));
   const knownTags = Array.from(new Set([...projectTags, ...world.tags.names()]));
+  // Components the selected entity can attach: those with an add hook and not
+  // already present. Engine premade first, then alphabetical.
+  const addableComponents = state.selectedEntity === undefined ? [] : components
+    .filter((component) => component.add && !(component.present?.(world, state.selectedEntity!) ?? false))
+    .map((component) => ({ id: component.id, label: component.title, premade: !!component.premade }))
+    .sort((left, right) => Number(right.premade) - Number(left.premade) || left.label.localeCompare(right.label));
   root.render(createElement(EditorShell, {
     fps: state.fps.toFixed(1),
     frameMs: state.latestFrameMs.toFixed(2),
@@ -178,6 +185,8 @@ export function renderEditor<TWorld extends DebuggerWorld>(
     folders,
     onToggleComponentCollapse: actions.toggleComponentCollapse,
     onRemoveComponent: actions.removeComponent,
+    onAddComponent: actions.addComponent,
+    addableComponents,
     onInspectorEdit: actions.editInspector,
     onSaveSnapshot: actions.saveSnapshot,
     onRestoreSnapshot: actions.restoreSnapshot,

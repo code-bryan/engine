@@ -102,6 +102,23 @@ export function createBuiltinInspectorComponents<TWorld extends DebuggerWorld>(
     {
       id: "physics",
       title: "Physics",
+      premade: true,
+      present: (world, entity) => !!world.physics.getBodyConfig(entity),
+      add(world, entity) {
+        const transform = transforms.get(entity);
+        world.physics.setBody(entity, {
+          x: transform?.position.x ?? 0,
+          y: transform?.position.y ?? 0,
+          width: transform?.size.x || 16,
+          height: transform?.size.y || 16,
+          kind: "dynamic",
+          isTrigger: false,
+          mass: 0,
+          friction: 0.1,
+          restitution: 0,
+          frictionAir: 0.01,
+        });
+      },
       fields(world, entity) {
         const cfg = world.physics.getBodyConfig(entity);
         if (!cfg) return [];
@@ -113,14 +130,14 @@ export function createBuiltinInspectorComponents<TWorld extends DebuggerWorld>(
             value: "",
             editable: true,
             axes: [
-              { label: "W", value: formatNumber(cfg.width), editKey: "width" },
-              { label: "H", value: formatNumber(cfg.height), editKey: "height" },
+              { label: "W", value: formatScalar(cfg.width), editKey: "width" },
+              { label: "H", value: formatScalar(cfg.height), editKey: "height" },
             ],
           },
-          { label: "Mass", value: formatNumber(cfg.mass), editable: true, editKey: "mass" },
-          { label: "Friction", value: formatNumber(cfg.friction), editable: true, editKey: "friction" },
-          { label: "Bounciness", value: formatNumber(cfg.restitution), editable: true, editKey: "restitution" },
-          { label: "Damping", value: formatNumber(cfg.frictionAir), editable: true, editKey: "frictionAir" },
+          { label: "Mass", value: formatScalar(cfg.mass), editable: true, editKey: "mass" },
+          { label: "Friction", value: formatScalar(cfg.friction), editable: true, editKey: "friction" },
+          { label: "Bounciness", value: formatScalar(cfg.restitution), editable: true, editKey: "restitution" },
+          { label: "Damping", value: formatScalar(cfg.frictionAir), editable: true, editKey: "frictionAir" },
         ];
       },
       remove(world, entity) {
@@ -218,9 +235,6 @@ export function buildInspectorCards<TWorld extends DebuggerWorld>(
   return cards;
 }
 
-function formatNumber(value?: number) {
-  return value === undefined ? "-" : value.toFixed(2);
-}
 
 // Editable numeric fields: show whole numbers as plain integers (no ".00") and trim
 // float noise / trailing zeros (92.690000001 → "92.69", 100 → "100", 1.05 → "1.05").

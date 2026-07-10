@@ -18,6 +18,9 @@ export type DebuggerEntityItemView = {
   customName?: string;
 };
 
+// A component the selected entity can have attached (Add Component menu).
+export type DebuggerAddableComponentView = { id: string; label: string; premade: boolean };
+
 // One node in the ordered outliner tree: a folder (with its ordered entity
 // children) or a top-level (loose) entity. Built by buildOutline from the world's
 // element order.

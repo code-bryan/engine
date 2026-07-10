@@ -1,5 +1,5 @@
 import { attachEditor, createStoreInspector, type ContentBookmark, type ContentTreeNode, type DebugEditorField, type DebuggerWorld } from "@engine/editor";
-import { getComponentDefinitions, getComponentStore, getPremadeAssets, upsertComponentDefinition, entityFolders, entityExtends, entityNames, worldOrder, type ComponentDefinition } from "@engine/runtime";
+import { getComponentDefinitions, getComponentStore, getPremadeAssets, getPremadeComponentIds, upsertComponentDefinition, entityFolders, entityExtends, entityNames, worldOrder, type ComponentDefinition } from "@engine/runtime";
 import type { ComponentStore, Entity } from "@engine/ecs-core";
 import { keyboard, pointer } from "@engine/input";
 import type { EngineApplication } from "@engine/renderer";
@@ -49,9 +49,10 @@ export type DebugEditorOptions = DebugEditorPlayback & {
 export function attachDebugEditor(world: GameWorld, engine: EngineApplication, options: DebugEditorOptions) {
   const playback = options;
   // Built from the live component registry; rebuilt after a hot-reloaded edit.
+  const premadeIds = new Set(getPremadeComponentIds());
   const buildComponents = () => getComponentDefinitions().map((def) => {
     const store = getComponentStore<unknown>(def.id);
-    return createStoreInspector<unknown>({
+    const inspector = createStoreInspector<unknown>({
       id: def.id,
       title: def.label,
       store,
@@ -60,6 +61,12 @@ export function attachDebugEditor(world: GameWorld, engine: EngineApplication, o
         ? undefined
         : (value, key, next, _world, entity) => setComponentField(store, value, key, next, entity, def),
     });
+    return {
+      ...inspector,
+      premade: premadeIds.has(def.id),
+      // Attach with the definition's default value (kind-appropriate fallback).
+      add: (_world: DebuggerWorld, entity: number) => store.set(entity, defaultComponentValue(def)),
+    };
   });
 
   let editor: ReturnType<typeof attachEditor>;
@@ -248,6 +255,21 @@ function setComponentField(store: ComponentStore<unknown>, value: unknown, key: 
   }
   const numeric = Number(next);
   store.set(entity, next.trim() !== "" && !Number.isNaN(numeric) ? constrainNumber(numeric, def) : next);
+}
+
+// Default value used when attaching a component: the declared default, else a
+// kind-appropriate fallback (first enum value / 0 / empty struct).
+function defaultComponentValue(def: ComponentDefinition): unknown {
+  if (def.defaultValue !== undefined) return cloneValue(def.defaultValue);
+  if (def.kind === "enum") return def.values?.[0] ?? "";
+  if (def.kind === "scalar") return 0;
+  return {};
+}
+
+function cloneValue<T>(value: T): T {
+  if (value === null || typeof value !== "object") return value;
+  if (typeof structuredClone === "function") return structuredClone(value);
+  return JSON.parse(JSON.stringify(value)) as T;
 }
 
 // "spawnX" → "Spawn X", "speed" → "Speed".
